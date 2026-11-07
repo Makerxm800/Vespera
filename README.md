@@ -55,6 +55,23 @@ double-click it — exactly like any commercial browser:
   see [RELEASING.md](RELEASING.md).)
 </details>
 
+The Windows installer is a **classic step-by-step wizard**: Welcome →
+choose folder → Install → **Finish with a "Run Vespera" checkbox** — tick it
+and the browser launches right away.
+
+### 🩺 If something goes wrong — read the logs
+
+Vespera keeps a full log of everything it does (startup steps, service
+status, errors with stack traces):
+
+- **Inside the app:** menu (⋮) → **View logs**, or type `vespera://logs`
+  in the address bar.
+- **On disk:** `%APPDATA%\vespera-browser\logs\vespera.log` on Windows,
+  `~/Library/Application Support/vespera-browser/logs/vespera.log` on macOS,
+  `~/.config/vespera-browser/logs/vespera.log` on Linux.
+- If the app can't start at all, it shows a dialog that includes the exact
+  log path — attach that file when reporting a problem.
+
 ### 🗑️ Uninstalling — leaves nothing behind
 
 - **Windows:** Settings → Apps → Installed apps → **Vespera → Uninstall**
