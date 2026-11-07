@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en" data-theme="dark" data-accent="gold">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Vespera</title>
+  <link rel="stylesheet" href="styles/tokens.css">
+  <link rel="stylesheet" href="styles/base.css">
+  <link rel="stylesheet" href="styles/chrome.css">
+  <link rel="stylesheet" href="styles/pages.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23f6b93b' d='M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z'/%3E%3C/svg%3E">
+</head>
+<body>
+  <div id="app">
+    <!-- Titlebar + tab strip (horizontal mode) -->
+    <header class="titlebar" id="titlebar">
+      <div class="brand no-drag">
+        <svg class="logo-star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z"/></svg>
+        <span>Vespera</span>
+      </div>
+      <div class="tabstrip no-drag" id="tabstrip"></div>
+      <button class="newtab-btn no-drag" id="btn-newtab" title="New tab (Ctrl+T)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <div class="window-controls" id="window-controls">
+        <button id="wc-min" title="Minimize"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M1 6h10"/></svg></button>
+        <button id="wc-max" title="Maximize"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="1.5" width="9" height="9" rx="1.5"/></svg></button>
+        <button id="wc-close" class="wc-close" title="Close"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2 2l8 8M10 2l-8 8"/></svg></button>
+      </div>
+    </header>
+
+    <!-- Toolbar (horizontal mode) -->
+    <div class="toolbar" id="toolbar">
+      <button class="icon-btn" id="btn-back" title="Back (Alt+←)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <button class="icon-btn" id="btn-forward" title="Forward (Alt+→)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button>
+      <button class="icon-btn" id="btn-reload" title="Reload (Ctrl+R)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button>
+      <button class="icon-btn" id="btn-home" title="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg></button>
+
+      <div class="omnibox-wrap" id="omnibox-wrap">
+        <div class="omnibox" id="omnibox">
+          <div class="site-info" id="site-info">
+            <svg class="lock" id="lock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 118 0v4"/></svg>
+          </div>
+          <input id="omni-input" type="text" spellcheck="false" autocomplete="off"
+                 placeholder="Search the web or type a URL" aria-label="Address bar">
+          <span class="engine-tag" id="engine-tag">Startpage</span>
+          <button class="icon-btn go-btn" id="omni-go" title="Go">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+        <div class="suggestions hidden" id="suggestions"></div>
+      </div>
+
+      <button class="icon-btn shield-btn" id="btn-shields" title="Vespera Shields">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+        <span class="count" id="shield-count" data-zero="true">0</span>
+      </button>
+      <button class="icon-btn" id="btn-bookmark" title="Bookmark this page (Ctrl+D)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button>
+      <button class="icon-btn" id="btn-palette" title="Command palette (Ctrl+K)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg></button>
+      <button class="icon-btn" id="btn-menu" title="Vespera menu"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg></button>
+    </div>
+
+    <!-- Main row: sidebar + content -->
+    <div class="main-row">
+      <nav class="sidebar" id="sidebar">
+        <div class="vtabs" id="vtabs">
+          <div class="vtabs-list" id="vtabs-list"></div>
+          <div class="vtabs-foot" id="vtabs-foot"></div>
+        </div>
+        <div class="rail" id="rail"></div>
+      </nav>
+      <div class="content-col">
+        <div class="preview-banner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg>
+          Web preview mode — the full Chromium experience runs in the desktop app (<b>npm start</b>). Internal pages &amp; accounts are fully live here.
+        </div>
+        <div class="toolbar-vt" id="toolbar-vt"></div>
+        <div class="content" id="content"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toasts" id="toasts"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
