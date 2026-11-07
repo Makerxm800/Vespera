@@ -11,6 +11,18 @@
 
 const { app, BrowserWindow, ipcMain, session, shell, nativeTheme } = require('electron');
 const path = require('node:path');
+
+// ---- App identity (before anything else) --------------------------------
+app.setName('Vespera');
+// Windows taskbar/Dock identity so pinned shortcuts group under "Vespera".
+if (process.platform === 'win32') app.setAppUserModelId('app.vespera.browser');
+
+// Packaged apps can't write inside the asar bundle — point the local service
+// at the OS userData folder (dev keeps ./data in the repo).
+if (app.isPackaged && !process.env.VESPERA_DATA) {
+  process.env.VESPERA_DATA = path.join(app.getPath('userData'), 'data');
+}
+
 const { installPrivacy } = require('./privacy');
 const { createServer } = require('../server/server');
 

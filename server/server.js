@@ -26,21 +26,28 @@ const { defaultRules } = require('../src/shared/blocklists');
 
 const ROOT = path.resolve(__dirname, '..');
 const RENDERER = path.join(ROOT, 'src', 'renderer');
-const DATA_DIR = process.env.VESPERA_DATA || path.join(ROOT, 'data');
+
+/** Where user data lives. In the packaged desktop app the Electron main
+ *  process points this at the OS userData folder (writable); in dev it
+ *  defaults to ./data in the repo. */
+function dataDir() {
+  return process.env.VESPERA_DATA || path.join(ROOT, 'data');
+}
 
 function loadSecret() {
-  const file = path.join(DATA_DIR, 'secret.key');
+  const dir = dataDir();
+  const file = path.join(dir, 'secret.key');
   try {
     if (fs.existsSync(file)) return fs.readFileSync(file, 'utf8').trim();
   } catch { /* fall through */ }
   const secret = crypto.randomBytes(32).toString('hex');
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(file, secret, { mode: 0o600 });
   return secret;
 }
 
 function createServer({ port = Number(process.env.PORT) || 4600, host = '0.0.0.0' } = {}) {
-  const db = new Store(path.join(DATA_DIR, 'db.json'));
+  const db = new Store(path.join(dataDir(), 'db.json'));
   const secret = loadSecret();
   const router = new Router();
 
@@ -99,4 +106,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { createServer, DATA_DIR };
+module.exports = { createServer };
