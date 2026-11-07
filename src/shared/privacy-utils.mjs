@@ -1,15 +1,14 @@
 /**
  * Vespera Privacy Utilities — link cleaning, search engines, URL helpers.
- * Shared between the Electron main process, the renderer, and the preview server.
+ * Shared ESM module: imported by the browser renderer directly, and by the
+ * Node/Electron side via `await import()` / `require()` (Node 22+).
  */
-
-'use strict';
 
 /**
  * Query parameters that exist purely for tracking/campaign attribution.
  * Removing them never changes the destination content.
  */
-const TRACKING_PARAMS = new Set([
+export const TRACKING_PARAMS = new Set([
   // UTM family (Google Analytics / Ads)
   'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
   'utm_id', 'utm_name', 'utm_cid', 'utm_reader', 'utm_place', 'utm_social',
@@ -36,7 +35,7 @@ const TRACKING_PARAMS = new Set([
  * @param {string} href
  * @returns {{url: string, removed: string[]}}
  */
-function cleanTrackingParams(href) {
+export function cleanTrackingParams(href) {
   let url;
   try { url = new URL(href); } catch { return { url: href, removed: [] }; }
   if (!url.search || url.search.length < 2) return { url: href, removed: [] };
@@ -53,7 +52,7 @@ function cleanTrackingParams(href) {
 }
 
 /** Strip the tracking-heavy referrer down to the origin (or nothing). */
-function strictReferrer(fromUrl, toUrl) {
+export function strictReferrer(fromUrl, toUrl) {
   try {
     const from = new URL(fromUrl);
     const to = new URL(toUrl);
@@ -68,7 +67,7 @@ function strictReferrer(fromUrl, toUrl) {
  * Vespera search engines. `{query}` is replaced with the URL-encoded query.
  * Startpage is the default — Google-quality results with zero tracking.
  */
-const SEARCH_ENGINES = {
+export const SEARCH_ENGINES = {
   startpage: {
     id: 'startpage', name: 'Startpage',
     search: 'https://www.startpage.com/sp/search?query={query}',
@@ -107,7 +106,7 @@ const SEARCH_ENGINES = {
 };
 
 /** Build a search URL for `query` with the given engine id (default: startpage). */
-function buildSearchUrl(query, engineId = 'startpage') {
+export function buildSearchUrl(query, engineId = 'startpage') {
   const engine = SEARCH_ENGINES[engineId] || SEARCH_ENGINES.startpage;
   return engine.search.replace('{query}', encodeURIComponent(query));
 }
@@ -116,7 +115,7 @@ function buildSearchUrl(query, engineId = 'startpage') {
  * Decide whether omnibox input is a URL or a search query.
  * @returns {{kind:'url'|'search'|'internal', value:string}}
  */
-function classifyInput(input) {
+export function classifyInput(input) {
   const text = input.trim();
   if (!text) return { kind: 'search', value: '' };
 
@@ -158,12 +157,12 @@ function classifyInput(input) {
 }
 
 /** Is this an internal Vespera page? */
-function isInternal(url) {
+export function isInternal(url) {
   return /^vespera:\/\//i.test(url || '');
 }
 
 /** Internal page registry — label + icon key for the chrome UI. */
-const INTERNAL_PAGES = {
+export const INTERNAL_PAGES = {
   'vespera://newtab': { title: 'New Tab', icon: 'sparkle' },
   'vespera://welcome': { title: 'Welcome', icon: 'sparkle' },
   'vespera://settings': { title: 'Settings', icon: 'gear' },
@@ -180,7 +179,7 @@ const INTERNAL_PAGES = {
  * Third-party check: does the request host differ from the document host
  * (registrable-domain level approximation)?
  */
-function isThirdParty(requestUrl, documentUrl) {
+export function isThirdParty(requestUrl, documentUrl) {
   try {
     const a = new URL(requestUrl);
     const b = new URL(documentUrl);
@@ -191,15 +190,3 @@ function isThirdParty(requestUrl, documentUrl) {
     return true;
   }
 }
-
-module.exports = {
-  TRACKING_PARAMS,
-  cleanTrackingParams,
-  strictReferrer,
-  SEARCH_ENGINES,
-  buildSearchUrl,
-  classifyInput,
-  isInternal,
-  INTERNAL_PAGES,
-  isThirdParty,
-};

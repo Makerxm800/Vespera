@@ -4,9 +4,11 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { FilterEngine } = require('../src/shared/filter-engine');
 const { defaultRules } = require('../src/shared/blocklists');
-const {
-  cleanTrackingParams, classifyInput, isThirdParty, buildSearchUrl, isInternal,
-} = require('../src/shared/privacy-utils');
+
+let pu = {};
+test.before(async () => {
+  pu = await import('../src/shared/privacy-utils.mjs');
+});
 
 function engine() {
   return new FilterEngine(defaultRules());
@@ -112,7 +114,7 @@ test('blocklist blocks real-world tracker urls', () => {
 });
 
 test('tracking params are stripped, normal params kept', () => {
-  const { url, removed } = cleanTrackingParams(
+  const { url, removed } = pu.cleanTrackingParams(
     'https://shop.example.com/item/1?utm_source=nl&utm_medium=email&color=red&size=m&fbclid=abc123');
   const u = new URL(url);
   assert.equal(u.searchParams.get('color'), 'red');
@@ -123,29 +125,29 @@ test('tracking params are stripped, normal params kept', () => {
 });
 
 test('classifyInput distinguishes urls, searches and internal pages', () => {
-  assert.equal(classifyInput('example.com/page').kind, 'url');
-  assert.equal(classifyInput('https://example.com').kind, 'url');
-  assert.equal(classifyInput('how to make bread').kind, 'search');
-  assert.equal(classifyInput('vespera://settings').kind, 'internal');
-  assert.equal(classifyInput('about:privacy').kind, 'internal');
-  assert.equal(classifyInput('localhost:3000').kind, 'url');
-  assert.equal(classifyInput('javascript:alert(1)').kind, 'search');
+  assert.equal(pu.classifyInput('example.com/page').kind, 'url');
+  assert.equal(pu.classifyInput('https://example.com').kind, 'url');
+  assert.equal(pu.classifyInput('how to make bread').kind, 'search');
+  assert.equal(pu.classifyInput('vespera://settings').kind, 'internal');
+  assert.equal(pu.classifyInput('about:privacy').kind, 'internal');
+  assert.equal(pu.classifyInput('localhost:3000').kind, 'url');
+  assert.equal(pu.classifyInput('javascript:alert(1)').kind, 'search');
 });
 
 test('isThirdParty compares registrable domains', () => {
-  assert.equal(isThirdParty('https://cdn.example.com/x.js', 'https://www.example.com/'), false);
-  assert.equal(isThirdParty('https://tracker.io/x.js', 'https://www.example.com/'), true);
+  assert.equal(pu.isThirdParty('https://cdn.example.com/x.js', 'https://www.example.com/'), false);
+  assert.equal(pu.isThirdParty('https://tracker.io/x.js', 'https://www.example.com/'), true);
 });
 
 test('search url builder defaults to startpage', () => {
-  const u = buildSearchUrl('privacy browser');
+  const u = pu.buildSearchUrl('privacy browser');
   assert.ok(u.includes('startpage.com'));
   assert.ok(u.includes('privacy%20browser'));
 });
 
 test('isInternal recognizes vespera pages', () => {
-  assert.equal(isInternal('vespera://welcome'), true);
-  assert.equal(isInternal('https://example.com'), false);
+  assert.equal(pu.isInternal('vespera://welcome'), true);
+  assert.equal(pu.isInternal('https://example.com'), false);
 });
 
 test('engine benchmark: 50k matches stay fast (optimized core)', () => {
