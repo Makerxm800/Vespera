@@ -41,8 +41,8 @@ double-click it — exactly like any commercial browser:
 | 🪟 Windows (portable) | `Vespera-Portable-<v>.exe` | Double-click and browse — no install |
 | 🍎 macOS (Apple Silicon) | `Vespera-<v>-mac-arm64.dmg` | Open → drag Vespera to Applications |
 | 🍎 macOS (Intel) | `Vespera-<v>-mac-x64.dmg` | Open → drag Vespera to Applications |
-| 🐧 Linux | `Vespera-<v>-linux-x64.AppImage` | Double-click (allow "execute" on first run) |
-| 🐧 Debian/Ubuntu | `Vespera-<v>-linux-x64.deb` | Double-click the package |
+| 🐧 Linux | `Vespera-<v>-linux-x86_64.AppImage` | Double-click (allow "execute" on first run) |
+| 🐧 Debian/Ubuntu | `Vespera-<v>-linux-amd64.deb` | Double-click the package |
 
 <details>
 <summary><b>First-run notes</b> (one-time, unsigned builds)</summary>

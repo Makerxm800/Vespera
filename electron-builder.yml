@@ -10,6 +10,7 @@ appId: app.vespera.browser
 productName: Vespera
 copyright: Copyright © 2026 Vespera Community
 executableName: Vespera
+electronVersion: 33.4.11
 
 directories:
   output: dist
@@ -72,3 +73,4 @@ linux:
   description: Vespera is a next-gen browser engineered for absolute privacy —
     zero telemetry, built-in tracker and ad blocking, and a community-voted roadmap.
   artifactName: Vespera-${version}-${os}-${arch}.${ext}
+  syncDesktopName: true
