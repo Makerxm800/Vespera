@@ -42,6 +42,9 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: Vespera
   uninstallDisplayName: Vespera Browser
+  # A clean uninstall: removes the app, its registry entries AND all local
+  # Vespera data (accounts, history, settings) — nothing left behind.
+  deleteAppDataOnUninstall: true
   artifactName: Vespera-Setup-${version}.${ext}
 
 portable:

@@ -55,6 +55,15 @@ double-click it — exactly like any commercial browser:
   see [RELEASING.md](RELEASING.md).)
 </details>
 
+### 🗑️ Uninstalling — leaves nothing behind
+
+- **Windows:** Settings → Apps → Installed apps → **Vespera → Uninstall**
+  (or Start Menu → Vespera → Uninstall). The uninstaller removes the program,
+  its Start Menu/Desktop shortcuts, **all registry entries**, and — since
+  v0.1.1 — all local Vespera data too (accounts, history, settings).
+- **macOS:** drag Vespera from Applications to the Trash.
+- **Linux:** delete the `.AppImage` file, or `sudo apt remove vespera` for the `.deb`.
+
 ---
 
 ## 🛠️ Build from source (for developers)

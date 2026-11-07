@@ -46,7 +46,35 @@ function loadSecret() {
   return secret;
 }
 
-function createServer({ port = Number(process.env.PORT) || 4600, host = '0.0.0.0' } = {}) {
+/**
+ * Listen with graceful EADDRINUSE fallback: if the preferred port is taken
+ * (second Vespera instance, or another app), walk up to the next free port
+ * instead of crashing the process. Rejects only when the whole range is busy.
+ */
+function listenWithFallback(server, port, host, maxRetries) {
+  return new Promise((resolve, reject) => {
+    let retries = maxRetries;
+    const tryPort = (p) => {
+      const onError = (err) => {
+        if (err.code === 'EADDRINUSE' && retries > 0) {
+          retries -= 1;
+          console.warn(`[vespera] port ${p} is busy — trying ${p + 1}`);
+          tryPort(p + 1);
+        } else {
+          reject(err);
+        }
+      };
+      server.once('error', onError);
+      server.listen(p, host, () => {
+        server.removeListener('error', onError);
+        resolve(server.address().port);
+      });
+    };
+    tryPort(port);
+  });
+}
+
+function createServer({ port = Number(process.env.PORT) || 4600, host = '0.0.0.0', maxPortRetries = 10 } = {}) {
   const db = new Store(path.join(dataDir(), 'db.json'));
   const secret = loadSecret();
   const router = new Router();
@@ -89,13 +117,12 @@ function createServer({ port = Number(process.env.PORT) || 4600, host = '0.0.0.0
     return serveStatic(req, res, RENDERER, url.pathname, true);
   });
 
-  return new Promise((resolve) => {
-    server.listen(port, host, () => {
-      const addr = server.address();
-      console.log(`\n  Vespera server running → http://${host}:${addr.port}`);
+  return new Promise((resolve, reject) => {
+    listenWithFallback(server, port, host, maxPortRetries).then((actualPort) => {
+      console.log(`\n  Vespera server running → http://${host}:${actualPort}`);
       console.log(`  UI: /   API: /api   Proxy: /proxy?url=...\n`);
-      resolve({ server, db, port: addr.port, secret });
-    });
+      resolve({ server, db, port: actualPort, secret });
+    }, reject);
   });
 }
 

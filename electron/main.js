@@ -26,6 +26,26 @@ if (app.isPackaged && !process.env.VESPERA_DATA) {
 const { installPrivacy } = require('./privacy');
 const { createServer } = require('../server/server');
 
+// Never pop a crash dialog over the user's desktop — log and keep going.
+// (The known error paths are handled properly; this is the safety net.)
+process.on('uncaughtException', (err) => {
+  console.error('[vespera] uncaught exception (ignored):', err);
+});
+
+// ---- Single instance ----------------------------------------------------
+// A second double-click focuses the existing window instead of booting a
+// second copy that would fight over the service port (EADDRINUSE crash).
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+  return;
+}
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
+
 let mainWindow = null;
 let serverHandle = null;
 let prefs = {
@@ -99,8 +119,11 @@ ipcMain.handle('downloads:list', () => global.__vesperaDownloads || []);
 // ---- App lifecycle -------------------------------------------------------
 app.whenReady().then(async () => {
   // Start the bundled Vespera service (accounts/sync/community/API).
+  // createServer falls back to the next free port if 4600 is taken, so a
+  // leftover instance or another app can never crash Vespera at startup.
   try {
     serverHandle = await createServer({ port: 4600, host: '127.0.0.1' });
+    console.log('[vespera] service ready on port', serverHandle.port);
   } catch (err) {
     console.error('[vespera] service failed to start:', err);
   }
