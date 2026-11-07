@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   test:
@@ -50,6 +51,9 @@ jobs:
               dist/*.AppImage
               dist/*.deb
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     env:
       # No Apple/Windows code-signing certs in this repo — skip auto-discovery
       # so builds succeed. Users bypass Gatekeeper/SmartScreen once (documented).
@@ -62,7 +66,32 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Build installers
-        run: npm run ${{ matrix.script }}
+        run: |
+          set -o pipefail
+          npm run ${{ matrix.script }} 2>&1 | tee build.log
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ matrix.platform }}
+          path: build.log
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: File build-log issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo "### CI build failure — ${{ matrix.platform }} (run $GITHUB_RUN_ID)"
+            echo ""
+            echo '```'
+            tail -c 30000 build.log 2>/dev/null || echo "(no build.log)"
+            echo '```'
+          } > issue-body.md
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "CI debug: ${{ matrix.platform }} build log (run $GITHUB_RUN_ID)" \
+            --body-file issue-body.md || echo "could not file issue"
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
         with:
