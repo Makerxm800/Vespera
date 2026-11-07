@@ -8,7 +8,12 @@
     "start": "electron .",
     "preview": "node server/server.js",
     "dev": "node server/server.js",
-    "test": "node --test \"test/*.test.js\"",
+    "test": "node --test",
+    "icons": "node scripts/generate-icons.js",
+    "dist": "npm run icons && electron-builder --publish never",
+    "dist:win": "npm run icons && electron-builder --win --publish never",
+    "dist:mac": "npm run icons && electron-builder --mac --publish never",
+    "dist:linux": "npm run icons && electron-builder --linux --publish never",
     "postinstall": "node scripts/postinstall.js"
   },
   "repository": {
@@ -26,6 +31,7 @@
   "author": "Vespera Community",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^33.0.0"
+    "electron": "^33.0.0",
+    "electron-builder": "^26.0.0"
   }
 }

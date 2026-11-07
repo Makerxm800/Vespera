@@ -14,6 +14,7 @@ Thumbs.db
 dist/
 out/
 release/
+build/
 
 # Editor
 .vscode/

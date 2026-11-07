@@ -29,7 +29,35 @@ Most mainstream browsers are designed to serve advertisers, hoard your data, or 
 
 ---
 
-## 🛠️ Quick Start
+## 📥 Download & install — no commands needed
+
+Grab the installer for your machine from the
+**[Releases page](https://github.com/Makerxm800/Vespera-beta/releases)** and
+double-click it — exactly like any commercial browser:
+
+| Platform | File to download | How to install |
+|---|---|---|
+| 🪟 Windows 10/11 | `Vespera-Setup-<v>.exe` | Double-click → install → open from Start Menu |
+| 🪟 Windows (portable) | `Vespera-Portable-<v>.exe` | Double-click and browse — no install |
+| 🍎 macOS (Apple Silicon) | `Vespera-<v>-mac-arm64.dmg` | Open → drag Vespera to Applications |
+| 🍎 macOS (Intel) | `Vespera-<v>-mac-x64.dmg` | Open → drag Vespera to Applications |
+| 🐧 Linux | `Vespera-<v>-linux-x86_64.AppImage` | Double-click (allow "execute" on first run) |
+| 🐧 Debian/Ubuntu | `Vespera-<v>-linux-amd64.deb` | Double-click the package |
+
+<details>
+<summary><b>First-run notes</b> (one-time, unsigned builds)</summary>
+
+- **Windows SmartScreen** may show "Windows protected your PC" → click
+  **More info → Run anyway**. This appears for every app without a paid
+  code-signing certificate.
+- **macOS Gatekeeper** may say the app is from an unidentified developer →
+  **right-click the app → Open → Open**. (Signing + notarization is planned —
+  see [RELEASING.md](RELEASING.md).)
+</details>
+
+---
+
+## 🛠️ Build from source (for developers)
 
 ```bash
 # 1. Install (pulls Electron + the Chromium core)
@@ -43,6 +71,9 @@ npm run preview   # then open http://localhost:4600
 
 # Run the test suite (25 tests incl. engine benchmarks)
 npm test
+
+# Build installers for your current platform (output in dist/)
+npm run dist
 ```
 
 **Requirements:** Node.js 20+ and npm. That's it.
@@ -85,6 +116,9 @@ Vespera-beta/
 ├── server/             Bundled local service (zero dependencies)
 │   ├── routes/         Accounts, sync, community voting API
 │   └── lib/            Auth (scrypt+HMAC), atomic JSON store, preview proxy
+├── scripts/            Icon generator + friendly postinstall
+├── electron-builder.yml            Installer config (win/mac/linux)
+├── .github/workflows/release.yml   Automated multi-OS build & release
 └── test/               25 tests: engine semantics, auth, store, benchmarks
 ```
 
