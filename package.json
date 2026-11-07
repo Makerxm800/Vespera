@@ -1,0 +1,31 @@
+{
+  "name": "vespera-browser",
+  "version": "0.1.0",
+  "description": "Vespera — a next-gen, community-first Chromium browser engineered for absolute privacy and superior performance.",
+  "main": "electron/main.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "preview": "node server/server.js",
+    "dev": "node server/server.js",
+    "test": "node --test \"test/*.test.js\"",
+    "postinstall": "node scripts/postinstall.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Makerxm800/Vespera-beta"
+  },
+  "keywords": [
+    "browser",
+    "electron",
+    "chromium",
+    "privacy",
+    "adblock",
+    "vespera"
+  ],
+  "author": "Vespera Community",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}
