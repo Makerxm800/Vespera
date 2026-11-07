@@ -1,6 +1,6 @@
 # Vespera — electron-builder configuration
 # Builds real, double-clickable desktop apps:
-#   Windows : Vespera-Setup-<v>.exe (installer) + Vespera-Portable-<v>.exe
+#   Windows : Vespera-Setup-<v>.exe (classic wizard installer) + Vespera-Portable-<v>.exe
 #   macOS   : Vespera-<v>-mac-arm64.dmg + Vespera-<v>-mac-x64.dmg
 #   Linux   : Vespera-<v>-linux-x64.AppImage + Vespera-<v>-linux-x64.deb
 #
@@ -16,6 +16,10 @@ directories:
   output: dist
   buildResources: build
 
+# No asar archive: files are packed unpacked on disk. Slightly larger install,
+# but module loading (CJS *and* ESM) is bulletproof in the packaged app.
+asar: false
+
 files:
   - electron/**/*
   - src/**/*
@@ -23,8 +27,6 @@ files:
   - package.json
   - "!**/*.map"
   - "!**/node_modules/*/{CHANGELOG.md,README.md,readme.md,readme.txt}"
-
-asar: true
 
 win:
   target:
@@ -36,12 +38,19 @@ win:
   artifactName: Vespera-${version}-win-${arch}.${ext}
 
 nsis:
-  oneClick: true
+  # Classic install wizard (Welcome → Install → Finish) with a
+  # "Run Vespera" checkbox on the Finish page — like every real installer.
+  oneClick: false
   perMachine: false
+  allowToChangeInstallationDirectory: true
+  runAfterFinish: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: Vespera
   uninstallDisplayName: Vespera Browser
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
   # A clean uninstall: removes the app, its registry entries AND all local
   # Vespera data (accounts, history, settings) — nothing left behind.
   deleteAppDataOnUninstall: true

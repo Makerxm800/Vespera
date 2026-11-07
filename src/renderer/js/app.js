@@ -20,6 +20,7 @@ import { renderPrivacy } from './pages/privacy.js';
 import { renderCommunity } from './pages/community.js';
 import { renderAccount } from './pages/account.js';
 import { renderHistory, renderBookmarks, renderDownloads } from './pages/library.js';
+import { renderLogs } from './pages/logs.js';
 
 const PAGE_RENDERERS = {
   'vespera://newtab': renderNewtab,
@@ -32,6 +33,7 @@ const PAGE_RENDERERS = {
   'vespera://bookmarks': renderBookmarks,
   'vespera://downloads': renderDownloads,
   'vespera://shields': renderPrivacy,
+  'vespera://logs': renderLogs,
 };
 
 let tabs;
@@ -318,6 +320,7 @@ function openMenu(anchor) {
     <div class="menu-sep"></div>
     <button class="menu-item" data-act="theme">${icon(state.settings.theme === 'dark' ? 'sun' : 'moon')} ${state.settings.theme === 'dark' ? 'Light' : 'Dark'} theme</button>
     <button class="menu-item" data-act="palette">${icon('search')} Command palette <span class="kbd">Ctrl+K</span></button>
+    <button class="menu-item" data-go="vespera://logs">${icon('flask')} View logs</button>
     <button class="menu-item" data-go="vespera://settings">${icon('gear')} Settings</button>
     <div class="menu-sep"></div>
     <button class="menu-item" data-go="vespera://welcome">${icon('heart')} About Vespera</button>`;
@@ -366,6 +369,7 @@ function paletteActions() {
     { title: 'Open History', icon: 'clock', run: go('vespera://history') },
     { title: 'Open Bookmarks', icon: 'bookmark', run: go('vespera://bookmarks') },
     { title: 'Open Downloads', icon: 'download', run: go('vespera://downloads') },
+    { title: 'View Logs', icon: 'flask', run: go('vespera://logs') },
     { title: state.user ? 'Open Account' : 'Sign in', icon: 'user', run: go('vespera://account') },
     { title: 'Toggle Theme', icon: 'moon', run: () => {
       state.set('theme', state.settings.theme === 'dark' ? 'light' : 'dark');

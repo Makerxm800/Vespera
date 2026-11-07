@@ -46,6 +46,7 @@ export function initOmnibox({ onNavigate }) {
         ['vespera://settings', 'Settings'], ['vespera://privacy', 'Privacy Dashboard'],
         ['vespera://community', 'Community — vote on features'], ['vespera://account', 'Account & Sync'],
         ['vespera://history', 'History'], ['vespera://bookmarks', 'Bookmarks'], ['vespera://downloads', 'Downloads'],
+        ['vespera://logs', 'Logs — what the app is doing'],
       ].filter(([url, title]) => (url + ' ' + title).toLowerCase().includes(query.toLowerCase()))
         .slice(0, 3)
         .map(([url, title]) => ({ kind: 'internal', title, sub: url, url }));

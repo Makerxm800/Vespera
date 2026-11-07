@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld('vespera', {
   app: {
     version: () => ipcRenderer.invoke('app:version'),
     downloads: () => ipcRenderer.invoke('downloads:list'),
+    readLog: () => ipcRenderer.invoke('app:read-log'),
+    logPath: () => ipcRenderer.invoke('app:log-path'),
+    openLogs: () => ipcRenderer.invoke('app:open-logs'),
   },
   on: (channel, fn) => {
     const allowed = ['download:started', 'download:updated', 'download:done', 'block:stat'];
