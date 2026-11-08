@@ -1,5 +1,7 @@
 /** Vespera state — settings, bookmarks, history; local-first with account sync. */
 import * as api from './api.js';
+import { applyWallpaper } from './wallpaper.js';
+import { SEARCH_ENGINES } from '../../shared/privacy-utils.mjs';
 
 const SETTINGS_KEY = 'vespera.settings';
 const BOOKMARKS_KEY = 'vespera.bookmarks';
@@ -25,19 +27,33 @@ export const DEFAULT_SETTINGS = {
     antiFingerprint: true,
   },
   allowlist: {},                 // hostname -> true (shields off for that site)
+  wallpaper: { type: 'builtin', id: 'twilight' },
+  wallpaperDim: 40,
+  showWallpaper: true,
+  customAccent: '#f6b93b',
+  clockSeconds: true,
+  clock24: false,
+  extensions: { darkPages: false, focusMode: false },
+  downloadPath: '',
+  askDownloadLocation: true,
+  onboarded: false,
 };
 
 function load(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
-    return raw ? { ...fallback, ...JSON.parse(raw) } : structuredClone(fallback);
+    if (!raw) return structuredClone(fallback);
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return structuredClone(fallback);
+    return { ...fallback, ...parsed };
   } catch {
     return structuredClone(fallback);
   }
 }
 
 function save(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* quota */ }
+  try { localStorage.setItem(key, JSON.stringify(value)); return true; }
+  catch { queueMicrotask(() => bus.emit('storage-error', 'Device storage is full or unavailable. This change could not be saved.')); return false; }
 }
 
 /** Simple event emitter for UI updates. */
@@ -58,19 +74,27 @@ class Emitter {
 export const bus = new Emitter();
 
 export const state = {
+  private: Boolean(window.vespera?.window?.isPrivate),
   settings: load(SETTINGS_KEY, DEFAULT_SETTINGS),
   bookmarks: load(BOOKMARKS_KEY, { items: [] }).items || [],
   history: load(HISTORY_KEY, { items: [] }).items || [],
   stats: load(STATS_KEY, { trackers: 0, ads: 0, linksCleaned: 0, httpsUpgrades: 0, bySite: {} }),
-  user: api.getCachedUser(),
+  user: api.getToken() ? api.getCachedUser() : null,
 
   saveSettings() {
     // Deep-merge shields so partial objects don't drop keys.
-    const merged = { ...DEFAULT_SETTINGS, ...this.settings, shields: { ...DEFAULT_SETTINGS.shields, ...(this.settings.shields || {}) } };
+    if (!SEARCH_ENGINES[this.settings.searchEngine]) this.settings.searchEngine = 'startpage';
+    const merged = { ...DEFAULT_SETTINGS, ...this.settings,
+      shields: { ...DEFAULT_SETTINGS.shields, ...(this.settings.shields || {}) },
+      extensions: { ...DEFAULT_SETTINGS.extensions, ...(this.settings.extensions || {}) },
+      allowlist: { ...(this.settings.allowlist || {}) },
+    };
     this.settings = merged;
-    save(SETTINGS_KEY, merged);
+    const saved = save(SETTINGS_KEY, merged);
+    window.vespera?.prefs?.save(merged);
     bus.emit('settings', merged);
     this.pushSync('settings', merged);
+    return saved;
   },
 
   set(path, value) {
@@ -81,7 +105,7 @@ export const state = {
       obj = obj[parts[i]];
     }
     obj[parts.at(-1)] = value;
-    this.saveSettings();
+    return this.saveSettings();
   },
 
   // ---- bookmarks ----
@@ -105,13 +129,20 @@ export const state = {
 
   // ---- history ----
   addHistory({ title, url }) {
-    if (url.startsWith('vespera://')) return;
+    if (this.private || url.startsWith('vespera://') || !/^https?:/.test(url)) return;
+    const previous = this.history.find((h) => h.url === url);
     this.history = this.history.filter((h) => h.url !== url);
-    this.history.unshift({ title, url, visitedAt: Date.now() });
+    this.history.unshift({ title: title && title !== url ? title : (previous?.title || url), url, visitedAt: Date.now() });
     if (this.history.length > 500) this.history.length = 500;
     save(HISTORY_KEY, { items: this.history });
     bus.emit('history', this.history);
     this.pushSync('history', { items: this.history.slice(0, 200) });
+  },
+  removeHistory(url) {
+    this.history = this.history.filter((h) => h.url !== url);
+    save(HISTORY_KEY, { items: this.history });
+    bus.emit('history', this.history);
+    this.pushSync('history', { items: this.history });
   },
   clearHistory() {
     this.history = [];
@@ -126,66 +157,120 @@ export const state = {
     else if (kind === 'ad') this.stats.ads++;
     else if (kind === 'link') this.stats.linksCleaned++;
     else if (kind === 'https') this.stats.httpsUpgrades++;
-    if (host) {
+    if (host && (kind === 'tracker' || kind === 'ad')) {
       this.stats.bySite[host] = (this.stats.bySite[host] || 0) + 1;
     }
-    save(STATS_KEY, this.stats);
+    if (!this.private) save(STATS_KEY, this.stats);
     bus.emit('stats', this.stats);
   },
 
   // ---- account sync (last-write-wins) ----
-  syncTimer: null,
+  syncTimers: {},
   pushSync(part, value) {
-    if (!this.user) return;
-    clearTimeout(this.syncTimer);
-    this.syncTimer = setTimeout(async () => {
+    if (!this.user || this.private) return;
+    clearTimeout(this.syncTimers[part]);
+    this.syncTimers[part] = setTimeout(async () => {
       const r = await api.sync.putPart(part, value);
-      if (r.status === 401) { api.setSession(null, null); this.user = null; bus.emit('user', null); }
+      if (r.status === 401) this.clearSession();
+      else if (!r.ok) bus.emit('sync-error', r.message || 'Sync is unavailable right now.');
     }, 700);
   },
 
+  clearSession() {
+    for (const timer of Object.values(this.syncTimers)) clearTimeout(timer);
+    this.syncTimers = {};
+    api.setSession(null, null);
+    this.user = null;
+    bus.emit('user', null);
+  },
+
   async pullSync() {
-    if (!this.user) return;
+    if (!this.user || this.private) return { ok: false, skipped: true };
     const r = await api.sync.get();
-    if (!r.ok || !r.collections) return;
+    if (r.status === 401) { this.clearSession(); return { ok: false, message: 'Your session expired. Please sign in again.' }; }
+    if (!r.ok || !r.collections) return { ok: false, message: r.message || 'Could not reach your sync store.' };
     const { settings, bookmarks, history } = r.collections;
-    // Merge policy: adopt remote values if present (single-user LWW).
-    if (settings && Object.keys(settings).length) {
-      this.settings = { ...DEFAULT_SETTINGS, ...settings, shields: { ...DEFAULT_SETTINGS.shields, ...(settings.shields || {}) } };
+    if (settings && typeof settings === 'object' && Object.keys(settings).length) {
+      this.settings = {
+        ...DEFAULT_SETTINGS, ...settings,
+        shields: { ...DEFAULT_SETTINGS.shields, ...(settings.shields || {}) },
+        extensions: { ...DEFAULT_SETTINGS.extensions, ...(settings.extensions || {}) },
+        allowlist: { ...(settings.allowlist || {}) },
+      };
       save(SETTINGS_KEY, this.settings);
       bus.emit('settings', this.settings);
     }
     if (bookmarks && Array.isArray(bookmarks.items)) {
-      // Union by url, remote wins on conflict.
-      const seen = new Set(bookmarks.items.map((b) => b.url));
-      this.bookmarks = [...bookmarks.items, ...this.bookmarks.filter((b) => !seen.has(b.url))];
+      const remote = bookmarks.items.filter((b) => b && typeof b.url === 'string');
+      const seen = new Set(remote.map((b) => b.url));
+      this.bookmarks = [...remote, ...this.bookmarks.filter((b) => !seen.has(b.url))];
       save(BOOKMARKS_KEY, { items: this.bookmarks });
       bus.emit('bookmarks', this.bookmarks);
     }
     if (history && Array.isArray(history.items)) {
-      this.history = [...history.items, ...this.history.filter((h) => !history.items.some((r2) => r2.url === h.url))]
+      const remote = history.items.filter((h) => h && typeof h.url === 'string' && Number.isFinite(h.visitedAt));
+      this.history = [...remote, ...this.history.filter((h) => !remote.some((r2) => r2.url === h.url))]
         .sort((a, b) => b.visitedAt - a.visitedAt).slice(0, 500);
       save(HISTORY_KEY, { items: this.history });
       bus.emit('history', this.history);
     }
+    return { ok: true };
   },
 
-  setUser(user) {
+  async syncNow() {
+    if (!this.user || this.private) return { ok: false, message: 'Sign in to sync your data.' };
+    const pulled = await this.pullSync();
+    if (!pulled.ok) return pulled;
+    const parts = [
+      ['settings', this.settings],
+      ['bookmarks', { items: this.bookmarks }],
+      ['history', { items: this.history.slice(0, 200) }],
+    ];
+    for (const [part, value] of parts) {
+      clearTimeout(this.syncTimers[part]);
+      const r = await api.sync.putPart(part, value);
+      if (!r.ok) {
+        if (r.status === 401) this.clearSession();
+        return { ok: false, message: r.message || 'Sync failed. Please try again.' };
+      }
+    }
+    return { ok: true };
+  },
+
+  async setUser(user) {
     this.user = user;
     api.setSession(api.getToken(), user);
+    if (!user) {
+      for (const timer of Object.values(this.syncTimers)) clearTimeout(timer);
+      this.syncTimers = {};
+    }
     bus.emit('user', user);
-    if (user) this.pullSync();
+    if (user && !this.private) return this.pullSync();
+    return { ok: true };
   },
 };
 
-/** Apply theme + accent to <html>. */
+/** Apply theme + accent to <html>. Custom image bytes never enter settings/sync. */
 export function applyAppearance() {
   const s = state.settings;
-  const theme = s.theme === 'system'
-    ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
-    : s.theme;
-  document.documentElement.dataset.theme = theme;
-  document.documentElement.dataset.accent = s.accent;
-  document.documentElement.dataset.density = s.density || 'comfortable';
+  const media = matchMedia('(prefers-color-scheme: light)');
+  const theme = s.theme === 'system' ? (media.matches ? 'light' : 'dark') : s.theme;
+  const root = document.documentElement;
+  root.dataset.theme = ['light', 'dark'].includes(theme) ? theme : 'dark';
+  root.dataset.accent = ['gold', 'violet', 'teal', 'rose'].includes(s.accent) ? s.accent : 'custom';
+  root.dataset.density = s.density === 'compact' ? 'compact' : 'comfortable';
+  if (s.accent === 'custom' && /^#[0-9a-f]{6}$/i.test(s.customAccent || '')) {
+    const hex = s.customAccent;
+    const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    const ink = rgb[0] * .299 + rgb[1] * .587 + rgb[2] * .114 > 150 ? '#101522' : '#ffffff';
+    root.style.setProperty('--accent', hex);
+    root.style.setProperty('--accent-2', hex);
+    root.style.setProperty('--accent-ink', ink);
+    root.style.setProperty('--accent-soft', `rgba(${rgb.join(',')}, .17)`);
+  } else {
+    for (const key of ['--accent', '--accent-2', '--accent-ink', '--accent-soft']) root.style.removeProperty(key);
+  }
   document.body.classList.toggle('vertical-tabs', s.tabLayout === 'vertical');
+  document.body.classList.toggle('focus-mode', Boolean(s.extensions?.focusMode));
+  void applyWallpaper(s);
 }

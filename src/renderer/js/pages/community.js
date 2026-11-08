@@ -19,6 +19,7 @@ const STATUSES = ['open', 'planned', 'in-progress', 'shipped'];
 export function renderCommunity(container, ctx) {
   let sort = 'votes';
   let expanded = null;
+  let alive = true;
 
   container.innerHTML = `
     <div class="page">
@@ -64,6 +65,7 @@ export function renderCommunity(container, ctx) {
 
   async function load() {
     const r = await api.community.list(sort);
+    if (!alive) return;
     const list = $('#cm-list');
     if (!r.ok) {
       list.innerHTML = `<div class="empty">${icon('warning')}<div>Could not load ideas — is the Vespera service running?</div></div>`;
@@ -77,6 +79,8 @@ export function renderCommunity(container, ctx) {
     }
     list.innerHTML = reqs.map((q) => cardHtml(q)).join('');
     wireCards(reqs);
+    wireStatusControls();
+    if (expanded) void fillComments(expanded);
   }
 
   function cardHtml(q) {
@@ -131,38 +135,40 @@ export function renderCommunity(container, ctx) {
     });
 
     list.querySelectorAll('.cm-card').forEach((card) => {
-      card.addEventListener('click', async () => {
+      card.addEventListener('click', async (e) => {
+        if (e.target.closest('button,select,input,textarea,a,.cm-comments')) return;
         const id = card.dataset.id;
         expanded = expanded === id ? null : id;
-        if (!expanded) { load(); return; }
-        const host = card.querySelector(`[data-comments="${id}"]`);
-        if (!host) { load(); return; }
-        const r = await api.community.comments(id);
-        host.innerHTML = (r.comments || []).map((c) => `
-          <div class="cm-comment">
-            <div class="avatar" style="--hue:${(c.authorName || '').length * 37 % 360}">${escapeHtml((c.authorName || '?')[0].toUpperCase())}</div>
-            <div>
-              <div><span class="cm-c-name">${escapeHtml(c.authorName)}</span><span class="cm-c-time">${timeAgo(c.createdAt)}</span></div>
-              <div class="cm-c-body">${escapeHtml(c.body)}</div>
-            </div>
-          </div>`).join('') + `
-          ${state.user ? `
-            <div class="row" style="margin-top:6px">
-              <input class="input grow" placeholder="Add a comment…" data-new-comment="${id}">
-              <button class="btn" data-send-comment="${id}">${icon('send')}</button>
-            </div>` : `<div class="small faint" style="margin-top:6px">Sign in to join the discussion.</div>`}`;
-
-        host.querySelector(`[data-send-comment]`)?.addEventListener('click', async () => {
-          const input = host.querySelector(`[data-new-comment]`);
-          const body = input.value.trim();
-          if (!body) return;
-          const res = await api.community.comment(id, body);
-          if (res.ok) { toast('Comment posted', 'ok'); expanded = null; load(); expanded = id; setTimeout(load, 0); }
-          else toast(res.message || 'Comment failed', 'error');
-        });
+        await load();
       });
     });
+  }
 
+  async function fillComments(id) {
+    const r = await api.community.comments(id);
+    if (!alive || expanded !== id) return;
+    const host = $('#cm-list').querySelector(`[data-comments="${id}"]`);
+    if (!host) return;
+    if (!r.ok) { host.textContent = r.message || 'Comments could not be loaded.'; return; }
+    host.innerHTML = (r.comments || []).map((c) => `
+      <div class="cm-comment">
+        <div class="avatar" style="--hue:${(c.authorName || '').length * 37 % 360}">${escapeHtml((c.authorName || '?')[0].toUpperCase())}</div>
+        <div><div><span class="cm-c-name">${escapeHtml(c.authorName)}</span><span class="cm-c-time">${timeAgo(c.createdAt)}</span></div><div class="cm-c-body">${escapeHtml(c.body)}</div></div>
+      </div>`).join('') + `
+      ${state.user ? `<form class="row" data-comment-form="${id}" style="margin-top:6px"><input class="input grow" placeholder="Add a comment…" data-new-comment="${id}" maxlength="2000"><button class="btn" type="submit">${icon('send')}</button></form>` : '<div class="small faint" style="margin-top:6px">Sign in to join the discussion.</div>'}`;
+    host.querySelector('[data-comment-form]')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = host.querySelector('[data-new-comment]');
+      const body = input.value.trim(); if (!body) return;
+      const res = await api.community.comment(id, body);
+      if (!alive) return;
+      if (res.ok) { toast('Comment posted', 'ok'); expanded = id; await load(); }
+      else toast(res.message || 'Comment failed', 'error');
+    });
+  }
+
+  function wireStatusControls() {
+    const list = $('#cm-list');
     list.querySelectorAll('[data-status-for]').forEach((sel) => {
       sel.addEventListener('click', (e) => e.stopPropagation());
       sel.addEventListener('change', async () => {
@@ -204,6 +210,7 @@ export function renderCommunity(container, ctx) {
   });
 
   load();
+  return () => { alive = false; };
 }
 
 function timeAgo(iso) {

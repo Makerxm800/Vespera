@@ -207,3 +207,11 @@ code { font-family: var(--font-mono); font-size: .92em; }
   text-align: center;
 }
 .empty svg { width: 42px; height: 42px; color: var(--text-faint); }
+/* The native checkbox owns the full switch hit area (including keyboard focus). */
+.switch input { inset: 0; width: 100%; height: 100%; margin: 0; z-index: 2; cursor: pointer; }
+.switch .track, .switch .thumb { pointer-events: none; }
+.switch input:disabled { cursor: not-allowed; }
+
+/* Compact action buttons for account/privacy surfaces. */
+.btn-sm { min-height: 30px; padding: 6px 12px; gap: 6px; font-size: 12px; }
+.btn-sm svg { width: 14px; height: 14px; }

@@ -120,7 +120,7 @@ export function classifyInput(input) {
   if (!text) return { kind: 'search', value: '' };
 
   // Internal vespera:// pages
-  if (/^vespera:\/\//i.test(text)) return { kind: 'internal', value: text.toLowerCase() };
+  if (/^vespera:\/\//i.test(text)) return { kind: 'internal', value: 'vespera://' + text.slice(10) };
   if (/^(about|chrome|edge):/i.test(text)) {
     const m = text.toLowerCase().match(/^(?:about|chrome|edge):([\w-]*)/);
     const page = m ? m[1] : '';
@@ -134,7 +134,7 @@ export function classifyInput(input) {
     if (/^(javascript|data|vbscript|file|blob):/i.test(text)) {
       return { kind: 'search', value: text };
     }
-    return { kind: 'url', value: text };
+    return { kind: 'search', value: text };
   }
 
   // localhost / IPs / host:port
@@ -142,6 +142,8 @@ export function classifyInput(input) {
       /^\d{1,3}(\.\d{1,3}){3}(:\d+)?(\/|$)/.test(text)) {
     return { kind: 'url', value: 'http://' + text };
   }
+
+  if (/^[a-z][a-z0-9+.\-]*:/i.test(text)) return { kind: 'search', value: text };
 
   // domain.tld or domain.tld/path — must have a known-looking TLD and no spaces.
   if (!/\s/.test(text)) {
@@ -166,13 +168,18 @@ export const INTERNAL_PAGES = {
   'vespera://newtab': { title: 'New Tab', icon: 'sparkle' },
   'vespera://welcome': { title: 'Welcome', icon: 'sparkle' },
   'vespera://settings': { title: 'Settings', icon: 'gear' },
-  'vespera://privacy': { title: 'Privacy Dashboard', icon: 'shield' },
+  'vespera://privacy': { title: 'Privacy Hub', icon: 'shield' },
   'vespera://community': { title: 'Community', icon: 'users' },
   'vespera://account': { title: 'Account', icon: 'user' },
   'vespera://history': { title: 'History', icon: 'clock' },
   'vespera://bookmarks': { title: 'Bookmarks', icon: 'bookmark' },
   'vespera://downloads': { title: 'Downloads', icon: 'download' },
   'vespera://shields': { title: 'Shields', icon: 'shield' },
+  'vespera://extensions': { title: 'Extensions', icon: 'split' },
+  'vespera://logs': { title: 'Logs', icon: 'flask' },
+  'vespera://reader': { title: 'Reader View', icon: 'eye' },
+  'vespera://search': { title: 'Preview Search', icon: 'search' },
+  'vespera://updates': { title: 'What’s New', icon: 'sparkle' },
 };
 
 /**
@@ -189,4 +196,17 @@ export function isThirdParty(requestUrl, documentUrl) {
   } catch {
     return true;
   }
+}
+
+/** Keep queries intact while looking up an internal page renderer. */
+export function internalPageKey(url) {
+  return String(url || '').split(/[?#]/)[0].replace(/\/$/, '').toLowerCase();
+}
+
+/** Only web URLs and our own pages may become browser tabs. */
+export function safeTabUrl(value) {
+  const text = String(value || '').trim();
+  if (/^vespera:\/\//i.test(text)) return text;
+  try { const u = new URL(text); return ['https:', 'http:'].includes(u.protocol) ? u.href : null; }
+  catch { return null; }
 }

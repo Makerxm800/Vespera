@@ -39,7 +39,7 @@ export const auth = {
   login: (email, password) =>
     api('/api/auth/login', { method: 'POST', body: { email, password }, auth: false }),
   me: () => api('/api/auth/me'),
-  logout: () => api('/api/auth/logout', { method: 'POST' }),
+  logout: (all = false) => api('/api/auth/logout', { method: 'POST', body: { all } }),
   updateProfile: (patch) => api('/api/auth/profile', { method: 'PATCH', body: patch }),
 };
 

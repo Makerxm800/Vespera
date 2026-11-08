@@ -21,7 +21,9 @@ const { Store } = require('./lib/db');
 const { registerRoutes: registerAuth } = require('./routes/auth');
 const { registerRoutes: registerSync } = require('./routes/sync');
 const { registerRoutes: registerCommunity } = require('./routes/community');
-const { handleProxy } = require('./lib/proxy');
+const { handleProxy, fetchRemote } = require('./lib/proxy');
+const { extractArticle } = require('./lib/reader');
+const { version } = require('../package.json');
 const { defaultRules } = require('../src/shared/blocklists');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -92,7 +94,18 @@ function createServer({ port = Number(process.env.PORT) || 4600, host = '0.0.0.0
     });
   });
 
-  router.get('/api/health', (req, res) => json(res, 200, { ok: true, app: 'vespera', version: '0.1.0' }));
+  router.get('/api/health', (req, res) => json(res, 200, {
+    ok: true, app: 'vespera', version,
+    previewRestricted: Boolean(process.env.VESPERA_PROXY_ALLOWED_HOSTS),
+    allowedHosts: (process.env.VESPERA_PROXY_ALLOWED_HOSTS || '').split(',').filter(Boolean),
+  }));
+  router.get('/api/reader', async (req, res, params, url) => {
+    try {
+      const result = await fetchRemote(url.searchParams.get('url') || '');
+      if (!String(result.headers['content-type'] || '').includes('html')) return json(res, 415, { error: 'not_html', message: 'Reader View needs an article page.' });
+      return json(res, 200, extractArticle(result.body.toString('utf8'), result.finalUrl));
+    } catch (err) { return json(res, 502, { error: 'reader_failed', message: err.message }); }
+  });
 
   // Proxy for the web-preview path (external sites).
   router.add('GET', '/proxy', (req, res, params, url) => handleProxy(req, res, url));
@@ -113,8 +126,16 @@ function createServer({ port = Number(process.env.PORT) || 4600, host = '0.0.0.0
       });
     }
 
+    // Shared ESM modules live outside the renderer root and must never receive SPA HTML.
+    if (url.pathname.startsWith('/shared/')) {
+      try { return serveStatic(req, res, path.join(ROOT, 'src', 'shared'), url.pathname.slice('/shared'.length), false); }
+      catch { res.writeHead(400); return res.end('Bad request'); }
+    }
+
     // Static renderer files (SPA fallback for convenience).
-    return serveStatic(req, res, RENDERER, url.pathname, true);
+    try {
+      return serveStatic(req, res, RENDERER, url.pathname, false);
+    } catch { res.writeHead(400); return res.end('Bad request'); }
   });
 
   return new Promise((resolve, reject) => {

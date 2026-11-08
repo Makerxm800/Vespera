@@ -18,6 +18,7 @@ const DEFAULT_DB = {
   requests: [],         // community feature requests
   votes: {},            // requestId -> {userId: +1|-1}
   comments: [],         // {id, requestId, userId, authorName, body, createdAt}
+  revokedTokens: {},    // token id -> expiry timestamp
   meta: { version: 1 },
 };
 
@@ -46,7 +47,9 @@ class Store {
     const dir = path.dirname(this.file);
     fs.mkdirSync(dir, { recursive: true });
     const tmp = this.file + '.' + crypto.randomBytes(4).toString('hex') + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2));
+    const now = Date.now();
+    for (const [id, exp] of Object.entries(this.data.revokedTokens || {})) if (!exp || exp < now) delete this.data.revokedTokens[id];
+    fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2), { mode: 0o600 });
     fs.renameSync(tmp, this.file); // atomic on POSIX
   }
 
@@ -89,6 +92,17 @@ class Store {
     const u = this.findUserById(id);
     if (u) { u.tokenVersion = (u.tokenVersion || 1) + 1; this.save(); }
     return u;
+  }
+
+  revokeToken(id, expiresAt) {
+    if (!id) return;
+    this.data.revokedTokens ||= {};
+    this.data.revokedTokens[id] = Number(expiresAt) || Date.now() + 30 * 24 * 60 * 60 * 1000;
+    this.save();
+  }
+
+  isTokenRevoked(id) {
+    return Boolean(id && this.data.revokedTokens?.[id]);
   }
 
   // ---- sync collections --------------------------------------------------

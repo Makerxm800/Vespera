@@ -1,171 +1,245 @@
-/** Vespera tab manager — horizontal strip + vertical sidebar tabs. */
+/** Tab model + accessible horizontal/vertical tab strips. Views are owned by app.js. */
 import { icon } from './icons.js';
-import { platform } from './platform.js';
+import { escapeHtml } from './toasts.js';
+import { safeTabUrl } from '../../shared/privacy-utils.mjs';
 
 let nextId = 1;
-
 export function createTabModel(url = 'vespera://newtab', opts = {}) {
   return {
-    id: 'tab' + nextId++,
-    url,
-    title: opts.title || 'New Tab',
-    favicon: null,
-    loading: false,
-    pinned: false,
-    view: null,           // live HTMLElement (webview/iframe/page container)
-    pageCleanup: null,    // internal page unmount hook
+    id: 'tab' + nextId++, url, title: opts.title || 'New Tab', favicon: null,
+    loading: false, pinned: Boolean(opts.pinned), view: null, pageCleanup: null,
+    disposeView: null, loadTimer: null, error: null, zoom: 1,
+    entries: [{ url, title: opts.title || 'New Tab' }], entryIndex: 0,
     shields: { blocked: 0, ads: 0, trackers: 0, cleaned: 0 },
-    createdAt: Date.now(),
-    _internal: url.startsWith('vespera://'),
+    createdAt: Date.now(), _internal: url.startsWith('vespera://'),
   };
 }
 
 export class TabManager {
-  constructor({ onActiveChange, onClose, onNavigate } = {}) {
+  constructor({ onActiveChange, onClose, onMount, onChange } = {}) {
     this.tabs = [];
     this.activeId = null;
+    this.closedStack = [];
     this.onActiveChange = onActiveChange || (() => {});
     this.onClose = onClose || (() => {});
-    this.onNavigate = onNavigate || (() => {});
+    this.onMount = onMount || (() => {});
+    this.onChange = onChange || (() => {});
     this.strip = document.getElementById('tabstrip');
     this.vlist = document.getElementById('vtabs-list');
+    for (const el of [this.strip, this.vlist]) el?.addEventListener('click', (e) => this.handleClick(e));
+    for (const el of [this.strip, this.vlist]) {
+      el?.addEventListener('auxclick', (e) => {
+        if (e.button !== 1) return;
+        const tab = e.target.closest('[data-id]');
+        if (tab) { e.preventDefault(); this.close(tab.dataset.id); }
+      });
+      el?.addEventListener('keydown', (e) => {
+        const row = e.target.closest('[data-id]');
+        if (!row || e.target.closest('button')) return;
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.activate(row.dataset.id); }
+        if (e.key === 'Delete') this.close(row.dataset.id);
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); this.next(); this.focusActive(); }
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); this.prev(); this.focusActive(); }
+      });
+      el?.addEventListener('dragstart', (e) => {
+        const row = e.target.closest('[data-id]');
+        if (!row) return;
+        e.dataTransfer.setData('text/tab-id', row.dataset.id);
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      el?.addEventListener('dragover', (e) => {
+        const row = e.target.closest('[data-id]');
+        if (row) { e.preventDefault(); row.classList.add('drag-over'); }
+      });
+      el?.addEventListener('dragleave', (e) => e.target.closest('[data-id]')?.classList.remove('drag-over'));
+      el?.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const row = e.target.closest('[data-id]');
+        row?.classList.remove('drag-over');
+        if (row) this.move(e.dataTransfer.getData('text/tab-id'), row.dataset.id);
+      });
+      el?.addEventListener('contextmenu', (e) => {
+        const row = e.target.closest('[data-id]');
+        if (row) { e.preventDefault(); this.onContextMenu?.(row.dataset.id, e.clientX, e.clientY); }
+      });
+    }
   }
-
   get active() { return this.tabs.find((t) => t.id === this.activeId) || null; }
-
-  add(url, { activate = true, title } = {}) {
-    const tab = createTabModel(url, { title });
+  handleClick(e) {
+    const close = e.target.closest('[data-close]');
+    if (close) { e.stopPropagation(); this.close(close.dataset.close); return; }
+    const row = e.target.closest('[data-id]');
+    if (row) this.activate(row.dataset.id);
+  }
+  add(url = 'vespera://newtab', { activate = true, title, pinned = false } = {}) {
+    url = safeTabUrl(url);
+    if (!url) throw new Error('This address cannot be opened in a tab.');
+    if (this.tabs.length >= 60) { this.close(this.tabs.find((t) => !t.pinned && t.id !== this.activeId)?.id); }
+    const tab = createTabModel(url, { title, pinned });
     this.tabs.push(tab);
+    this.onMount(tab);
     this.render();
-    if (activate) this.activate(tab.id);
+    if (activate || !this.activeId) this.activate(tab.id);
+    else this.onChange();
     return tab;
   }
-
+  dispose(tab) {
+    clearTimeout(tab.loadTimer);
+    try { tab.pageCleanup?.(); } catch (err) { console.error('[vespera] page cleanup', err); }
+    try { tab.disposeView?.(); } catch { /* already detached */ }
+    tab.pageCleanup = null;
+    tab.view?.remove();
+    tab.view = null;
+  }
   close(id) {
     const i = this.tabs.findIndex((t) => t.id === id);
     if (i === -1) return;
     const [tab] = this.tabs.splice(i, 1);
-    if (tab.pageCleanup) { try { tab.pageCleanup(); } catch { /* noop */ } }
-    if (tab.view) tab.view.remove();
+    this.closedStack.push({ url: tab.url, title: tab.title });
+    if (this.closedStack.length > 20) this.closedStack.shift();
+    this.dispose(tab);
     this.onClose(tab);
-    if (!this.tabs.length) {
-      // Always keep at least one tab.
-      const t = this.add('vespera://newtab');
-      this.activate(t.id);
-      return;
-    }
-    if (this.activeId === id) {
-      const next = this.tabs[Math.min(i, this.tabs.length - 1)];
-      this.activate(next.id);
-    } else {
-      this.render();
-    }
+    if (!this.tabs.length) { this.add('vespera://newtab'); return; }
+    if (this.activeId === id) this.activate(this.tabs[Math.min(i, this.tabs.length - 1)].id);
+    else { this.render(); this.onChange(); }
   }
-
+  closeOthers(id) { for (const t of [...this.tabs]) if (t.id !== id && !t.pinned) this.close(t.id); this.activate(id); }
+  duplicate(id) { const t = this.tabs.find((t) => t.id === id); if (t) this.add(t.url, { title: t.title }); }
+  togglePin(id) { const t = this.tabs.find((t) => t.id === id); if (t) { t.pinned = !t.pinned; this.render(); this.onChange(); } }
   activate(id) {
+    if (!this.tabs.some((t) => t.id === id)) return;
     this.activeId = id;
-    const tab = this.active;
-    if (!tab) return;
-    // Show only the active view.
-    for (const t of this.tabs) {
-      if (t.view) t.view.classList.toggle('hidden', t.id !== id);
-    }
+    for (const t of this.tabs) t.view?.classList.toggle('hidden', t.id !== id);
     this.render();
-    this.onActiveChange(tab);
+    this.onActiveChange(this.active);
+    this.onChange();
+    this.focusActiveStrip();
   }
-
-  update(tab, patch) {
+  focusActiveStrip() {
+    const list = document.body.classList.contains('vertical-tabs') ? this.vlist : this.strip;
+    list?.querySelector('.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+  focusActive() {
+    const list = document.body.classList.contains('vertical-tabs') ? this.vlist : this.strip;
+    list?.querySelector('.active')?.focus();
+  }
+  update(tab, patch = {}) {
     Object.assign(tab, patch);
+    if (tab.entries?.[tab.entryIndex]) tab.entries[tab.entryIndex].title = tab.title;
     this.render();
+    if (tab.id === this.activeId) this.onActiveChange(tab);
+    this.onChange();
   }
-
   move(fromId, toId) {
-    const from = this.tabs.findIndex((t) => t.id === fromId);
-    const to = this.tabs.findIndex((t) => t.id === toId);
-    if (from === -1 || to === -1 || from === to) return;
-    const [tab] = this.tabs.splice(from, 1);
-    this.tabs.splice(to, 0, tab);
-    this.render();
+    const from = this.tabs.findIndex((t) => t.id === fromId), to = this.tabs.findIndex((t) => t.id === toId);
+    if (from < 0 || to < 0 || from === to) return;
+    this.tabs.splice(to, 0, this.tabs.splice(from, 1)[0]);
+    this.render(); this.onChange();
   }
-
-  next() {
-    const i = this.tabs.findIndex((t) => t.id === this.activeId);
-    this.activate(this.tabs[(i + 1) % this.tabs.length].id);
-  }
-  prev() {
-    const i = this.tabs.findIndex((t) => t.id === this.activeId);
-    this.activate(this.tabs[(i - 1 + this.tabs.length) % this.tabs.length].id);
-  }
-  reopenClosed() {
-    // Reopen last closed (kept in a small stack by app.js if desired).
-    this._lastClosed && this.add(this._lastClosed.url, { title: this._lastClosed.title });
-  }
-
+  next() { const i = this.tabs.findIndex((t) => t.id === this.activeId); this.activate(this.tabs[(i + 1) % this.tabs.length].id); }
+  prev() { const i = this.tabs.findIndex((t) => t.id === this.activeId); this.activate(this.tabs[(i - 1 + this.tabs.length) % this.tabs.length].id); }
+  reopenClosed() { const t = this.closedStack.pop(); return t ? this.add(t.url, { title: t.title }) : null; }
   faviconHtml(tab) {
     if (tab.loading) return '<div class="spinner"></div>';
-    if (tab.favicon) return `<img src="${tab.favicon}" alt="" onerror="this.remove()">`;
+    if (tab.favicon && /^(https?:|data:image\/)/.test(tab.favicon)) return `<img src="${escapeHtml(tab.favicon)}" alt="" referrerpolicy="no-referrer">`;
     return icon(tab.url.startsWith('vespera://') ? 'sparkle' : 'globe');
   }
-
   tabHtml(tab, vertical = false) {
     const cls = vertical ? 'vtab' : 'tab';
-    return `
-      <div class="${cls} ${tab.id === this.activeId ? 'active' : ''}" data-id="${tab.id}" draggable="true">
-        <div class="favicon">${this.faviconHtml(tab)}</div>
-        <div class="title">${escapeAttr(tab.title)}</div>
-        <button class="close" data-close="${tab.id}" title="Close tab">
-          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l8 8M10 2L2 10"/></svg>
-        </button>
-      </div>`;
+    return `<div class="${cls} ${tab.id === this.activeId ? 'active' : ''} ${tab.pinned ? 'pinned' : ''}" data-id="${tab.id}" draggable="true" role="tab" tabindex="${tab.id === this.activeId ? 0 : -1}" aria-selected="${tab.id === this.activeId}" title="${escapeHtml(tab.title)}">
+      <div class="favicon">${this.faviconHtml(tab)}</div>
+      <div class="title">${escapeHtml(tab.title)}</div>
+      ${tab.pinned ? '<span class="pin-marker" aria-label="Pinned">•</span>' : ''}
+      <button class="close" data-close="${tab.id}" title="Close tab" aria-label="Close ${escapeHtml(tab.title)}">${icon('x')}</button>
+    </div>`;
   }
-
   render() {
-    const vertical = document.body.classList.contains('vertical-tabs');
-    // Horizontal strip
-    if (this.strip) {
-      this.strip.innerHTML = this.tabs.map((t) => this.tabHtml(t, false)).join('');
-    }
-    // Vertical list
-    if (this.vlist) {
-      this.vlist.innerHTML = this.tabs.map((t) => this.tabHtml(t, true)).join('');
-    }
-    // Wire clicks (both lists share class names by mode)
-    const active = vertical ? this.vlist : this.strip;
-    if (!active) return;
-    active.querySelectorAll('[data-close]').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const id = btn.dataset.close;
-        this._lastClosed = this.tabs.find((t) => t.id === id);
-        this.close(id);
-      });
-    });
-    active.querySelectorAll('[data-id]').forEach((el) => {
-      el.addEventListener('click', () => this.activate(el.dataset.id));
-      el.addEventListener('auxclick', (e) => {
-        if (e.button === 1) { e.preventDefault(); this.close(el.dataset.id); }
-      });
-      el.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('text/tab-id', el.dataset.id);
-        e.dataTransfer.effectAllowed = 'move';
-      });
-      el.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        el.classList.add('drag-over');
-      });
-      el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
-      el.addEventListener('drop', (e) => {
-        e.preventDefault();
-        el.classList.remove('drag-over');
-        const fromId = e.dataTransfer.getData('text/tab-id');
-        if (fromId) this.move(fromId, el.dataset.id);
-      });
-    });
+    // Keyed updates keep the pressed close button, focus and drag target alive.
+    this.renderStrip(this.strip, false);
+    this.renderStrip(this.vlist, true);
+    document.querySelectorAll('[data-tab-count]').forEach((el) => { el.textContent = this.tabs.length; });
   }
-}
-
-function escapeAttr(s) {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  }[c]));
+  renderStrip(list, vertical) {
+    if (!list) return;
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const existing = new Map(), before = new Map();
+    for (const row of [...list.children]) {
+      if (!row.dataset.id) continue;
+      existing.set(row.dataset.id, row);
+      before.set(row.dataset.id, row.getBoundingClientRect());
+    }
+    const alive = new Set(this.tabs.map((t) => t.id));
+    for (const [id, row] of existing) {
+      if (alive.has(id)) continue;
+      const rect = before.get(id);
+      row.remove();
+      if (!reduce && list.offsetParent !== null) this.animateTabExit(list, row, rect, vertical);
+    }
+    const ordered = [];
+    for (const tab of this.tabs) {
+      let row = existing.get(tab.id);
+      if (!row) {
+        const template = document.createElement('template');
+        template.innerHTML = this.tabHtml(tab, vertical).trim();
+        row = template.content.firstElementChild;
+        if (!reduce && list.offsetParent !== null) {
+          row.classList.add('tab-enter');
+          row.addEventListener('animationend', () => row.classList.remove('tab-enter'), { once: true });
+        }
+      }
+      const active = tab.id === this.activeId;
+      row.classList.toggle('active', active);
+      row.classList.toggle('pinned', tab.pinned);
+      row.tabIndex = active ? 0 : -1;
+      row.setAttribute('aria-selected', String(active));
+      row.title = tab.title;
+      const title = row.querySelector('.title');
+      if (title && title.textContent !== tab.title) title.textContent = tab.title;
+      const faviconKey = `${tab.loading ? 'loading' : 'idle'}|${tab.favicon || ''}|${tab._internal ? 'internal' : 'web'}`;
+      if (row.dataset.faviconKey !== faviconKey) {
+        row.dataset.faviconKey = faviconKey;
+        const favicon = row.querySelector('.favicon');
+        if (favicon) favicon.innerHTML = this.faviconHtml(tab);
+      }
+      const close = row.querySelector('.close');
+      if (close) { close.title = 'Close tab'; close.setAttribute('aria-label', `Close ${tab.title}`); }
+      const pin = row.querySelector('.pin-marker');
+      if (tab.pinned && !pin) close?.insertAdjacentHTML('beforebegin', '<span class="pin-marker" aria-label="Pinned">•</span>');
+      else if (!tab.pinned && pin) pin.remove();
+      ordered.push(row);
+    }
+    ordered.forEach((row, index) => {
+      if (list.children[index] !== row) list.insertBefore(row, list.children[index] || null);
+    });
+    if (reduce) return;
+    for (const row of ordered) {
+      const first = before.get(row.dataset.id);
+      if (!first) continue;
+      const last = row.getBoundingClientRect();
+      const x = first.left - last.left, y = first.top - last.top;
+      if (Math.abs(x) < .5 && Math.abs(y) < .5) continue;
+      row._vesperaMove?.cancel();
+      row._vesperaMove = row.animate(
+        [{ transform: `translate(${x}px, ${y}px)` }, { transform: 'translate(0, 0)' }],
+        { duration: 220, easing: 'cubic-bezier(.22, .8, .28, 1)' }
+      );
+    }
+  }
+  animateTabExit(list, row, rect, vertical) {
+    if (!rect?.width) return;
+    const host = list.getBoundingClientRect();
+    const ghost = row.cloneNode(true);
+    ghost.className = 'tab-exit-ghost' + (vertical ? ' vertical' : '');
+    ghost.removeAttribute('data-id'); ghost.removeAttribute('role'); ghost.removeAttribute('tabindex');
+    ghost.removeAttribute('aria-selected'); ghost.removeAttribute('draggable'); ghost.removeAttribute('title');
+    ghost.setAttribute('aria-hidden', 'true'); ghost.inert = true;
+    ghost.querySelectorAll('[data-close]').forEach((button) => { button.removeAttribute('data-close'); button.tabIndex = -1; });
+    Object.assign(ghost.style, {
+      left: `${rect.left - host.left + list.scrollLeft}px`, top: `${rect.top - host.top + list.scrollTop}px`,
+      width: `${rect.width}px`, height: `${rect.height}px`,
+    });
+    list.appendChild(ghost);
+    ghost.addEventListener('animationend', () => ghost.remove(), { once: true });
+    setTimeout(() => ghost.remove(), 320);
+  }
 }

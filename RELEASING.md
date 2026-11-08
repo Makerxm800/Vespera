@@ -5,7 +5,7 @@ Cutting a release builds real desktop installers for **Windows**, **macOS** and
 
 ## Steps
 
-1. **Bump the version** in `package.json` (e.g. `"version": "0.2.0"`).
+1. **Bump the version** in `package.json` and the top-level `package-lock.json` entries (e.g. `"version": "0.2.0"`). Update `CHANGELOG.md` and the in-app release notes.
 2. **Commit & merge** the change to `main`.
 3. **Tag and push:**
 
@@ -15,7 +15,7 @@ Cutting a release builds real desktop installers for **Windows**, **macOS** and
    ```
 
 4. Done. GitHub Actions (`.github/workflows/release.yml`) then:
-   - runs the test suite,
+   - runs the unit/service tests and Chromium UI checks,
    - builds on native runners:
      - `windows-latest` → `Vespera-Setup-<v>.exe` + `Vespera-Portable-<v>.exe`
      - `macos-latest` → `Vespera-<v>-mac-arm64.dmg` + `Vespera-<v>-mac-x64.dmg`
