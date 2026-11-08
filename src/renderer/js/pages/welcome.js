@@ -18,17 +18,17 @@ export function renderWelcome(container, ctx) {
     <div class="page">
       <div class="welcome-hero">
         ${starfield()}
-        <div class="hero-kicker">${icon('sparkle')} Welcome to Vespera</div>
-        <h1>The browser that works <span class="grad">for you</span>,<br>not for advertisers.</h1>
+        <div class="hero-kicker">${icon('sparkle')} A calmer corner of the internet</div>
+        <h1>Welcome to <span class="grad">Vespera.</span><br>The web, on your terms.</h1>
         <p class="hero-sub">
           Vespera is a community-first Chromium browser: zero telemetry, built-in tracker
           and ad blocking, tracking-link cleanup, and a sleek interface that stays out of your way.
           Different from Chrome and every other browser — on purpose.
         </p>
         <div class="hero-actions">
-          <button class="btn btn-primary" id="w-make-default">${icon('bolt')} Make Vespera my default</button>
-          <button class="btn" id="w-explore">${icon('shield')} See what we block</button>
-          <button class="btn btn-ghost" id="w-community">${icon('users')} Vote on features</button>
+          <button class="btn btn-primary" id="w-start">${icon('sparkle')} Start exploring</button>
+          <button class="btn" id="w-customize">${icon('palette')} Make it yours</button>
+          <button class="btn btn-ghost" id="w-explore">${icon('shield')} Your privacy</button>
         </div>
       </div>
 
@@ -104,9 +104,7 @@ export function renderWelcome(container, ctx) {
       </div>
     </div>`;
 
-  container.querySelector('#w-make-default')?.addEventListener('click', () => {
-    ctx.toast('Vespera is now your default browser on this device.', 'ok');
-  });
-  container.querySelector('#w-explore')?.addEventListener('click', () => ctx.navigate('vespera://privacy'));
-  container.querySelector('#w-community')?.addEventListener('click', () => ctx.navigate('vespera://community'));
+  container.querySelector('#w-start').onclick = () => ctx.navigate('vespera://newtab');
+  container.querySelector('#w-customize').onclick = () => ctx.navigate('vespera://settings#appearance');
+  container.querySelector('#w-explore').onclick = () => ctx.navigate('vespera://privacy');
 }

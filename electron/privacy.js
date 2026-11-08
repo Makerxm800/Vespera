@@ -1,154 +1,69 @@
-/**
- * Vespera Electron Privacy — session-level enforcement of the Vespera
- * privacy engine inside real Chromium (roadmap items 1 & 3, wired up).
- *
- *  - Blocks tracker/ad/fingerprint requests via onBeforeRequest (webRequest)
- *  - Sends Sec-GPC + DNT on every request, strips tracking referrers
- *  - Upgrades http→https navigations when HTTPS-only mode is on
- *  - Strips tracking query parameters from navigations (link cleaning)
- *  - Injects cosmetic-filter CSS after page load
- */
-
+/** Session-level privacy enforcement for real Chromium webviews. */
 'use strict';
-
 const { FilterEngine } = require('../src/shared/filter-engine');
-const { defaultRules } = require('../src/shared/blocklists');
-
-/** Map Chromium webRequest resource types onto engine types. */
+const { BASE_TRACKERS, AD_RULES } = require('../src/shared/blocklists');
 function toEngineType(details) {
-  const t = details.resourceType || 'other';
-  const map = {
-    mainFrame: 'document', subFrame: 'subdocument', stylesheet: 'stylesheet',
-    script: 'script', image: 'image', font: 'font', media: 'media',
-    object: 'object', xhr: 'xmlhttprequest', fetch: 'xmlhttprequest',
-    websocket: 'websocket', ping: 'ping', other: 'other',
-  };
-  return map[t] || 'other';
+  return ({ mainFrame: 'document', subFrame: 'subdocument', stylesheet: 'stylesheet', script: 'script', image: 'image', font: 'font', media: 'media', object: 'object', xhr: 'xmlhttprequest', fetch: 'xmlhttprequest', websocket: 'websocket', ping: 'ping' })[details.resourceType] || 'other';
 }
-
+function hostOf(url) { try { return new URL(url).hostname.toLowerCase(); } catch { return ''; } }
+function siteMatches(host, allowed) { return Boolean(host && allowed && (allowed[host] || Object.keys(allowed).some((h) => host.endsWith('.' + h)))); }
 function installPrivacy(session, getPrefs, log, pu) {
-  if (!pu) throw new Error('installPrivacy requires the privacy-utils ESM module (pass `pu`)');
-  const engine = new FilterEngine(defaultRules());
-
-  // ---- Request blocking -------------------------------------------------
-  session.webRequest.onBeforeRequest(
-    { urls: ['http://*/*', 'https://*/*'] },
-    (details, callback) => {
-      const prefs = getPrefs();
-      const sh = prefs.shields || {};
-      if (sh.enabled === false) return callback({});
-
-      // Never block our own UI or internal pages.
-      if (details.url.startsWith('vespera://') || details.url.includes('127.0.0.1')) {
-        return callback({});
-      }
-
-      const docHost = hostOf(details.referrer || details.frameUrl || details.url);
-      const thirdParty = pu.isThirdParty(details.url, details.frameUrl || details.referrer || details.url);
-
-      // Feature gates
-      const type = toEngineType(details);
-      const isAdType = type === 'image' || type === 'subdocument';
-      if (isAdType && sh.blockAds === false) return callback({});
-      if (!isAdType && sh.blockTrackers === false) return callback({});
-
-      const siteOff = docHost && prefs.allowlist && prefs.allowlist[docHost];
-      if (siteOff) return callback({});
-
-      const result = engine.match(details.url, type, { thirdParty, documentHost: docHost });
-      if (result.blocked) {
-        log('blocked', result.rule, details.url);
-        return callback({ cancel: true });
-      }
-      callback({});
-    }
-  );
-
-  // ---- Privacy headers (GPC + DNT) & referrer trimming -------------------
-  session.webRequest.onBeforeSendHeaders(
-    { urls: ['http://*/*', 'https://*/*'] },
-    (details, callback) => {
-      const prefs = getPrefs();
-      const sh = prefs.shields || {};
-      const headers = { ...details.requestHeaders };
-      if (sh.gpc !== false) {
-        headers['Sec-GPC'] = '1';
-        headers['DNT'] = '1';
-      }
-      callback({ requestHeaders: headers });
-    }
-  );
-
-  // ---- Navigation link cleaning & HTTPS upgrades (via protectWebContents) --
-
-  const wcHooks = new Set();
-  session.on('will-download', (event, item) => {
-    for (const fn of wcHooks) fn(event, item);
+  const trackers = new FilterEngine(BASE_TRACKERS), ads = new FilterEngine(AD_RULES);
+  const engine = new FilterEngine([...BASE_TRACKERS, ...AD_RULES]);
+  const cosmeticKeys = new WeakMap();
+  session.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (details, callback) => {
+    const prefs = getPrefs(), sh = prefs.shields || {};
+    const docUrl = details.webContents?.getURL() || details.referrer || details.url;
+    const docHost = hostOf(docUrl);
+    if (sh.enabled === false || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(hostOf(details.url)) || siteMatches(docHost, prefs.allowlist)) return callback({});
+    const type = toEngineType(details);
+    if (type === 'document') return callback({});
+    const context = { thirdParty: pu.isThirdParty(details.url, docUrl), documentHost: docHost };
+    let kind = null, result;
+    if (sh.blockTrackers !== false) { result = trackers.match(details.url, type, context); if (result.blocked) kind = 'tracker'; }
+    if (!kind && sh.blockAds !== false) { result = ads.match(details.url, type, context); if (result.blocked) kind = 'ad'; }
+    if (kind) { log({ kind, rule: result.rule, url: details.url, host: docHost, webContentsId: details.webContentsId, at: Date.now() }); return callback({ cancel: true }); }
+    callback({});
   });
-
+  session.webRequest.onBeforeSendHeaders({ urls: ['http://*/*', 'https://*/*'] }, (details, callback) => {
+    const sh = getPrefs().shields || {}, headers = { ...details.requestHeaders };
+    for (const key of Object.keys(headers)) if (['sec-gpc', 'dnt'].includes(key.toLowerCase())) delete headers[key];
+    if (sh.enabled !== false && sh.gpc !== false) { headers['Sec-GPC'] = '1'; headers.DNT = '1'; }
+    const refKey = Object.keys(headers).find((k) => k.toLowerCase() === 'referer');
+    if (refKey && sh.enabled !== false) {
+      const ref = pu.strictReferrer(headers[refKey], details.url);
+      if (ref) headers[refKey] = ref; else delete headers[refKey];
+    }
+    callback({ requestHeaders: headers });
+  });
   return {
     engine,
-    /** Apply navigation-time protections to a webContents. */
-    protectWebContents(wc, getPrefs) {
+    protectWebContents(wc) {
       wc.on('will-navigate', (event, url) => {
-        const prefs = getPrefs();
-        const sh = prefs.shields || {};
-        if (sh.enabled === false) return;
-
-        let target = url;
-        let changed = false;
-
-        if (sh.httpsOnly !== false && target.startsWith('http://')
-            && !/^http:\/\/(localhost|127\.0\.0\.1)/i.test(target)) {
-          target = 'https://' + target.slice('http://'.length);
-          changed = true;
-        }
+        const prefs = getPrefs(), sh = prefs.shields || {};
+        if (sh.enabled === false || !/^https?:/i.test(url) || siteMatches(hostOf(url), prefs.allowlist)) return;
+        let target = url, changed = false;
+        if (sh.httpsOnly !== false && target.startsWith('http://') && !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/)/i.test(target)) { target = 'https://' + target.slice(7); changed = true; }
         if (sh.cleanLinks !== false) {
-          const { url: clean, removed } = pu.cleanTrackingParams(target);
-          if (removed.length) {
-            target = clean;
-            changed = true;
-            for (const fn of wcHooks) fn('link-cleaned', removed.length);
-          }
+          const clean = pu.cleanTrackingParams(target);
+          if (clean.removed.length) { target = clean.url; changed = true; log({ kind: 'link', count: clean.removed.length, host: hostOf(target), webContentsId: wc.id, at: Date.now() }); }
         }
-        if (changed) {
-          event.preventDefault();
-          wc.loadURL(target);
-        }
+        if (changed) { event.preventDefault(); wc.loadURL(target).catch(() => {}); }
       });
-
-      // Cosmetic filtering after each load.
-      wc.on('did-finish-load', () => {
-        const prefs = getPrefs();
-        const sh = prefs.shields || {};
-        if (sh.enabled === false) return;
-        const url = wc.getURL();
-        if (!/^https?:/.test(url)) return;
-        const host = hostOf(url);
-        if (host && prefs.allowlist && prefs.allowlist[host]) return;
-
-        const { hide } = engine.cosmeticFor(host || '');
-        let selectors = hide;
-        if (sh.blockAnnoyances === false) {
-          selectors = selectors.filter((s) => !/cookie|gdpr|newsletter|share|social/i.test(s));
-        }
-        if (sh.blockAds === false) {
-          selectors = selectors.filter((s) => !/ad|ads|sponsor/i.test(s));
-        }
-        if (!selectors.length) return;
-        const css = selectors.map((s) => `${s}{display:none!important}`).join('\n');
-        const js = `(function(){var s=document.createElement('style');
-          s.id='__vespera_cosmetic';s.textContent=${JSON.stringify(css)};
-          (document.head||document.documentElement).appendChild(s);})()`;
-        wc.executeJavaScript(js).catch(() => {});
+      wc.on('did-navigate', () => { log({ kind: 'reset', webContentsId: wc.id, host: hostOf(wc.getURL()) }); });
+      wc.on('did-finish-load', async () => {
+        const prefs = getPrefs(), sh = prefs.shields || {}, host = hostOf(wc.getURL());
+        try {
+          const previous = cosmeticKeys.get(wc);
+          if (previous) { await wc.removeInsertedCSS(previous); cosmeticKeys.delete(wc); }
+          if (sh.enabled === false || siteMatches(host, prefs.allowlist) || !/^https?:/.test(wc.getURL())) return;
+          let { hide } = engine.cosmeticFor(host);
+          if (sh.blockAnnoyances === false) hide = hide.filter((s) => !/cookie|gdpr|newsletter|signup|share|social|follow-prompt/i.test(s));
+          if (sh.blockAds === false) hide = hide.filter((s) => !/ad|ads|sponsor/i.test(s));
+          if (hide.length) cosmeticKeys.set(wc, await wc.insertCSS(hide.map((s) => `${s}{display:none!important}`).join('\n')));
+        } catch { /* Navigations can race cosmetic insertion. */ }
       });
     },
-    onDownload(fn) { wcHooks.add(fn); },
   };
 }
-
-function hostOf(url) {
-  try { return new URL(url).hostname.toLowerCase(); } catch { return ''; }
-}
-
-module.exports = { installPrivacy, hostOf };
+module.exports = { installPrivacy, hostOf, siteMatches };

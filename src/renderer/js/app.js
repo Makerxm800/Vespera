@@ -1,18 +1,17 @@
-/**
- * Vespera app controller — boots the browser shell and wires every module.
- * Runs identically in Electron (real Chromium webviews) and the web preview.
- */
+/** Vespera browser controller. Every page action is bound to its owning tab. */
 import { state, applyAppearance, bus } from './state.js';
 import { platform } from './platform.js';
 import { TabManager } from './tabs.js';
 import { initOmnibox } from './omnibox.js';
-import { toggleShields, updateShieldBadge, closeShields } from './shields.js';
+import { toggleShields, updateShieldBadge, hostOf } from './shields.js';
 import { openPalette, closePalette, paletteOpen } from './palette.js';
 import { toast, escapeHtml } from './toasts.js';
 import { icon } from './icons.js';
-import { classifyInput, buildSearchUrl, isInternal, INTERNAL_PAGES, cleanTrackingParams } from '../../shared/privacy-utils.mjs';
+import { classifyInput, buildSearchUrl, isInternal, internalPageKey, INTERNAL_PAGES, cleanTrackingParams, safeTabUrl, SEARCH_ENGINES } from '../../shared/privacy-utils.mjs';
+import { closePopover, openPopover } from './popover.js';
+import { confirmAction } from './dialog.js';
+import { initDownloads, downloadUrl } from './downloads.js';
 import * as api from './api.js';
-
 import { renderWelcome } from './pages/welcome.js';
 import { renderNewtab } from './pages/newtab.js';
 import { renderSettings } from './pages/settings.js';
@@ -21,477 +20,522 @@ import { renderCommunity } from './pages/community.js';
 import { renderAccount } from './pages/account.js';
 import { renderHistory, renderBookmarks, renderDownloads } from './pages/library.js';
 import { renderLogs } from './pages/logs.js';
+import { renderExtensions } from './pages/extensions.js';
+import { renderReader, renderSearch, renderNotFound } from './pages/tools.js';
+import { renderUpdates } from './pages/updates.js';
 
 const PAGE_RENDERERS = {
-  'vespera://newtab': renderNewtab,
-  'vespera://welcome': renderWelcome,
-  'vespera://settings': renderSettings,
-  'vespera://privacy': renderPrivacy,
-  'vespera://community': renderCommunity,
-  'vespera://account': renderAccount,
-  'vespera://history': renderHistory,
-  'vespera://bookmarks': renderBookmarks,
-  'vespera://downloads': renderDownloads,
-  'vespera://shields': renderPrivacy,
-  'vespera://logs': renderLogs,
+  'vespera://newtab': renderNewtab, 'vespera://welcome': renderWelcome,
+  'vespera://settings': renderSettings, 'vespera://privacy': renderPrivacy,
+  'vespera://community': renderCommunity, 'vespera://account': renderAccount,
+  'vespera://history': renderHistory, 'vespera://bookmarks': renderBookmarks,
+  'vespera://downloads': renderDownloads, 'vespera://shields': renderPrivacy,
+  'vespera://logs': renderLogs, 'vespera://extensions': renderExtensions,
+  'vespera://reader': renderReader, 'vespera://search': renderSearch,
+  'vespera://updates': renderUpdates,
 };
-
-let tabs;
-let omnibox;
+let tabs, omnibox, saveTimer, previewRestricted = false, serviceVersion = '';
+let previousDark = false;
+let installPrompt = null;
 const contentEl = document.getElementById('content');
-
-/* ================================================================
-   Navigation
-   ================================================================ */
-
-function classify(value, kind) {
-  if (kind === 'url') return { kind: 'url', value };
-  if (kind === 'search') return { kind: 'search', value };
-  return classifyInput(value);
-}
+const $ = (id) => document.getElementById(id);
+const diagnostics = [];
+function diagnostic(message) { diagnostics.unshift({ at: Date.now(), message: String(message) }); if (diagnostics.length > 100) diagnostics.pop(); }
+window.addEventListener('error', (e) => diagnostic(e.message));
+window.addEventListener('unhandledrejection', (e) => diagnostic(e.reason?.message || e.reason));
 
 function navigate(input, opts = {}) {
-  const target = classify(input.value ?? input, opts.kind);
-  const tab = tabs.active;
+  const value = String(input?.value ?? input ?? '').trim();
+  if (!value) return;
+  const tab = opts.tab || tabs.active;
   if (!tab) return;
-
-  let url;
-  if (target.kind === 'search') {
-    url = buildSearchUrl(target.value, state.settings.searchEngine);
-  } else if (target.kind === 'internal') {
-    url = target.value;
-  } else {
-    url = target.value;
+  const target = opts.kind === 'search' ? { kind: 'search', value } : opts.kind === 'url' ? classifyInput(value) : classifyInput(value);
+  let url = target.kind === 'search' ? buildSearchUrl(target.value, state.settings.searchEngine) : target.value;
+  if (target.kind === 'search' && previewRestricted && !platform.isElectron) {
+    url = 'vespera://search?q=' + encodeURIComponent(target.value);
   }
-
-  // Privacy: strip tracking parameters before we ever load the page.
-  if (state.settings.shields.cleanLinks && !url.startsWith('vespera://')) {
-    const { url: clean, removed } = cleanTrackingParams(url);
-    if (removed.length) {
-      tab.shields.cleaned += removed.length;
-      state.recordBlock('link', hostOf(clean));
-      url = clean;
-    }
+  if (!safeTabUrl(url)) return toast('That address is not a safe web page. Use an http:// or https:// address.', 'error');
+  const sh = state.settings.shields;
+  if (sh.enabled && sh.cleanLinks && !isInternal(url)) {
+    const clean = cleanTrackingParams(url);
+    if (clean.removed.length) { tab.shields.cleaned += clean.removed.length; state.recordBlock('link', hostOf(clean.url)); url = clean.url; }
   }
-  // Privacy: HTTPS-only upgrades.
-  if (state.settings.shields.httpsOnly && url.startsWith('http://')
-      && !/^(localhost|127\.0\.0\.1)/i.test(url)) {
-    url = 'https://' + url.slice('http://'.length);
-    state.recordBlock('https', hostOf(url));
+  if (sh.enabled && sh.httpsOnly && url.startsWith('http://') && !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/)/i.test(url)) {
+    url = 'https://' + url.slice(7); state.recordBlock('https', hostOf(url));
   }
-
   openInTab(tab, url);
 }
 
-function openInTab(tab, url) {
+function disposeView(tab) {
+  clearTimeout(tab.loadTimer);
+  try { tab.pageCleanup?.(); } catch (err) { diagnostic(err.message); }
+  tab.pageCleanup = null;
+  tab.disposeView?.();
+  tab.disposeView = null;
+  tab.view?.remove(); tab.view = null;
+}
+function openInTab(tab, url, { push = true } = {}) {
+  url = safeTabUrl(url);
+  if (!url) return;
+  closePopover(); closeFind();
+  disposeView(tab);
+  if (push) {
+    tab.entries = tab.entries.slice(0, tab.entryIndex + 1);
+    tab.entries.push({ url, title: INTERNAL_PAGES[internalPageKey(url)]?.title || url });
+    if (tab.entries.length > 100) tab.entries.shift();
+    tab.entryIndex = tab.entries.length - 1;
+  }
   tab.url = url;
   tab._internal = isInternal(url);
+  tab.error = null; tab.favicon = null; tab.reader ||= null;
   tab.shields = { blocked: 0, ads: 0, trackers: 0, cleaned: tab.shields?.cleaned || 0 };
-
-  // Tear down previous view.
-  if (tab.pageCleanup) { try { tab.pageCleanup(); } catch { /* noop */ } tab.pageCleanup = null; }
-  if (tab.view) { tab.view.remove(); tab.view = null; }
-
   if (tab._internal) {
-    tab.title = INTERNAL_PAGES[url]?.title || 'Vespera';
-    const page = document.createElement('div');
-    page.className = 'page-scroll';
-    contentEl.appendChild(page);
-    tab.view = page;
-    renderInternalPage(page, url, tab);
+    tab.title = INTERNAL_PAGES[internalPageKey(url)]?.title || 'Page not found';
     tab.loading = false;
+    tab.view = document.createElement('div'); tab.view.className = 'page-scroll';
+    contentEl.appendChild(tab.view);
+    renderInternalPage(tab.view, url, tab);
   } else {
-    tab.title = url;
-    tab.loading = true;
-    const view = platform.createView(tab);
-    contentEl.appendChild(view);
-    tab.view = view;
-    platform.bindView(view, tab, {
-      onLoading: (v) => {
-        tab.loading = v;
-        if (!v) {
-          // Cosmetic filtering after load (Electron webviews).
-          applyCosmetic(view, tab);
-        }
-        tabs.update(tab, {});
-        updateChromeFor(tab);
+    tab.title = hostOf(url) || url; tab.loading = true;
+    tab.view = platform.createView(tab); contentEl.appendChild(tab.view);
+    tab.disposeView = platform.bindView(tab.view, tab, {
+      onLoading: (loading) => {
+        tab.loading = loading;
+        if (!loading) { clearTimeout(tab.loadTimer); applyPageExtensions(tab); state.addHistory({ title: tab.title, url: tab.url }); }
+        tabs.update(tab);
       },
-      onTitle: (t) => tabs.update(tab, { title: t }),
-      onUrl: (u) => {
-        tab.url = u;
-        updateChromeFor(tab);
+      onTitle: (title) => { if (title) { tabs.update(tab, { title }); state.addHistory({ title, url: tab.url }); } },
+      onUrl: (next) => {
+        if (!safeTabUrl(next) || isInternal(next)) return;
+        tab.url = next; tab.entries[tab.entryIndex] = { url: next, title: tab.title };
+        tabs.update(tab);
       },
-      onFavicon: (f) => tabs.update(tab, { favicon: f }),
-      onError: (msg) => toast(msg, 'error'),
+      onFavicon: (favicon) => tabs.update(tab, { favicon }),
+      onError: (message) => showLoadError(tab, message),
+      onLink: (link, newTab) => newTab ? tabs.add(link) : navigate(link, { tab, kind: 'url' }),
+      onDownload: (link, name) => downloadUrl(link, name),
+      onShield: (kind, count) => { if (!count) return; tab.shields[kind === 'tracker' ? 'trackers' : 'ads'] += count; tab.shields.blocked += count; for (let i = 0; i < count; i++) state.recordBlock(kind, hostOf(tab.url)); tabs.update(tab); },
+      onFound: (result) => { $('find-count').textContent = result.matches ? `${result.activeMatchOrdinal} / ${result.matches}` : 'No matches'; },
+      onContext: (info, x, y) => showContextMenu(tab, x, y, info),
     });
+    state.addHistory({ title: tab.title, url });
+    tab.loadTimer = setTimeout(() => { if (tab.loading && tab.view) showLoadError(tab, 'This page is taking longer than expected. You can retry or open the original site.'); }, 25000);
   }
-
-  tabs.update(tab, {});
-  updateChromeFor(tab);
-
-  if (!tab._internal) {
-    state.addHistory({ title: tab.title, url: tab.url });
-  }
+  tab.view.classList.toggle('hidden', tabs.activeId !== tab.id);
+  tabs.update(tab);
+  applyPageExtensions(tab);
 }
-
+function showLoadError(tab, message) {
+  clearTimeout(tab.loadTimer);
+  tab.loading = false; tab.error = message;
+  tabs.update(tab);
+  if (!tab.view?.classList.contains('web-frame') || tab.view.querySelector('.load-error')) return;
+  const overlay = document.createElement('div'); overlay.className = 'load-error';
+  overlay.innerHTML = `<div class="error-symbol">${icon('globe')}</div><span class="chip">Let’s try that again</span><h1>This page couldn’t be opened</h1>
+    <p>${escapeHtml(message)}</p><div class="error-host">${escapeHtml(hostOf(tab.url) || tab.url)}</div>
+    <div class="hero-actions"><button class="btn btn-primary" data-retry>${icon('refresh')} Try again</button><a class="btn" href="${escapeHtml(tab.url)}" target="_blank" rel="noopener noreferrer">Open original ${icon('external')}</a><button class="btn btn-ghost" data-home>Back home</button></div>
+    <p class="small faint">Some websites limit embedded browsing. “Open original” visits the site directly.</p>`;
+  tab.view.appendChild(overlay);
+  overlay.querySelector('[data-retry]').onclick = () => reload(tab);
+  overlay.querySelector('[data-home]').onclick = () => navigate('vespera://newtab', { tab });
+}
 function renderInternalPage(page, url, tab) {
-  const renderer = PAGE_RENDERERS[url] || renderWelcome;
+  try { tab.pageCleanup?.(); } catch { /* stale page */ }
+  tab.pageCleanup = null;
+  const key = internalPageKey(url);
+  const renderer = PAGE_RENDERERS[key] || renderNotFound;
   const ctx = {
-    navigate: (v, o) => navigate(v, o || {}),
-    toast,
-    getActiveTab: () => tabs.active,
-    refreshChrome: (rebuildTabs) => {
-      applyAppearance();
-      omnibox?.refreshEngine();
-      if (rebuildTabs) { positionTabUI(); tabs.render(); }
-    },
+    navigate: (v, o = {}) => navigate(v, { ...o, tab }),
+    openTab: (v) => tabs.add(v), toast, getActiveTab: () => tab,
+    refreshChrome: (rebuildTabs) => { applyAppearance(); omnibox?.refreshEngine(); if (rebuildTabs) { positionTabUI(); tabs.render(); } },
     rerenderPage: () => renderInternalPage(page, url, tab),
+    refreshPage: () => openInTab(tab, tab.url, { push: false }),
+    reload: () => reload(tab), reader: () => openReader(tab),
+    previewRestricted: () => previewRestricted,
+    version: () => serviceVersion, diagnostics: () => diagnostics,
+    download: downloadUrl,
+    back: () => goBack(tab),
   };
-  tab.pageCleanup = renderer(page, ctx) || null;
+  try { tab.pageCleanup = renderer(page, ctx) || null; }
+  catch (err) { diagnostic(err.stack || err.message); page.innerHTML = `<div class="page"><h1>Something went wrong</h1><p>${escapeHtml(err.message)}</p><button class="btn" id="page-retry">Try again</button></div>`; page.querySelector('#page-retry').onclick = ctx.rerenderPage; }
+  const section = url.includes('#') ? url.split('#')[1] : '';
+  if (section) requestAnimationFrame(() => page.querySelector('#' + CSS.escape(section))?.scrollIntoView({ block: 'start' }));
 }
-
-function hostOf(url) {
-  try { return new URL(url).hostname; } catch { return null; }
-}
-
-/* ================================================================
-   Chrome (toolbar / omnibox / badges) sync
-   ================================================================ */
 
 function updateChromeFor(tab) {
-  if (!tab) return;
+  if (!tab || tabs.active !== tab) return;
   omnibox?.setUrl(tab.url, tab._internal);
   updateShieldBadge(tab);
-  document.getElementById('btn-back')?.toggleAttribute('disabled', false);
-  document.getElementById('btn-forward')?.toggleAttribute('disabled', false);
-  document.title = (tab.title || 'Vespera') + ' — Vespera';
+  $('btn-back').disabled = tab.entryIndex <= 0;
+  $('btn-forward').disabled = tab.entryIndex >= tab.entries.length - 1;
+  $('btn-reload').innerHTML = icon(tab.loading ? 'x' : 'refresh');
+  $('btn-reload').title = tab.loading ? 'Stop loading' : 'Reload (Ctrl+R)';
+  const marked = state.isBookmarked(tab.url);
+  $('btn-bookmark').innerHTML = icon(marked ? 'bookmarkFill' : 'bookmark');
+  $('btn-bookmark').classList.toggle('is-active', marked);
+  $('btn-bookmark').title = marked ? 'Remove bookmark' : 'Bookmark this page (Ctrl+D)';
+  document.title = (tab.title || 'New Tab') + ' — Vespera' + (state.private ? ' (Private)' : '');
+  $('page-status').textContent = tab.error ? 'Page unavailable' : tab.loading ? 'Loading ' + (hostOf(tab.url) || 'page') + '…' : tab._internal ? 'Vespera · Ready' : hostOf(tab.url) || 'Ready';
+  $('zoom-status').textContent = Math.round(tab.zoom * 100) + '%';
+  $('open-original').classList.toggle('hidden', tab._internal);
+  if (!tab._internal) $('open-original').href = tab.url;
+  document.querySelectorAll('[data-nav]').forEach((el) => el.classList.toggle('active', tab._internal && el.dataset.nav === internalPageKey(tab.url)));
 }
-
-function applyCosmetic(view, tab) {
-  if (view.tagName !== 'WEBVIEW') return;
-  if (!state.settings.shields.enabled || !state.settings.shields.blockAnnoyances) return;
-  // Cosmetic filter list is evaluated in the main process; here we ask via
-  // a simple inline pass using the bundled rules endpoint when needed.
-  fetch('/api/filters').then((r) => r.json()).then(({ rules }) => {
-    const host = hostOf(tab.url) || '';
-    const hide = [];
-    for (const line of rules) {
-      const m = String(line).match(/^(.*?)(##)(.+)$/);
-      if (!m) continue;
-      const ruleHost = m[1].trim();
-      const selector = m[3].trim();
-      if (!ruleHost || host === ruleHost || host.endsWith('.' + ruleHost)) {
-        if (/^\.(cookie|gdpr|newsletter|signup|share|social|sticky-share|follow)/.test(selector)) {
-          hide.push(selector);
-        }
-      }
-    }
-    if (hide.length) {
-      const css = hide.map((s) => `${s}{display:none!important}`).join('\n');
-      platform.injectCss(view, css);
-    }
-  }).catch(() => {});
+async function applyPageExtensions(tab) {
+  if (!platform.isWebview(tab.view)) return;
+  const frame = platform.inner(tab.view);
+  try {
+    if (state.settings.extensions.darkPages && !tab.darkCss) tab.darkCss = await frame.insertCSS('html{filter:invert(1) hue-rotate(180deg)!important;background:#111!important}img,video,canvas{filter:invert(1) hue-rotate(180deg)}');
+    else if (!state.settings.extensions.darkPages && tab.darkCss) { await frame.removeInsertedCSS(tab.darkCss); tab.darkCss = null; }
+  } catch { /* Page navigated while CSS was being applied. */ }
 }
-
-/* ================================================================
-   Layout modes
-   ================================================================ */
-
 function positionTabUI() {
   const vertical = state.settings.tabLayout === 'vertical';
   document.body.classList.toggle('vertical-tabs', vertical);
-  const rail = document.getElementById('rail');
-  const vtabs = document.getElementById('vtabs');
-  if (vtabs) vtabs.style.display = vertical ? 'flex' : 'none';
-  if (rail) rail.style.display = vertical ? 'none' : 'flex';
+  $('vtabs').classList.toggle('hidden', !vertical);
+  $('rail').classList.toggle('hidden', vertical);
+  const toolbar = $('toolbar');
+  if (vertical) $('toolbar-vt').appendChild(toolbar);
+  else $('app').insertBefore(toolbar, $('main-row'));
 }
-
 function buildRail() {
-  const rail = document.getElementById('rail');
-  const foot = document.getElementById('vtabs-foot');
-  const navItems = [
-    ['vespera://newtab', 'sparkle', 'New Tab'],
-    ['vespera://privacy', 'shield', 'Privacy Dashboard'],
-    ['vespera://community', 'users', 'Community'],
-    ['vespera://history', 'clock', 'History'],
-    ['vespera://bookmarks', 'bookmark', 'Bookmarks'],
-    ['vespera://downloads', 'download', 'Downloads'],
-    ['vespera://settings', 'gear', 'Settings'],
+  const items = [
+    ['vespera://newtab', 'sparkle', 'Home'], ['vespera://extensions', 'split', 'Extensions'],
+    ['vespera://privacy', 'shield', 'Privacy Hub'], ['vespera://community', 'users', 'Community'],
+    ['vespera://history', 'clock', 'History'], ['vespera://bookmarks', 'bookmark', 'Bookmarks'],
+    ['vespera://downloads', 'download', 'Downloads'], ['vespera://settings', 'gear', 'Settings'],
     ['vespera://account', 'user', 'Account'],
   ];
-  rail.innerHTML = navItems.map(([url, ic, title], i) =>
-    `${i === 3 || i === 6 ? '<div class="rail-sep"></div>' : ''}
-     <button class="icon-btn" data-nav="${url}" title="${title}">${icon(ic)}</button>`).join('');
-  foot.innerHTML = navItems.map(([url, ic, title]) =>
-    `<button class="vtab-nav" data-nav="${url}">${icon(ic)} ${title}</button>`).join('');
-
+  $('rail').innerHTML = items.map(([url, ic, title], i) => `${i === 4 || i === 7 ? '<div class="rail-sep"></div>' : ''}<button class="icon-btn" data-nav="${url}" title="${title}" aria-label="${title}">${icon(ic)}</button>`).join('');
+  $('vtabs-foot').innerHTML = items.filter(([url]) => !['vespera://newtab', 'vespera://community'].includes(url)).map(([url, ic, title]) => `<button class="vtab-nav" data-nav="${url}">${icon(ic)} ${title}</button>`).join('');
   document.querySelectorAll('[data-nav]').forEach((btn) => {
-    btn.addEventListener('click', () => navigate(btn.dataset.nav, { kind: 'url' }));
-    btn.addEventListener('auxclick', (e) => {
-      if (e.button === 1) { e.preventDefault(); tabs.add(btn.dataset.nav); }
-    });
+    btn.addEventListener('click', () => navigate(btn.dataset.nav));
+    btn.addEventListener('auxclick', (e) => { if (e.button === 1) { e.preventDefault(); tabs.add(btn.dataset.nav); } });
   });
 }
-
-function buildToolbarVt() {
-  const tb = document.getElementById('toolbar-vt');
-  if (!tb || tb.dataset.built) return;
-  tb.dataset.built = '1';
-  tb.innerHTML = `
-    <button class="icon-btn" data-vt="back" title="Back">${icon('arrowUp')}</button>
-    <button class="icon-btn" data-vt="reload" title="Reload">${icon('refresh')}</button>
-    <div class="omnibox-wrap" id="omnibox-wrap-vt" style="margin:0 8px">
-      <div class="omnibox">
-        <div class="site-info">${icon('lock')}</div>
-        <input id="omni-input-vt" type="text" spellcheck="false" placeholder="Search or type a URL">
-        <button class="icon-btn go-btn" id="omni-go-vt">${icon('external')}</button>
-      </div>
-    </div>
-    <button class="icon-btn" data-vt="shields" title="Shields">${icon('shield')}</button>
-    <button class="icon-btn" data-vt="menu" title="Menu">${icon('gear')}</button>`;
-  tb.querySelector('#omni-go-vt').addEventListener('click', () => {
-    navigate(tb.querySelector('#omni-input-vt').value, { kind: 'auto' });
-  });
-  tb.querySelector('#omni-input-vt').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') navigate(e.target.value, { kind: 'auto' });
-  });
-  tb.querySelector('[data-vt="back"]').addEventListener('click', () => goBack());
-  tb.querySelector('[data-vt="reload"]').addEventListener('click', () => reload());
-  tb.querySelector('[data-vt="shields"]').addEventListener('click', (e) =>
-    toggleShields(e.currentTarget, tabs.active, { onToggleSite: shieldAction }));
-  tb.querySelector('[data-vt="menu"]').addEventListener('click', (e) => openMenu(e.currentTarget));
+function renderBookmarksBar() {
+  const bar = $('bookmarks-bar');
+  bar.classList.toggle('hidden', !state.settings.showBookmarksBar);
+  bar.innerHTML = state.bookmarks.length ? state.bookmarks.slice(0, 20).map((b) => `<button class="bookmark-chip" data-bookmark-url="${escapeHtml(b.url)}" title="${escapeHtml(b.url)}">${icon('globe')}<span>${escapeHtml(b.title || b.url)}</span></button>`).join('') : '<span class="small muted">Your bookmarks bar is ready. Save a page with the bookmark button or Ctrl+D.</span><button class="text-btn" data-open-bookmarks>Manage bookmarks</button>';
+  bar.querySelectorAll('[data-bookmark-url]').forEach((b) => b.onclick = () => navigate(b.dataset.bookmarkUrl));
+  bar.querySelector('[data-open-bookmarks]')?.addEventListener('click', () => navigate('vespera://bookmarks'));
 }
-
-/* ================================================================
-   Toolbar actions
-   ================================================================ */
-
-function goBack() {
-  const tab = tabs.active;
+function goBack(tab = tabs.active) {
+  if (!tab || tab.entryIndex <= 0) return;
+  tab.entryIndex--; openInTab(tab, tab.entries[tab.entryIndex].url, { push: false });
+}
+function goForward(tab = tabs.active) {
+  if (!tab || tab.entryIndex >= tab.entries.length - 1) return;
+  tab.entryIndex++; openInTab(tab, tab.entries[tab.entryIndex].url, { push: false });
+}
+function reload(tab = tabs.active) {
   if (!tab) return;
-  if (tab._internal) return navigate('vespera://newtab', { kind: 'url' });
-  platform.goBack(tab.view);
+  closeFind();
+  if (tab._internal) { renderInternalPage(tab.view, tab.url, tab); toast('Page refreshed', 'ok', 1400); return; }
+  tab.view?.querySelector('.load-error')?.remove(); tab.error = null; tab.loading = true;
+  platform.reload(tab.view); tabs.update(tab);
+  clearTimeout(tab.loadTimer);
+  tab.loadTimer = setTimeout(() => { if (tab.loading) showLoadError(tab, 'The site did not respond. Try again or open the original.'); }, 25000);
 }
-function goForward() {
-  const tab = tabs.active;
-  if (tab && !tab._internal) platform.goForward(tab.view);
-}
-function reload() {
-  const tab = tabs.active;
-  if (!tab) return;
-  if (tab._internal) return renderInternalPage(tab.view, tab.url, tab);
-  platform.reload(tab.view);
-  tab.loading = true;
-  tabs.update(tab, {});
-}
-
 function bookmarkActive() {
   const tab = tabs.active;
-  if (!tab || tab._internal) return toast('Internal pages are always in your bookmarks 😉', 'info');
-  const added = state.addBookmark({ title: tab.title, url: tab.url });
-  toast(added ? 'Bookmarked!' : 'Already bookmarked', added ? 'ok' : 'info');
+  if (!tab || tab._internal) return toast('Open a website to bookmark it.', 'info');
+  const existing = state.bookmarks.find((b) => b.url === tab.url);
+  if (existing) { state.removeBookmark(existing.id); toast('Bookmark removed', 'ok'); }
+  else { state.addBookmark({ title: tab.title, url: tab.url }); toast('Page saved to bookmarks', 'ok'); }
+  updateChromeFor(tab);
+}
+async function setZoom(delta, reset = false) {
+  const tab = tabs.active;
+  tab.zoom = reset ? 1 : Math.max(.5, Math.min(2, Math.round((tab.zoom + delta) * 10) / 10));
+  await platform.setZoom(tab.view, tab.zoom); updateChromeFor(tab);
+  const value = $('zoom-value'); if (value) value.textContent = Math.round(tab.zoom * 100) + '%';
+}
+function closeFind() { $('find-bar').classList.add('hidden'); platform.stopFind(tabs?.active?.view); }
+function openFind() {
+  if (!platform.isElectron || tabs.active?._internal) return toast('Use your browser’s Find command in the web preview.', 'info');
+  $('find-bar').classList.remove('hidden'); $('find-input').focus(); $('find-input').select();
+}
+async function openReader(tab = tabs.active) {
+  const previousArticle = tab?.entries.slice(0, tab.entryIndex).reverse().find((e) => /^https?:/.test(e.url));
+  const sourceUrl = tab?._internal ? previousArticle?.url : tab?.url;
+  if (!sourceUrl) return toast('Open a website first, then choose Reader View.', 'info');
+  toast('Preparing a quiet reading view…', 'info');
+  try {
+    if (platform.isElectron && !tab._internal) {
+      tab.reader = await platform.inner(tab.view).executeJavaScript(`(()=>{const source=document.querySelector('article')||document.querySelector('main')||document.body;const clone=source.cloneNode(true);clone.querySelectorAll('script,style,nav,header,footer,aside,form,noscript,svg,iframe,button').forEach(e=>e.remove());return {title:document.title,text:clone.textContent.replace(/[\\t\\r ]+/g,' ').replace(/\\n\\s*\\n\\s*\\n+/g,'\\n\\n').trim().slice(0,120000),url:location.href}})()`);
+    } else {
+      const response = await fetch('/api/reader?url=' + encodeURIComponent(sourceUrl));
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || 'This article is not reachable from the preview.');
+      tab.reader = result;
+    }
+    if (!tab.reader?.text || tab.reader.text.length < 80) throw new Error('No readable article was found on this page.');
+    navigate('vespera://reader', { tab });
+  } catch (err) { toast(err.message || 'Reader View is unavailable for this page.', 'error', 5500); }
 }
 
-function shieldAction(action) {
-  if (action?.startsWith?.('__navigate:')) return navigate(action.slice(11), { kind: 'url' });
-  applyCosmetic(tabs.active?.view, tabs.active);
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); toast('Copied to clipboard', 'ok', 1600); }
+  catch { toast('Clipboard access was blocked by your browser.', 'error'); }
 }
-
-/* ================================================================
-   Menu + window controls
-   ================================================================ */
-
-function openMenu(anchor) {
-  document.querySelector('.menu')?.remove();
-  const menu = document.createElement('div');
-  menu.className = 'menu';
-  const r = anchor.getBoundingClientRect();
-  menu.style.top = (r.bottom + 8) + 'px';
-  menu.style.right = (window.innerWidth - r.right) + 'px';
-  menu.innerHTML = `
-    <button class="menu-item" data-go="vespera://newtab">${icon('sparkle')} New Tab <span class="kbd">Ctrl+T</span></button>
-    <button class="menu-item" data-go="vespera://history">${icon('clock')} History</button>
-    <button class="menu-item" data-go="vespera://bookmarks">${icon('bookmark')} Bookmarks</button>
-    <button class="menu-item" data-go="vespera://downloads">${icon('download')} Downloads</button>
-    <div class="menu-sep"></div>
-    <button class="menu-item" data-go="vespera://privacy">${icon('shield')} Privacy Dashboard</button>
-    <button class="menu-item" data-go="vespera://community">${icon('users')} Community</button>
-    <button class="menu-item" data-go="vespera://account">${icon('user')} ${state.user ? 'Account' : 'Sign in'}</button>
-    <div class="menu-sep"></div>
-    <button class="menu-item" data-act="theme">${icon(state.settings.theme === 'dark' ? 'sun' : 'moon')} ${state.settings.theme === 'dark' ? 'Light' : 'Dark'} theme</button>
-    <button class="menu-item" data-act="palette">${icon('search')} Command palette <span class="kbd">Ctrl+K</span></button>
-    <button class="menu-item" data-go="vespera://logs">${icon('flask')} View logs</button>
-    <button class="menu-item" data-go="vespera://settings">${icon('gear')} Settings</button>
-    <div class="menu-sep"></div>
-    <button class="menu-item" data-go="vespera://welcome">${icon('heart')} About Vespera</button>`;
-  document.body.appendChild(menu);
-  setTimeout(() => {
-    const onDoc = (e) => {
-      if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('mousedown', onDoc); }
-    };
-    document.addEventListener('mousedown', onDoc);
-  }, 0);
-  menu.addEventListener('click', (e) => {
-    const item = e.target.closest('.menu-item');
-    if (!item) return;
-    menu.remove();
-    if (item.dataset.go) navigate(item.dataset.go, { kind: 'url' });
-    else if (item.dataset.act === 'theme') {
-      state.set('theme', state.settings.theme === 'dark' ? 'light' : 'dark');
-      applyAppearance();
-    } else if (item.dataset.act === 'palette') {
-      openPalette({ actions: paletteActions() });
+function showContextMenu(tab, x, y, info = {}) {
+  if (!tab) return;
+  const item = (act, ic, label, disabled = false) => `<button class="menu-item" data-ctx="${act}" ${disabled ? 'disabled' : ''}>${icon(ic)} ${label}</button>`;
+  const sep = '<div class="menu-sep"></div>';
+  let html = '';
+  if (info.link) html += item('open-link', 'plus', 'Open link in new tab') + item('copy-link', 'link', 'Copy link address') + item('save-link', 'download', 'Save link as…') + sep;
+  if (info.image) html += item('open-image', 'image', 'Open image in new tab') + item('copy-image', 'link', 'Copy image address') + item('save-image', 'download', 'Save image as…') + sep;
+  if (info.selection) html += item('copy-selection', 'copy', 'Copy selection') + item('search-selection', 'search', 'Search for “' + escapeHtml(info.selection.slice(0, 28)) + (info.selection.length > 28 ? '…' : '') + '”') + sep;
+  html += item('back', 'arrowLeft', 'Back', tab.entryIndex <= 0) + item('forward', 'arrowRight', 'Forward', tab.entryIndex >= tab.entries.length - 1) + item('reload', 'refresh', 'Reload') + sep;
+  if (!tab._internal) html += item('save-page', 'download', 'Save page as…') + item('reader', 'eye', 'Reader View') + item('bookmark', 'bookmark', state.isBookmarked(tab.url) ? 'Remove bookmark' : 'Bookmark page') + sep;
+  if (internalPageKey(tab.url) === 'vespera://newtab') html += item('customize', 'palette', 'Customize home') + sep;
+  html += item('copy-address', 'link', 'Copy page address') + item('home', 'sparkle', 'Home') + item('settings', 'gear', 'Settings');
+  const anchor = document.createElement('span');
+  anchor.className = 'context-anchor'; anchor.tabIndex = -1;
+  anchor.style.left = Math.max(0, x) + 'px'; anchor.style.top = Math.max(0, y) + 'px';
+  document.body.appendChild(anchor);
+  const pop = openPopover(anchor, html, { className: 'menu context-menu', label: 'Page context menu', align: 'context', onClose: () => anchor.remove() });
+  if (!pop) { anchor.remove(); return; }
+  pop.el.addEventListener('click', (e) => {
+    const act = e.target.closest('[data-ctx]')?.dataset.ctx; if (!act) return;
+    pop.close();
+    switch (act) {
+      case 'open-link': tabs.add(info.link); break;
+      case 'copy-link': copyText(info.link); break;
+      case 'save-link': downloadUrl(info.link); break;
+      case 'open-image': tabs.add(info.image); break;
+      case 'copy-image': copyText(info.image); break;
+      case 'save-image': downloadUrl(info.image); break;
+      case 'copy-selection': copyText(info.selection); break;
+      case 'search-selection': navigate(info.selection, { kind: 'search', tab }); break;
+      case 'back': goBack(tab); break;
+      case 'forward': goForward(tab); break;
+      case 'reload': reload(tab); break;
+      case 'save-page': downloadUrl(tab.url, (tab.title || 'page') + '.html'); break;
+      case 'reader': openReader(tab); break;
+      case 'bookmark': tabs.activate(tab.id); bookmarkActive(); break;
+      case 'customize': navigate('vespera://settings#appearance', { tab }); break;
+      case 'copy-address': copyText(tab.url); break;
+      case 'home': navigate(state.settings.homepage || 'vespera://newtab', { tab }); break;
+      case 'settings': navigate('vespera://settings', { tab }); break;
     }
   });
 }
-
-function wireWindowControls() {
-  if (!platform.isElectron) return;
-  document.body.classList.add('electron');
-  document.getElementById('wc-min')?.addEventListener('click', () => platform.minimize());
-  document.getElementById('wc-max')?.addEventListener('click', () => platform.maximize());
-  document.getElementById('wc-close')?.addEventListener('click', () => platform.close());
+function wireContextMenus() {
+  document.addEventListener('contextmenu', (e) => {
+    if (e.target.closest('input,textarea,select,[contenteditable="true"],[contenteditable=""]')) return;
+    if (e.target.closest('#tabstrip,#vtabs-list')) return; // tab-specific menu
+    if (!e.target.closest('#content')) return;
+    e.preventDefault();
+    showContextMenu(tabs.active, e.clientX, e.clientY, { selection: String(window.getSelection() || '').slice(0, 2000) });
+  });
 }
-
-/* ================================================================
-   Command palette actions
-   ================================================================ */
-
+function openMenu(anchor) {
+  const s = state.settings;
+  const item = (act, ic, label, kbd = '') => `<button class="menu-item" data-act="${act}">${icon(ic)} ${label}${kbd ? `<span class="kbd">${kbd}</span>` : ''}</button>`;
+  const pop = openPopover(anchor, `
+    ${item('newtab', 'plus', 'New tab', 'Ctrl+T')}
+    ${item('private', 'eyeOff', state.private ? 'Private window' : 'New private window', 'Ctrl+Shift+N')}
+    ${!platform.isElectron ? `<button class="menu-item ${installPrompt ? '' : 'hidden'}" data-act="install">${icon('download')} Install Vespera as an app</button>` : ''}
+    <div class="menu-sep"></div>
+    ${item('history', 'clock', 'History')}${item('bookmarks', 'bookmark', 'Bookmarks')}${item('downloads', 'download', 'Downloads')}${item('extensions', 'split', 'Extensions')}
+    <div class="menu-sep"></div>
+    <div class="zoom-row"><span>Zoom</span><button class="icon-btn" data-act="zoom-out" title="Zoom out">−</button><b id="zoom-value">${Math.round(tabs.active.zoom * 100)}%</b><button class="icon-btn" data-act="zoom-in" title="Zoom in">+</button><button class="icon-btn" data-act="zoom-reset" title="Reset zoom">${icon('refresh')}</button></div>
+    ${item('find', 'search', 'Find in page', 'Ctrl+F')}${item('print', 'download', 'Print page', 'Ctrl+P')}
+    <div class="menu-sep"></div>
+    ${item('customize', 'palette', 'Customize Vespera')}${item('theme', s.theme === 'dark' ? 'sun' : 'moon', s.theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme')}
+    ${item('vertical', 'split', (s.tabLayout === 'vertical' ? '✓ ' : '') + 'Vertical tabs')}${item('bookbar', 'bookmark', (s.showBookmarksBar ? '✓ ' : '') + 'Bookmarks bar')}${item('focus', 'eye', (s.extensions.focusMode ? '✓ ' : '') + 'Focus mode')}
+    <div class="menu-sep"></div>
+    ${item('palette', 'keyboard', 'Command palette', 'Ctrl+K')}${item('privacy', 'shield', 'Privacy Hub')}${item('account', 'user', state.user ? 'Account · ' + escapeHtml(state.user.displayName) : 'Sign in / create account')}${item('settings', 'gear', 'Settings')}${item('updates', 'sparkle', 'What’s new')}${item('logs', 'flask', 'View logs')}${item('welcome', 'sparkle', 'Welcome & about')}
+  `, { label: 'Vespera menu', className: 'menu browser-menu' });
+  if (!pop) return;
+  if (!platform.isElectron) pop.el.querySelector('[data-act="private"]').disabled = true;
+  pop.el.addEventListener('click', async (e) => {
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    if (!act) return;
+    if (!act.startsWith('zoom')) pop.close();
+    switch (act) {
+      case 'newtab': tabs.add('vespera://newtab'); break;
+      case 'install': if (installPrompt) { installPrompt.prompt(); const choice = await installPrompt.userChoice; if (choice.outcome === 'accepted') toast('Vespera is installing as an app.', 'ok'); installPrompt = null; } break;
+      case 'private': if (platform.isElectron) window.vespera.window.incognito(); break;
+      case 'history': case 'bookmarks': case 'downloads': case 'extensions': case 'privacy': case 'account': case 'settings': case 'logs': case 'welcome': case 'updates': navigate('vespera://' + act); break;
+      case 'customize': navigate('vespera://settings#appearance'); break;
+      case 'theme': state.set('theme', document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); break;
+      case 'vertical': state.set('tabLayout', s.tabLayout === 'vertical' ? 'horizontal' : 'vertical'); break;
+      case 'bookbar': state.set('showBookmarksBar', !s.showBookmarksBar); break;
+      case 'focus': state.set('extensions.focusMode', !s.extensions.focusMode); break;
+      case 'palette': openPalette({ actions: paletteActions() }); break;
+      case 'zoom-in': setZoom(.1); break;
+      case 'zoom-out': setZoom(-.1); break;
+      case 'zoom-reset': setZoom(0, true); break;
+      case 'find': openFind(); break;
+      case 'print': if (platform.isElectron && !tabs.active._internal) platform.print(tabs.active.view); else toast('Open the original website to print it from the web preview.', 'info'); break;
+    }
+  });
+}
+function wireWindowControls() {
+  document.body.classList.add(platform.isElectron ? 'electron' : 'web-preview');
+  if (state.private) { document.body.classList.add('private-mode'); $('runtime-status').textContent = 'Private · not saved'; }
+  else $('runtime-status').textContent = platform.isElectron ? 'Desktop · Chromium' : 'Live preview';
+  const min = $('wc-min'), max = $('wc-max'), close = $('wc-close');
+  if (platform.isElectron) {
+    min.onclick = () => platform.minimize(); max.onclick = () => platform.maximize(); close.onclick = () => platform.close();
+    window.vespera.on('window:maximized', (value) => { max.title = value ? 'Restore window' : 'Maximize window'; max.setAttribute('aria-label', max.title); max.classList.toggle('is-maximized', value); });
+    return;
+  }
+  min.title = 'Minimize preview to dock';
+  max.title = 'Enter / exit fullscreen';
+  close.title = 'Hide preview (tabs are saved)';
+  const hide = (description) => { persistSession(); $('app').classList.add('hidden'); $('web-window-dock').classList.remove('hidden'); $('dock-description').textContent = description; $('web-restore').focus(); };
+  min.onclick = () => hide('Minimized. Your tabs are still here.');
+  max.onclick = async () => {
+    try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen(); }
+    catch { state.set('extensions.focusMode', !state.settings.extensions.focusMode); toast('Fullscreen is unavailable here. Focus mode toggled instead.', 'info'); }
+  };
+  close.onclick = async () => { if (await confirmAction({ title: 'Hide Vespera preview?', message: 'Your tabs are saved on this device. A browser tab cannot close its own operating-system window; you can reopen this preview from the dock.', confirmText: 'Hide preview' })) hide('Preview hidden. Reopen whenever you’re ready.'); };
+  $('web-restore').onclick = () => { $('app').classList.remove('hidden'); $('web-window-dock').classList.add('hidden'); tabs.active?.view && updateChromeFor(tabs.active); };
+}
 function paletteActions() {
-  const go = (url) => () => navigate(url, { kind: 'url' });
+  const go = (url) => () => navigate(url);
   return [
     { title: 'New Tab', icon: 'plus', kbd: 'Ctrl+T', run: () => tabs.add('vespera://newtab') },
     { title: 'Close Tab', icon: 'x', kbd: 'Ctrl+W', run: () => tabs.close(tabs.activeId) },
-    { title: 'Reopen Closed Tab', icon: 'refresh', kbd: 'Ctrl+Shift+T', run: () => tabs.reopenClosed() },
-    { title: 'Open Settings', icon: 'gear', run: go('vespera://settings') },
-    { title: 'Open Privacy Dashboard', icon: 'shield', run: go('vespera://privacy') },
-    { title: 'Open Community', icon: 'users', run: go('vespera://community') },
-    { title: 'Open History', icon: 'clock', run: go('vespera://history') },
-    { title: 'Open Bookmarks', icon: 'bookmark', run: go('vespera://bookmarks') },
-    { title: 'Open Downloads', icon: 'download', run: go('vespera://downloads') },
-    { title: 'View Logs', icon: 'flask', run: go('vespera://logs') },
-    { title: state.user ? 'Open Account' : 'Sign in', icon: 'user', run: go('vespera://account') },
-    { title: 'Toggle Theme', icon: 'moon', run: () => {
-      state.set('theme', state.settings.theme === 'dark' ? 'light' : 'dark');
-      applyAppearance();
-    } },
-    { title: 'Toggle Vertical Tabs', icon: 'split', run: () => {
-      state.set('tabLayout', state.settings.tabLayout === 'vertical' ? 'horizontal' : 'vertical');
-      applyAppearance(); positionTabUI(); tabs.render();
-    } },
+    { title: 'Reopen Closed Tab', icon: 'refresh', kbd: 'Ctrl+Shift+T', run: () => tabs.reopenClosed() || toast('No recently closed tabs.', 'info') },
+    ...['settings', 'extensions', 'privacy', 'community', 'history', 'bookmarks', 'downloads', 'logs', 'account', 'welcome', 'updates'].map((page) => ({ title: 'Open ' + (INTERNAL_PAGES['vespera://' + page]?.title || page), icon: INTERNAL_PAGES['vespera://' + page]?.icon || 'sparkle', run: go('vespera://' + page) })),
+    { title: 'Customize wallpaper & colors', icon: 'palette', run: go('vespera://settings#appearance') },
+    { title: 'Toggle Theme', icon: 'moon', run: () => state.set('theme', document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark') },
+    { title: 'Toggle Vertical Tabs', icon: 'split', run: () => state.set('tabLayout', state.settings.tabLayout === 'vertical' ? 'horizontal' : 'vertical') },
+    { title: 'Reader View', icon: 'eye', run: () => openReader() },
     { title: 'Bookmark This Page', icon: 'star', kbd: 'Ctrl+D', run: bookmarkActive },
-    { title: 'Clear Browsing History', icon: 'trash', run: () => {
-      state.clearHistory(); toast('History cleared', 'ok');
-    } },
+    { title: 'Clear Browsing History', icon: 'trash', run: async () => { if (await confirmAction({ title: 'Clear browsing history?', message: 'This removes history on this device and from your connected sync store.', confirmText: 'Clear history', danger: true })) { state.clearHistory(); toast('History cleared', 'ok'); } } },
   ];
 }
-
-/* ================================================================
-   Keyboard shortcuts
-   ================================================================ */
-
 function wireKeyboard() {
   document.addEventListener('keydown', (e) => {
-    const mod = e.ctrlKey || e.metaKey;
-    const inField = /^(input|textarea|select)$/i.test(e.target.tagName);
-
-    if (e.key === 'Escape' && paletteOpen()) { closePalette(); return; }
-
-    if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); openPalette({ actions: paletteActions() }); }
-    else if (mod && e.key.toLowerCase() === 'l') { e.preventDefault(); omnibox?.focus(); }
-    else if (mod && e.key.toLowerCase() === 't') { e.preventDefault(); tabs.add('vespera://newtab'); }
-    else if (mod && e.key.toLowerCase() === 'w') { e.preventDefault(); tabs.close(tabs.activeId); }
-    else if (mod && e.shiftKey && e.key.toLowerCase() === 't') { e.preventDefault(); tabs.reopenClosed(); }
-    else if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); bookmarkActive(); }
-    else if (mod && e.key.toLowerCase() === 'r') { e.preventDefault(); reload(); }
+    const mod = e.ctrlKey || e.metaKey, key = e.key.toLowerCase();
+    const field = /^(input|textarea|select)$/i.test(e.target.tagName) || e.target.isContentEditable;
+    if (e.key === 'Escape') { closePopover(); if (paletteOpen()) closePalette(); closeFind(); return; }
+    if (mod && e.shiftKey && key === 't') { e.preventDefault(); tabs.reopenClosed() || toast('No recently closed tabs.', 'info'); }
+    else if (mod && e.shiftKey && key === 'n') { e.preventDefault(); if (platform.isElectron) window.vespera.window.incognito(); else toast('Private windows are available in the desktop app.', 'info'); }
+    else if (mod && key === 'k') { e.preventDefault(); openPalette({ actions: paletteActions() }); }
+    else if (mod && key === 'l') { e.preventDefault(); omnibox?.focus(); }
+    else if (mod && key === 't') { e.preventDefault(); tabs.add('vespera://newtab'); }
+    else if (mod && key === 'w' && !field) { e.preventDefault(); tabs.close(tabs.activeId); }
+    else if (mod && key === 'd') { e.preventDefault(); bookmarkActive(); }
+    else if (mod && key === 'r') { e.preventDefault(); reload(); }
+    else if (mod && key === 'f') { if (platform.isElectron && !tabs.active?._internal) { e.preventDefault(); openFind(); } }
+    else if (mod && key === 'p') { if (platform.isElectron && !tabs.active?._internal) { e.preventDefault(); platform.print(tabs.active.view); } }
+    else if (mod && (key === '=' || key === '+')) { e.preventDefault(); setZoom(.1); }
+    else if (mod && key === '-') { e.preventDefault(); setZoom(-.1); }
+    else if (mod && key === '0') { e.preventDefault(); setZoom(0, true); }
     else if (mod && e.key === 'Tab') { e.preventDefault(); e.shiftKey ? tabs.prev() : tabs.next(); }
     else if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); goBack(); }
     else if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); goForward(); }
+    else if (e.altKey && key === 'home') { e.preventDefault(); navigate(state.settings.homepage); }
     else if (e.key === 'F5') { e.preventDefault(); reload(); }
-    else if (!inField && e.key === '/') { e.preventDefault(); omnibox?.focus(); }
-    else if (mod && e.shiftKey && e.key.toLowerCase() === 'n') {
-      e.preventDefault();
-      toast('Incognito window — no history, no cookies, full shields', 'ok');
-      if (platform.isElectron) window.vespera.window.incognito();
-    }
+    else if (e.key === 'F11') { e.preventDefault(); $('wc-max').click(); }
+    else if (!field && e.key === '/') { e.preventDefault(); omnibox?.focus(); }
   });
 }
-
-/* ================================================================
-   Boot
-   ================================================================ */
+function persistSession() {
+  if (state.private || !tabs) return;
+  try { localStorage.setItem('vespera.session', JSON.stringify({ tabs: tabs.tabs.map((t) => ({ url: t.url, title: t.title, pinned: t.pinned })), activeIndex: tabs.tabs.findIndex((t) => t.id === tabs.activeId) })); } catch { /* Storage errors are reported by state saves. */ }
+}
+function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(persistSession, 150); }
 
 function boot() {
-  applyAppearance();
-  positionTabUI();
+  state.saveSettings(); applyAppearance();
+  previousDark = state.settings.extensions.darkPages;
   wireWindowControls();
-
   tabs = new TabManager({
-    onActiveChange: (tab) => updateChromeFor(tab),
+    onMount: (tab) => openInTab(tab, tab.url, { push: false }),
+    onActiveChange: updateChromeFor, onChange: scheduleSave,
+    onContextMenu: (id, x, y) => {
+      const tab = tabs.tabs.find((t) => t.id === id);
+      const anchor = document.querySelector(`#tabstrip [data-id="${id}"]`) || $('btn-menu');
+      const pop = openPopover(anchor, `<button class="menu-item" data-action="pin">${icon('star')} ${tab.pinned ? 'Unpin' : 'Pin'} tab</button><button class="menu-item" data-action="duplicate">${icon('plus')} Duplicate tab</button><button class="menu-item" data-action="others">${icon('x')} Close other tabs</button><button class="menu-item" data-action="close">${icon('x')} Close tab</button>`, { label: 'Tab actions' });
+      pop?.el.addEventListener('click', (e) => { const act = e.target.closest('[data-action]')?.dataset.action; if (!act) return; pop.close(); if (act === 'pin') tabs.togglePin(id); if (act === 'duplicate') tabs.duplicate(id); if (act === 'others') tabs.closeOthers(id); if (act === 'close') tabs.close(id); });
+    },
   });
-
-  buildRail();
-  buildToolbarVt();
-
-  omnibox = initOmnibox({ onNavigate: (target) => navigate(target.value, { kind: target.kind }) });
+  buildRail(); positionTabUI(); renderBookmarksBar();
+  omnibox = initOmnibox({ onNavigate: (target) => navigate(target.value, { kind: target.kind }), isPreviewSearch: () => previewRestricted && !platform.isElectron });
   window.__vesperaNavigate = (t) => navigate(t.value, { kind: t.kind });
-
-  // Toolbar wiring
-  document.getElementById('btn-back')?.addEventListener('click', goBack);
-  document.getElementById('btn-forward')?.addEventListener('click', goForward);
-  document.getElementById('btn-reload')?.addEventListener('click', reload);
-  document.getElementById('btn-home')?.addEventListener('click', () =>
-    navigate(state.settings.homepage || 'vespera://newtab', { kind: 'url' }));
-  document.getElementById('btn-newtab')?.addEventListener('click', () => tabs.add('vespera://newtab'));
-  document.getElementById('btn-bookmark')?.addEventListener('click', bookmarkActive);
-  document.getElementById('btn-palette')?.addEventListener('click', () => openPalette({ actions: paletteActions() }));
-  document.getElementById('btn-menu')?.addEventListener('click', (e) => openMenu(e.currentTarget));
-  document.getElementById('btn-shields')?.addEventListener('click', (e) =>
-    toggleShields(e.currentTarget, tabs.active, { onToggleSite: shieldAction }));
-
-  wireKeyboard();
-
-  // Live-update chrome when settings change (e.g. from a settings page).
-  bus.on('settings', () => {
-    applyAppearance();
-    omnibox?.refreshEngine();
-    positionTabUI();
-    tabs.render();
-  });
-  bus.on('user', () => { /* pages rerender themselves */ });
-
-  // Restore session: open last tabs, else the welcome experience.
-  let restored = false;
-  try {
-    const session = JSON.parse(localStorage.getItem('vespera.session') || 'null');
-    if (session?.tabs?.length) {
-      for (const t of session.tabs) tabs.add(t.url, { title: t.title, activate: false });
-      tabs.activate(session.activeId && tabs.tabs.some((t) => t.id === session.activeId)
-        ? session.activeId : tabs.tabs[0].id);
-      restored = true;
-    }
-  } catch { /* ignore */ }
-  if (!restored) {
-    tabs.add('vespera://welcome');
-    if (state.history.length > 3) tabs.add('vespera://newtab');
-    tabs.activate(tabs.tabs[0].id);
+  $('btn-back').onclick = () => goBack(); $('btn-forward').onclick = () => goForward();
+  $('btn-reload').onclick = () => tabs.active?.loading ? (platform.stop(tabs.active.view), tabs.update(tabs.active, { loading: false })) : reload();
+  $('btn-home').onclick = () => navigate(state.settings.homepage || 'vespera://newtab');
+  $('btn-newtab').onclick = $('btn-newtab-vt').onclick = () => tabs.add('vespera://newtab');
+  $('btn-bookmark').onclick = bookmarkActive;
+  $('btn-palette').onclick = () => openPalette({ actions: paletteActions() });
+  $('btn-menu').onclick = (e) => openMenu(e.currentTarget);
+  $('btn-shields').onclick = (e) => toggleShields(e.currentTarget, tabs.active, { onNavigate: navigate, onReload: () => reload() });
+  $('site-info').onclick = (e) => toggleShields(e.currentTarget, tabs.active, { onNavigate: navigate, onReload: () => reload() });
+  $('preview-details').onclick = (e) => openPopover(e.currentTarget, `<div class="menu-label">Vespera is running live</div><p class="popover-copy">Tabs, Home, search, settings, extensions, downloads and customization work right here — no setup needed. Some websites restrict embedded pages or are unreachable from this hosted environment; “Open original” visits them directly.</p><p class="popover-copy">Right-click pages, links and images for browser actions. Use the menu to install Vespera as a standalone app when your browser offers it.</p><button class="btn" data-dismiss>Got it</button>`, { className: 'popover info-popover', label: 'About this live browser' });
+  $('dismiss-preview').onclick = () => $('preview-banner').classList.add('hidden');
+  $('open-original').target = '_blank'; $('open-original').rel = 'noopener noreferrer';
+  $('find-input').addEventListener('input', (e) => { $('find-count').textContent = ''; platform.find(tabs.active?.view, e.target.value); });
+  $('find-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') platform.find(tabs.active?.view, e.target.value, { forward: !e.shiftKey, findNext: true }); });
+  $('find-next').onclick = () => platform.find(tabs.active?.view, $('find-input').value, { forward: true, findNext: true });
+  $('find-prev').onclick = () => platform.find(tabs.active?.view, $('find-input').value, { forward: false, findNext: true });
+  $('find-close').onclick = closeFind;
+  wireKeyboard(); wireContextMenus();
+  if (!platform.isElectron) {
+    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; });
+    window.addEventListener('appinstalled', () => { installPrompt = null; toast('Vespera installed. Launch it from your apps.', 'ok'); });
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch((err) => diagnostic('App shell cache unavailable: ' + err.message));
   }
-
-  // Persist session for crash/relaunch recovery.
-  setInterval(() => {
-    localStorage.setItem('vespera.session', JSON.stringify({
-      tabs: tabs.tabs.map((t) => ({ url: t.url, title: t.title })),
-      activeId: tabs.activeId,
-    }));
-  }, 2000);
-
-  // Validate/refresh account session in the background.
-  if (api.getToken()) {
-    api.auth.me().then((r) => {
-      if (r.ok) state.setUser(r.user);
-      else { api.setSession(null, null); state.user = null; }
+  bus.on('storage-error', (message) => toast(message, 'error', 6000));
+  bus.on('sync-error', (message) => toast(message, 'error', 5000));
+  bus.on('settings', () => {
+    applyAppearance(); omnibox?.refreshEngine(); positionTabUI(); tabs.render(); renderBookmarksBar();
+    tabs.focusActiveStrip();
+    if (previousDark !== state.settings.extensions.darkPages) {
+      previousDark = state.settings.extensions.darkPages;
+      for (const tab of tabs.tabs) if (!tab._internal) platform.isWebview(tab.view) ? applyPageExtensions(tab) : reload(tab);
+    }
+    if (tabs.active) { updateChromeFor(tabs.active); platform.setZoom(tabs.active.view, tabs.active.zoom); }
+  });
+  bus.on('bookmarks', () => { renderBookmarksBar(); if (tabs.active) updateChromeFor(tabs.active); });
+  matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (state.settings.theme === 'system') applyAppearance(); });
+  let restored = false;
+  if (!state.private) {
+    try {
+      const session = JSON.parse(localStorage.getItem('vespera.session') || 'null');
+      if (Array.isArray(session?.tabs) && session.tabs.length) {
+        for (const t of session.tabs.slice(0, 60)) if (safeTabUrl(t.url)) tabs.add(t.url, { title: t.title, pinned: t.pinned, activate: false });
+        if (tabs.tabs.length) { tabs.activate(tabs.tabs[Math.max(0, Math.min(session.activeIndex || 0, tabs.tabs.length - 1))].id); restored = true; }
+      }
+    } catch { diagnostic('Could not restore the previous session.'); }
+  }
+  if (!restored) tabs.add('vespera://newtab');
+  initDownloads().catch((err) => diagnostic(err.message));
+  if (platform.isElectron) {
+    window.vespera.on('browser:new-tab', (url) => { if (safeTabUrl(url)) tabs.add(url); });
+    window.vespera.on('shield:stat', (event) => {
+      const tab = tabs.tabs.find((t) => { try { return platform.inner(t.view)?.getWebContentsId?.() === event.webContentsId; } catch { return false; } });
+      if (!tab) return;
+      if (event.kind === 'reset') tab.shields = { blocked: 0, ads: 0, trackers: 0, cleaned: 0 };
+      else if (['tracker', 'ad'].includes(event.kind)) { tab.shields[event.kind === 'tracker' ? 'trackers' : 'ads']++; tab.shields.blocked++; state.recordBlock(event.kind, event.host); }
+      else if (event.kind === 'link') { tab.shields.cleaned += event.count || 1; state.recordBlock('link', event.host); }
+      tabs.update(tab);
+    });
+    window.vespera.on('menu:action', (action) => {
+      const actions = { newtab: () => tabs.add('vespera://newtab'), reopen: () => tabs.reopenClosed(), closetab: () => tabs.close(tabs.activeId), private: () => window.vespera.window.incognito(), reload: () => reload(), find: openFind, 'zoom-in': () => setZoom(.1), 'zoom-out': () => setZoom(-.1), 'zoom-reset': () => setZoom(0, true), back: () => goBack(), forward: () => goForward(), home: () => navigate(state.settings.homepage), palette: () => openPalette({ actions: paletteActions() }) };
+      if (actions[action]) actions[action]();
+      else if (INTERNAL_PAGES['vespera://' + action]) navigate('vespera://' + action);
     });
   }
+  fetch('/api/health').then((r) => r.json()).then((health) => {
+    previewRestricted = Boolean(health.previewRestricted); serviceVersion = health.version || '';
+    omnibox?.refreshEngine();
+    if (previewRestricted) $('preview-label').textContent = 'Live browser · GitHub search & browsing ready · Some sites may be limited';
+    for (const tab of tabs.tabs) if (tab._internal && internalPageKey(tab.url) === 'vespera://newtab') renderInternalPage(tab.view, tab.url, tab);
+  }).catch(() => { $('preview-label').textContent = 'Live browser · Local service unavailable'; });
+  window.addEventListener('beforeunload', persistSession);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) persistSession(); });
+  if (api.getToken() && !state.private) api.auth.me().then((r) => {
+    if (r.ok) state.setUser(r.user);
+    else if (r.status === 401) state.clearSession();
+  });
 }
-
 boot();

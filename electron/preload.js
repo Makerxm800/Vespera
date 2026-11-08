@@ -1,30 +1,34 @@
-/**
- * Vespera preload — the only bridge between the browser chrome (renderer)
- * and the privileged Electron main process. Exposes exactly what the UI
- * needs via contextBridge (contextIsolation stays ON).
- */
-
+/** Narrow, sender-validated bridge. Website guests receive no preload or Node access. */
 'use strict';
-
 const { contextBridge, ipcRenderer } = require('electron');
-
+const send = (channel) => ipcRenderer.send(channel);
+const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args);
 contextBridge.exposeInMainWorld('vespera', {
   window: {
-    minimize: () => ipcRenderer.send('window:minimize'),
-    maximize: () => ipcRenderer.send('window:maximize'),
-    close: () => ipcRenderer.send('window:close'),
-    incognito: () => ipcRenderer.send('window:incognito'),
+    isPrivate: process.argv.includes('--vespera-private'),
+    minimize: () => send('window:minimize'), maximize: () => send('window:maximize'),
+    close: () => send('window:close'), incognito: () => send('window:incognito'),
   },
+  prefs: { save: (value) => invoke('prefs:save', value) },
   app: {
-    version: () => ipcRenderer.invoke('app:version'),
-    downloads: () => ipcRenderer.invoke('downloads:list'),
-    readLog: () => ipcRenderer.invoke('app:read-log'),
-    logPath: () => ipcRenderer.invoke('app:log-path'),
-    openLogs: () => ipcRenderer.invoke('app:open-logs'),
+    version: () => invoke('app:version'), readLog: () => invoke('app:read-log'),
+    logPath: () => invoke('app:log-path'), openLogs: () => invoke('app:open-logs'),
+    setDefaultBrowser: () => invoke('app:default-browser'),
+    downloads: () => invoke('downloads:list'), download: (url) => invoke('downloads:start', url),
+    downloadAction: (action, id) => invoke('downloads:action', action, id),
+    clearDownloads: () => invoke('downloads:clear'),
+    chooseDownloadFolder: () => invoke('downloads:choose-folder'),
+    openDownloadFolder: () => invoke('downloads:folder'),
+  },
+  extensions: {
+    list: () => invoke('extensions:list'), install: () => invoke('extensions:install'),
+    remove: (id) => invoke('extensions:remove', id),
   },
   on: (channel, fn) => {
-    const allowed = ['download:started', 'download:updated', 'download:done', 'block:stat'];
-    if (!allowed.includes(channel)) return;
-    ipcRenderer.on(channel, (_e, data) => fn(data));
+    const allowed = ['download:started', 'download:updated', 'download:done', 'shield:stat', 'window:maximized', 'menu:action', 'browser:new-tab'];
+    if (!allowed.includes(channel) || typeof fn !== 'function') return () => {};
+    const listener = (_event, data) => fn(data);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
   },
 });

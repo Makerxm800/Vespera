@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>Vespera</title>
+  <meta name="theme-color" content="#0a0e1c">
+  <meta name="application-name" content="Vespera">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Vespera">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/assets/icon-256.png">
   <link rel="stylesheet" href="styles/tokens.css">
   <link rel="stylesheet" href="styles/base.css">
   <link rel="stylesheet" href="styles/chrome.css">
@@ -19,14 +25,14 @@
         <svg class="logo-star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z"/></svg>
         <span>Vespera</span>
       </div>
-      <div class="tabstrip no-drag" id="tabstrip"></div>
+      <div class="tabstrip no-drag" id="tabstrip" role="tablist" aria-label="Browser tabs"></div>
       <button class="newtab-btn no-drag" id="btn-newtab" title="New tab (Ctrl+T)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
       </button>
-      <div class="window-controls" id="window-controls">
-        <button id="wc-min" title="Minimize"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M1 6h10"/></svg></button>
-        <button id="wc-max" title="Maximize"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="1.5" width="9" height="9" rx="1.5"/></svg></button>
-        <button id="wc-close" class="wc-close" title="Close"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2 2l8 8M10 2l-8 8"/></svg></button>
+      <div class="window-controls no-drag" id="window-controls">
+        <button id="wc-min" title="Minimize" aria-label="Minimize"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2.5 6h7"/></svg></button>
+        <button id="wc-max" title="Maximize" aria-label="Maximize"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="8" height="8" rx="2"/></svg></button>
+        <button id="wc-close" class="wc-close" title="Close" aria-label="Close"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3.25 3.25l5.5 5.5M8.75 3.25l-5.5 5.5"/></svg></button>
       </div>
     </header>
 
@@ -62,26 +68,39 @@
     </div>
 
     <!-- Main row: sidebar + content -->
-    <div class="main-row">
+    <div class="main-row" id="main-row">
       <nav class="sidebar" id="sidebar">
         <div class="vtabs" id="vtabs">
-          <div class="vtabs-list" id="vtabs-list"></div>
+          <div class="vtabs-head"><span>Your tabs <span class="chip" data-tab-count>1</span></span><button class="icon-btn" id="btn-newtab-vt" title="New tab" aria-label="New tab">+</button></div>
+          <div class="vtabs-list" id="vtabs-list" role="tablist" aria-label="Browser tabs"></div>
           <div class="vtabs-foot" id="vtabs-foot"></div>
         </div>
         <div class="rail" id="rail"></div>
       </nav>
       <div class="content-col">
-        <div class="preview-banner">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg>
-          Web preview mode — the full Chromium experience runs in the desktop app (<b>npm start</b>). Internal pages &amp; accounts are fully live here.
+        <div class="preview-banner" id="preview-banner">
+          <span class="preview-dot"></span><span id="preview-label">Vespera is running live · Some sites may limit embedded pages</span>
+          <button class="text-btn" id="preview-details">Details</button>
+          <button class="text-btn hidden" id="open-original">Open original ↗</button>
+          <button class="icon-btn soft-close" id="dismiss-preview" title="Dismiss preview notice" aria-label="Dismiss preview notice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         </div>
         <div class="toolbar-vt" id="toolbar-vt"></div>
-        <div class="content" id="content"></div>
+        <div class="bookmarks-bar hidden" id="bookmarks-bar" aria-label="Bookmarks bar"></div>
+        <div class="find-bar hidden" id="find-bar">
+          <input id="find-input" class="input" placeholder="Find in page…" aria-label="Find in page">
+          <span id="find-count" class="small muted"></span>
+          <button class="icon-btn" id="find-prev" title="Previous match">↑</button>
+          <button class="icon-btn" id="find-next" title="Next match">↓</button>
+          <button class="icon-btn soft-close" id="find-close" title="Close find" aria-label="Close find"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        </div>
+        <div class="content" id="content" role="tabpanel" aria-label="Active tab content"></div>
+        <footer class="status-bar"><span id="page-status">Ready</span><span class="grow"></span><span id="zoom-status">100%</span><span><span data-tab-count>1</span> tabs</span><span id="runtime-status">Web preview</span></footer>
       </div>
     </div>
   </div>
 
-  <div class="toasts" id="toasts"></div>
+  <div class="web-window-dock hidden" id="web-window-dock"><span class="dock-star">✦</span><div><b>Vespera</b><div class="small muted" id="dock-description">Your tabs are still here.</div></div><button class="btn btn-primary" id="web-restore">Restore</button></div>
+  <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 
   <script type="module" src="js/app.js"></script>
 </body>

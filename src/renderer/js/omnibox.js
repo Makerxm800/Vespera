@@ -1,176 +1,84 @@
-/** Vespera omnibox — unified address & search bar with smart suggestions. */
+/** Address/search input. Typed URLs navigate as URLs; arrows explicitly select a suggestion. */
 import { state } from './state.js';
 import { escapeHtml } from './toasts.js';
 import { icon } from './icons.js';
+import { INTERNAL_PAGES, classifyInput } from '../../shared/privacy-utils.mjs';
 
-const SEARCH_HINTS = [
-  'privacy-focused browser',
-  'how to block trackers',
-  'best ad blocker 2026',
-];
-
-let selectedIndex = -1;
-let items = [];
-let blurTimer = null;
-
-export function initOmnibox({ onNavigate }) {
+export function initOmnibox({ onNavigate, isPreviewSearch = () => false }) {
   const input = document.getElementById('omni-input');
-  const box = document.getElementById('omni-input') && document.getElementById('omnibox');
   const dropdown = document.getElementById('suggestions');
   const engineTag = document.getElementById('engine-tag');
-
-  if (!input) return;
-
-  const engineNames = {
-    startpage: 'Startpage', duckduckgo: 'DuckDuckGo', brave: 'Brave',
-    google: 'Google', ecosia: 'Ecosia', mojeek: 'Mojeek', wikipedia: 'Wikipedia',
-  };
-  engineTag.textContent = engineNames[state.settings.searchEngine] || 'Startpage';
-
-  function render(q) {
-    const query = q.trim();
-    items = [];
-
-    if (!query) {
-      const recents = state.history.slice(0, 4);
-      items = recents.map((h) => ({ kind: 'history', title: h.title || h.url, sub: h.url, url: h.url }));
-      if (!items.length) {
-        items = SEARCH_HINTS.map((t) => ({
-          kind: 'search', title: t, sub: 'Search with ' + engineTag.textContent, query: t,
-        }));
-      }
-    } else {
-      // Internal pages first
-      const internals = [
-        ['vespera://newtab', 'New Tab'], ['vespera://welcome', 'Welcome'],
-        ['vespera://settings', 'Settings'], ['vespera://privacy', 'Privacy Dashboard'],
-        ['vespera://community', 'Community — vote on features'], ['vespera://account', 'Account & Sync'],
-        ['vespera://history', 'History'], ['vespera://bookmarks', 'Bookmarks'], ['vespera://downloads', 'Downloads'],
-        ['vespera://logs', 'Logs — what the app is doing'],
-      ].filter(([url, title]) => (url + ' ' + title).toLowerCase().includes(query.toLowerCase()))
-        .slice(0, 3)
-        .map(([url, title]) => ({ kind: 'internal', title, sub: url, url }));
-
-      const hist = state.history
-        .filter((h) => (h.title + ' ' + h.url).toLowerCase().includes(query.toLowerCase()))
-        .slice(0, 4)
-        .map((h) => ({ kind: 'history', title: h.title || h.url, sub: h.url, url: h.url }));
-
-      const bms = state.bookmarks
-        .filter((b) => (b.title + ' ' + b.url).toLowerCase().includes(query.toLowerCase()))
-        .slice(0, 3)
-        .map((b) => ({ kind: 'bookmark', title: b.title, sub: b.url, url: b.url }));
-
-      items = [
-        ...internals,
-        ...bms,
-        ...hist,
-        { kind: 'search', title: query, sub: 'Search with ' + engineTag.textContent, query },
-        { kind: 'url', title: guessUrl(query), sub: 'Open as website', url: guessUrl(query) },
-      ];
-    }
-
-    if (!items.length) { dropdown.classList.add('hidden'); return; }
-    selectedIndex = items.length ? 0 : -1;
-    dropdown.innerHTML = items.map((it, i) => `
-      <div class="suggestion ${i === selectedIndex ? 'selected' : ''}" data-i="${i}">
-        ${icon(it.kind === 'search' ? 'search' : it.kind === 'internal' ? 'sparkle'
-          : it.kind === 'bookmark' ? 'bookmark' : it.kind === 'url' ? 'globe' : 'clock')}
-        <div class="s-main">
-          <div class="s-title">${highlight(it.title, query)}</div>
-          <div class="s-sub">${highlight(it.sub || '', query)}</div>
-        </div>
-        <span class="s-kind">${it.kind}</span>
-      </div>`).join('');
-    dropdown.classList.remove('hidden');
-
-    dropdown.querySelectorAll('.suggestion').forEach((el) => {
-      el.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        choose(Number(el.dataset.i));
-      });
-    });
+  let selectedIndex = -1, items = [], currentUrl = '', blurTimer;
+  input.setAttribute('role', 'combobox'); input.setAttribute('aria-autocomplete', 'list');
+  input.setAttribute('aria-controls', 'suggestions'); input.setAttribute('aria-expanded', 'false');
+  dropdown.setAttribute('role', 'listbox');
+  const engineName = () => isPreviewSearch() ? 'GitHub preview' : ({ startpage: 'Startpage', duckduckgo: 'DuckDuckGo', brave: 'Brave', google: 'Google', ecosia: 'Ecosia', mojeek: 'Mojeek', wikipedia: 'Wikipedia' }[state.settings.searchEngine] || 'Startpage');
+  function refreshEngine() {
+    engineTag.textContent = engineName();
+    input.placeholder = isPreviewSearch() ? 'Search GitHub or enter an allowed website' : 'Search the web or type a URL';
   }
-
-  function guessUrl(q) {
-    if (/^https?:/i.test(q)) return q;
-    return 'https://' + q.replace(/^\/+/, '');
-  }
-
   function highlight(text, q) {
-    const t = escapeHtml(text);
-    if (!q) return t;
-    const i = t.toLowerCase().indexOf(escapeHtml(q).toLowerCase());
-    if (i === -1) return t;
-    const len = escapeHtml(q).length;
-    return t.slice(0, i) + '<mark>' + t.slice(i, i + len) + '</mark>' + t.slice(i + len);
+    const raw = String(text || ''), i = raw.toLowerCase().indexOf(q.toLowerCase());
+    if (!q || i < 0) return escapeHtml(raw);
+    return escapeHtml(raw.slice(0, i)) + '<mark>' + escapeHtml(raw.slice(i, i + q.length)) + '</mark>' + escapeHtml(raw.slice(i + q.length));
   }
-
-  function choose(i) {
-    const it = items[i];
-    if (!it) return;
-    close();
-    if (it.kind === 'search') onNavigate({ kind: 'search', value: it.query || it.title });
-    else onNavigate({ kind: 'url', value: it.url });
-  }
-
-  function close() {
-    dropdown.classList.add('hidden');
-    selectedIndex = -1;
-  }
-
-  input.addEventListener('focus', () => {
-    clearTimeout(blurTimer);
-    input.select();
-    render(input.value);
-  });
-  input.addEventListener('blur', () => {
-    blurTimer = setTimeout(close, 160);
-  });
-  input.addEventListener('input', () => render(input.value));
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
-      e.preventDefault();
-      selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
-      refreshSelection();
-    } else if (e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) {
-      e.preventDefault();
-      selectedIndex = Math.max(selectedIndex - 1, 0);
-      refreshSelection();
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      if (selectedIndex >= 0 && items[selectedIndex] && input.value.trim()) choose(selectedIndex);
-      else onNavigate({ kind: 'auto', value: input.value });
-    } else if (e.key === 'Escape') {
-      close();
-      input.blur();
+  function render(q) {
+    const query = q.trim(), lower = query.toLowerCase();
+    if (!query) {
+      items = state.history.slice(0, 5).map((h) => ({ kind: 'history', title: h.title || h.url, sub: h.url, url: h.url }));
+      if (!items.length) items = Object.entries(INTERNAL_PAGES).filter(([url]) => ['vespera://welcome', 'vespera://settings', 'vespera://extensions'].includes(url)).map(([url, p]) => ({ kind: 'internal', title: p.title, sub: url, url }));
+    } else {
+      const internals = Object.entries(INTERNAL_PAGES).filter(([url, p]) => (url + ' ' + p.title).toLowerCase().includes(lower)).slice(0, 3).map(([url, p]) => ({ kind: 'internal', title: p.title, sub: url, url }));
+      const bms = state.bookmarks.filter((b) => (b.title + ' ' + b.url).toLowerCase().includes(lower)).slice(0, 3).map((b) => ({ kind: 'bookmark', title: b.title, sub: b.url, url: b.url }));
+      const hist = state.history.filter((h) => (h.title + ' ' + h.url).toLowerCase().includes(lower)).slice(0, 4).map((h) => ({ kind: 'history', title: h.title || h.url, sub: h.url, url: h.url }));
+      const classified = classifyInput(query);
+      items = [...internals, ...bms, ...hist];
+      if (classified.kind === 'url' || classified.kind === 'internal') items.unshift({ kind: 'url', title: query, sub: 'Open website · Enter', url: query });
+      else items.push({ kind: 'search', title: query, sub: 'Search with ' + engineName() + ' · Enter', query });
     }
-  });
-
+    selectedIndex = -1;
+    dropdown.innerHTML = items.map((it, i) => `<div class="suggestion" id="suggestion-${i}" role="option" aria-selected="false" data-i="${i}">${icon(it.kind === 'search' ? 'search' : it.kind === 'internal' ? 'sparkle' : it.kind === 'bookmark' ? 'bookmark' : it.kind === 'url' ? 'globe' : 'clock')}<div class="s-main"><div class="s-title">${highlight(it.title, query)}</div><div class="s-sub">${highlight(it.sub, query)}</div></div><span class="s-kind">${it.kind}</span></div>`).join('');
+    dropdown.classList.toggle('hidden', !items.length);
+    input.setAttribute('aria-expanded', String(Boolean(items.length)));
+    dropdown.querySelectorAll('.suggestion').forEach((el) => el.addEventListener('mousedown', (e) => { e.preventDefault(); choose(Number(el.dataset.i)); }));
+  }
+  function close() { dropdown.classList.add('hidden'); selectedIndex = -1; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); }
+  function choose(i) {
+    const it = items[i]; if (!it) return;
+    close(); input.blur();
+    onNavigate(it.kind === 'search' ? { kind: 'search', value: it.query || it.title } : { kind: 'url', value: it.url });
+  }
   function refreshSelection() {
     dropdown.querySelectorAll('.suggestion').forEach((el, i) => {
-      el.classList.toggle('selected', i === selectedIndex);
-      if (i === selectedIndex) el.scrollIntoView({ block: 'nearest' });
+      el.classList.toggle('selected', i === selectedIndex); el.setAttribute('aria-selected', String(i === selectedIndex));
+      if (i === selectedIndex) { el.scrollIntoView({ block: 'nearest' }); input.setAttribute('aria-activedescendant', el.id); }
     });
   }
-
-  document.getElementById('omni-go')?.addEventListener('click', () => {
-    onNavigate({ kind: 'auto', value: input.value });
+  input.addEventListener('focus', () => { clearTimeout(blurTimer); input.select(); render(input.value); });
+  input.addEventListener('blur', () => { blurTimer = setTimeout(close, 160); });
+  input.addEventListener('input', () => render(input.value));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (dropdown.classList.contains('hidden')) render(input.value);
+      selectedIndex = Math.max(0, Math.min(selectedIndex + (e.key === 'ArrowDown' ? 1 : -1), items.length - 1));
+      refreshSelection();
+    } else if (e.key === 'Enter' && input.value.trim()) {
+      e.preventDefault();
+      if (selectedIndex >= 0) choose(selectedIndex);
+      else { close(); input.blur(); onNavigate({ kind: 'auto', value: input.value }); }
+    } else if (e.key === 'Escape') { close(); input.value = currentUrl === 'vespera://newtab' ? '' : currentUrl; input.blur(); }
   });
-
-  // Keep engine tag in sync with settings.
+  document.getElementById('omni-go').addEventListener('click', () => { if (input.value.trim()) { close(); onNavigate({ kind: 'auto', value: input.value }); } });
+  refreshEngine();
   return {
-    setUrl(url, isInternal) {
-      input.value = url;
+    setUrl(url, internal) {
+      currentUrl = url; input.dataset.currentUrl = url; input.value = url === 'vespera://newtab' ? '' : url;
       const lock = document.getElementById('lock-icon');
-      if (lock) {
-        const secure = isInternal || url.startsWith('https://');
-        lock.classList.toggle('insecure', !secure);
-      }
+      lock.classList.toggle('insecure', !internal && !url.startsWith('https://'));
+      document.getElementById('site-info').title = internal ? 'Vespera internal page' : url.startsWith('https://') ? 'HTTPS connection · site privacy controls' : 'Connection settings';
+      close();
     },
-    focus() { input.focus(); },
-    refreshEngine() {
-      engineTag.textContent = engineNames[state.settings.searchEngine] || 'Startpage';
-    },
+    focus() { input.focus(); input.select(); }, refreshEngine,
   };
 }

@@ -1,248 +1,195 @@
-/**
- * Vespera main process — the real Chromium browser shell.
- *
- * Startup is fully instrumented and fail-safe:
- *   - every step is written to <userData>/logs/vespera.log
- *   - any fatal error shows a dialog WITH the log path (never a silent exit)
- *   - the window is guaranteed to appear (no "ready-to-show" black hole)
- *   - a second double-click focuses the running window instead of crashing
- */
-
+/** Vespera desktop shell: real Chromium tabs, native window controls, downloads and privacy. */
 'use strict';
-
-const { app, BrowserWindow, dialog, ipcMain, session, shell, nativeTheme } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, session, shell, nativeTheme, Menu, webContents } = require('electron');
 const path = require('node:path');
+const fs = require('node:fs');
 const log = require('./logger');
+const { DownloadManager } = require('./downloads');
+const { installExtensions } = require('./extensions');
 
-// ---- App identity (before anything else) --------------------------------
 app.setName('Vespera');
 if (process.platform === 'win32') app.setAppUserModelId('app.vespera.browser');
-
-// Packaged apps can't write inside the app bundle — point the local service
-// at the OS userData folder (dev keeps ./data in the repo).
-if (app.isPackaged && !process.env.VESPERA_DATA) {
-  process.env.VESPERA_DATA = path.join(app.getPath('userData'), 'data');
-}
-
+if (app.isPackaged && !process.env.VESPERA_DATA) process.env.VESPERA_DATA = path.join(app.getPath('userData'), 'data');
 log.init(path.join(app.getPath('userData'), 'logs'));
+process.on('uncaughtException', (err) => log.error('Uncaught exception', err));
+process.on('unhandledRejection', (err) => log.error('Unhandled rejection', err instanceof Error ? err : new Error(String(err))));
+if (!app.requestSingleInstanceLock()) { app.quit(); return; }
+app.on('second-instance', () => { const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : [...windows][0]; if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
 
-// Safety net: log stray errors instead of popping a crash dialog — but the
-// log file always records exactly what happened.
-process.on('uncaughtException', (err) => log.error('uncaught exception', err));
-process.on('unhandledRejection', (err) => log.error('unhandled rejection', err instanceof Error ? err : new Error(String(err))));
+const windows = new Set();
+let mainWindow = null, serverHandle = null, downloadManager, extensionManager, normalSession, privateSession;
+const prefsFile = path.join(app.getPath('userData'), 'preferences.json');
+let prefs = { shields: { enabled: true, blockTrackers: true, blockAds: true, blockAnnoyances: false, cleanLinks: true, httpsOnly: true, gpc: true }, allowlist: {}, askDownloadLocation: true, downloadPath: '', extensionPaths: [] };
+try { const saved = JSON.parse(fs.readFileSync(prefsFile, 'utf8')); if (saved && typeof saved === 'object') prefs = { ...prefs, ...saved, shields: { ...prefs.shields, ...(saved.shields || {}) } }; } catch { /* First launch. */ }
+function persistPrefs() { try { fs.writeFileSync(prefsFile, JSON.stringify(prefs, null, 2), { mode: 0o600 }); } catch (err) { log.error('Could not save preferences', err); } }
+function uiUrl() { return `http://127.0.0.1:${serverHandle?.port || 4600}/index.html`; }
+function isTrustedSender(event) { return windows.has(BrowserWindow.fromWebContents(event.sender)) && event.sender.getURL().startsWith(uiUrl()) && event.senderFrame === event.sender.mainFrame; }
+function handle(channel, fn) { ipcMain.handle(channel, (event, ...args) => { if (!isTrustedSender(event)) return { ok: false, message: 'Untrusted browser request.' }; try { return fn(event, ...args); } catch (err) { log.error(channel, err); return { ok: false, message: err.message }; } }); }
+function isPrivateEvent(event) { return Boolean(BrowserWindow.fromWebContents(event.sender)?.__vesperaPrivate); }
+function sendMenu(action) { BrowserWindow.getFocusedWindow()?.webContents.send('menu:action', action); }
 
-// ---- Single instance ----------------------------------------------------
-// A second double-click focuses the existing window instead of booting a
-// second copy that would fight over the service port (EADDRINUSE crash).
-if (!app.requestSingleInstanceLock()) {
-  log.info('second instance detected — focusing the existing window and quitting');
-  app.quit();
-  return;
-}
-app.on('second-instance', () => {
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-    log.info('focused existing window (second launch)');
-  }
-});
-
-let mainWindow = null;
-let serverHandle = null;
-let prefs = {
-  shields: {
-    enabled: true, blockTrackers: true, blockAds: true, blockAnnoyances: false,
-    cleanLinks: true, httpsOnly: true, gpc: true, antiFingerprint: true,
-  },
-  allowlist: {},
-};
-
-function showFatal(title, err) {
-  log.error(title, err);
-  dialog.showErrorBox(
-    'Vespera could not start — ' + title,
-    `${(err && (err.stack || err.message)) || err}\n\n` +
-    `A full log was written to:\n${log.getLogFile()}\n\n` +
-    'Please attach this file if you report the problem.'
-  );
-}
-
-function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1320,
-    height: 860,
-    minWidth: 880,
-    minHeight: 560,
-    frame: false, // custom Vespera titlebar
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0a0e1c' : '#f4f1ea',
-    show: false,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webviewTag: true,
-      spellcheck: true,
-    },
-  });
-
-  const port = serverHandle ? serverHandle.port : 4600;
-  const url = `http://127.0.0.1:${port}/index.html`;
-  log.info(`loading browser UI from ${url}`);
-  mainWindow.loadURL(url);
-
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
-    log.info('window shown (ready-to-show)');
-  });
-
-  // GUARANTEE the window appears even if the renderer never fires
-  // ready-to-show (white-screen / slow start). A browser that opens to a
-  // blank window beats a browser that opens to nothing at all.
-  setTimeout(() => {
-    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
-      mainWindow.show();
-      log.warn('window shown by fallback timer (ready-to-show never fired)');
-    }
-  }, 4000);
-
-  // Renderer crashes are logged with details instead of vanishing silently.
-  mainWindow.webContents.on('render-process-gone', (_e, details) => {
-    log.error('renderer process gone', new Error(JSON.stringify(details)));
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      dialog.showMessageBox(mainWindow, {
-        type: 'warning',
-        message: 'A Vespera tab process crashed',
-        detail: `${details.reason}\n\nThe browser will reload. Details are in the log:\n${log.getLogFile()}`,
-      });
-      mainWindow.webContents.reload();
-    }
-  });
-
-  // External links open in the user's default browser, not in new windows.
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/.test(url)) shell.openExternal(url);
-    return { action: 'deny' };
-  });
-
-  mainWindow.on('maximize', () => mainWindow.webContents.send('window:maximized', true));
-  mainWindow.on('unmaximize', () => mainWindow.webContents.send('window:maximized', false));
-  mainWindow.on('closed', () => { mainWindow = null; });
-}
-
-// ---- IPC: window controls & diagnostics ---------------------------------
-ipcMain.on('window:minimize', () => mainWindow?.minimize());
-ipcMain.on('window:maximize', () => {
-  if (!mainWindow) return;
-  mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
-});
-ipcMain.on('window:close', () => mainWindow?.close());
-ipcMain.on('window:incognito', () => {
+function createWindow({ privateMode = false } = {}) {
   const win = new BrowserWindow({
-    width: 1100, height: 760, frame: false, show: true,
-    backgroundColor: '#0a0e1c',
+    width: 1320, height: 860, minWidth: 720, minHeight: 500, frame: false,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0a0e1c' : '#f4f1ea', show: false,
+    title: privateMode ? 'Vespera — Private' : 'Vespera',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true, nodeIntegration: false, sandbox: true,
-      webviewTag: true, partition: 'incognito',
+      preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false,
+      sandbox: true, webviewTag: true, spellcheck: true,
+      ...(privateMode ? { partition: 'incognito', additionalArguments: ['--vespera-private'] } : {}),
     },
   });
-  const port = serverHandle ? serverHandle.port : 4600;
-  win.loadURL(`http://127.0.0.1:${port}/index.html`);
-  log.info('incognito window opened');
-});
-
-ipcMain.handle('app:version', () => app.getVersion());
-ipcMain.handle('downloads:list', () => global.__vesperaDownloads || []);
-ipcMain.handle('app:read-log', () => log.readTail(400));
-ipcMain.handle('app:log-path', () => log.getLogFile());
-ipcMain.handle('app:open-logs', () => {
-  shell.openPath(log.getLogDir());
-  return log.getLogDir();
-});
-
-// ---- App lifecycle -------------------------------------------------------
-app.whenReady().then(async () => {
-  log.info(`Vespera ${app.getVersion()} starting  (electron ${process.versions.electron}, ${process.platform})`);
-  log.info(`userData: ${app.getPath('userData')}`);
-
-  // Start the bundled Vespera service (accounts/sync/community/API).
-  // createServer falls back to the next free port if 4600 is taken, so a
-  // leftover instance or another app can never crash Vespera at startup.
-  try {
-    const { createServer } = require('../server/server');
-    serverHandle = await createServer({ port: 4600, host: '127.0.0.1' });
-    log.info(`service ready on port ${serverHandle.port}`);
-  } catch (err) {
-    showFatal('local service failed to start', err);
-    app.quit();
-    return;
-  }
-
-  // Install privacy enforcement on the persistent web session.
-  // privacy-utils is an ESM module; load with import() (Electron's bundled
-  // Node lacks require(esm)). If it ever fails, degrade gracefully — the
-  // browser still works, the incident is in the log.
-  let pu = null;
-  try {
-    const { installPrivacy } = require('./privacy');
-    pu = await import('../src/shared/privacy-utils.mjs');
-    const privacy = installPrivacy(session.defaultSession, () => prefs, (kind, rule, url) => {
-      global.__blockLog = global.__blockLog || [];
-      if (global.__blockLog.length > 2000) global.__blockLog.shift();
-      global.__blockLog.push({ kind, rule, url, at: Date.now() });
-    }, pu);
-    log.info('privacy engine attached to the browser session');
-
-    global.__vesperaDownloads = [];
-    session.defaultSession.on('will-download', (_event, item) => {
-      const entry = {
-        name: item.getFilename(),
-        url: item.getURL(),
-        size: formatBytes(item.getTotalBytes()),
-        status: 'in-progress',
-      };
-      global.__vesperaDownloads.unshift(entry);
-      item.on('updated', (_e, state) => { entry.status = state; });
-      item.once('done', (_e, state) => {
-        entry.status = state;
-        log.info(`download finished: ${entry.name} (${state})`);
-      });
-      mainWindow?.webContents.send('download:started', entry);
-      log.info(`download started: ${entry.name}`);
-    });
-
-    app.on('web-contents-created', (_e, contents) => {
-      if (contents.getType() === 'webview') {
-        privacy.protectWebContents(contents, () => prefs);
-      }
-    });
-  } catch (err) {
-    log.error('privacy engine failed to attach (browser will run without it)', err);
-  }
-
-  createWindow();
-  log.info('main window created');
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  win.__vesperaPrivate = privateMode;
+  win.webContents.on('will-attach-webview', (_event, webPreferences) => {
+    delete webPreferences.preload;
+    webPreferences.nodeIntegration = false; webPreferences.contextIsolation = true; webPreferences.sandbox = true;
+    webPreferences.partition = privateMode ? 'incognito' : 'persist:vespera';
   });
-});
+  windows.add(win);
+  if (!privateMode) mainWindow = win;
+  win.loadURL(uiUrl()).catch((err) => { log.error('Could not load browser UI', err); win.show(); dialog.showErrorBox('Vespera could not load its interface', `${err.message}\n\nLog: ${log.getLogFile()}`); });
+  win.once('ready-to-show', () => { win.show(); if (privateMode) win.webContents.send('window:maximized', win.isMaximized()); });
+  const fallback = setTimeout(() => { if (!win.isDestroyed() && !win.isVisible()) { win.show(); log.warn('Window shown by startup fallback.'); } }, 4000);
+  win.webContents.on('render-process-gone', (_e, details) => { log.error('Browser UI process gone', new Error(JSON.stringify(details))); if (!win.isDestroyed()) win.webContents.reload(); });
+  win.webContents.on('did-fail-load', (_e, code, description) => { if (code !== -3) log.error(`Browser UI load failed: ${description} (${code})`); });
+  win.on('maximize', () => win.webContents.send('window:maximized', true));
+  win.on('unmaximize', () => win.webContents.send('window:maximized', false));
+  win.on('enter-full-screen', () => win.webContents.send('window:maximized', true));
+  win.on('leave-full-screen', () => win.webContents.send('window:maximized', win.isMaximized()));
+  win.on('closed', () => { clearTimeout(fallback); windows.delete(win); if (mainWindow === win) mainWindow = [...windows].find((w) => !w.__vesperaPrivate) || null; });
+  win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url).catch((err) => log.error('Open external failed', err)); return { action: 'deny' }; });
+  log.info(`${privateMode ? 'Private' : 'Normal'} window created`);
+  return win;
+}
 
-app.on('window-all-closed', () => {
-  log.info('all windows closed — quitting');
-  if (process.platform !== 'darwin') app.quit();
-});
+function registerIpc() {
+  const on = (channel, fn) => ipcMain.on(channel, (event, ...args) => { if (isTrustedSender(event)) fn(BrowserWindow.fromWebContents(event.sender), ...args); });
+  on('window:minimize', (win) => win.minimize());
+  on('window:maximize', (win) => win.isMaximized() ? win.unmaximize() : win.maximize());
+  on('window:close', (win) => win.close());
+  on('window:incognito', () => createWindow({ privateMode: true }));
+  handle('app:version', () => app.getVersion());
+  handle('prefs:save', (event, value) => {
+    if (isPrivateEvent(event) || !value || typeof value !== 'object') return { ok: true };
+    prefs = { ...prefs, ...value, shields: { ...prefs.shields, ...(value.shields || {}) }, allowlist: { ...(value.allowlist || {}) }, extensionPaths: prefs.extensionPaths || [] };
+    delete prefs.wallpaperData; persistPrefs(); return { ok: true };
+  });
+  handle('downloads:list', (event) => downloadManager.list(isPrivateEvent(event)));
+  handle('downloads:action', (event, action, id) => downloadManager.action(action, String(id), isPrivateEvent(event)));
+  handle('downloads:clear', (event) => { downloadManager.clear(isPrivateEvent(event)); return { ok: true }; });
+  handle('downloads:start', (event, url) => {
+    if (!/^https?:\/\//i.test(String(url))) return { ok: false, message: 'Only HTTP and HTTPS files can be downloaded.' };
+    (isPrivateEvent(event) ? privateSession : normalSession).downloadURL(url); return { ok: true };
+  });
+  handle('downloads:folder', async () => { const folder = prefs.downloadPath && fs.existsSync(prefs.downloadPath) ? prefs.downloadPath : app.getPath('downloads'); const error = await shell.openPath(folder); return { ok: !error, message: error }; });
+  handle('downloads:choose-folder', async (event) => {
+    const result = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), { properties: ['openDirectory', 'createDirectory'], title: 'Choose download folder' });
+    if (result.canceled) return { ok: false, canceled: true };
+    prefs.downloadPath = result.filePaths[0]; persistPrefs(); return { ok: true, path: prefs.downloadPath };
+  });
+  handle('app:read-log', () => log.readTail(400));
+  handle('app:log-path', () => log.getLogFile());
+  handle('app:open-logs', async () => { const error = await shell.openPath(log.getLogDir()); return { ok: !error, path: log.getLogDir(), message: error }; });
+  handle('app:default-browser', () => {
+    if (!app.isPackaged) return { ok: false, message: 'Install a Vespera release build first. A source checkout cannot safely register itself as your default browser.' };
+    const results = ['http', 'https'].map((protocol) => app.setAsDefaultProtocolClient(protocol));
+    const ok = results.every(Boolean) && app.isDefaultProtocolClient('https');
+    return { ok, message: ok ? 'Vespera is now your default web browser.' : 'Your operating system did not accept the change. Set Vespera as the default browser in system settings.' };
+  });
+  handle('extensions:list', (event) => isPrivateEvent(event) ? [] : extensionManager.list());
+  handle('extensions:install', (event) => isPrivateEvent(event) ? { ok: false, message: 'Extensions are disabled in private windows.' } : extensionManager.install());
+  handle('extensions:remove', (event, id) => isPrivateEvent(event) ? { ok: false, message: 'Extensions are disabled in private windows.' } : extensionManager.remove(String(id)));
+}
+function buildMenu() {
+  const item = (label, action, accelerator) => ({ label, accelerator, click: () => sendMenu(action) });
+  const template = [
+    { label: 'File', submenu: [item('New Tab', 'newtab', 'CmdOrCtrl+T'), item('Reopen Closed Tab', 'reopen', 'CmdOrCtrl+Shift+T'), item('New Private Window', 'private', 'CmdOrCtrl+Shift+N'), { type: 'separator' }, item('Close Tab', 'closetab', 'CmdOrCtrl+W'), { role: 'close', label: 'Close Window' }] },
+    { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
+    { label: 'View', submenu: [item('Reload Page', 'reload', 'CmdOrCtrl+R'), item('Find in Page', 'find', 'CmdOrCtrl+F'), item('Zoom In', 'zoom-in', 'CmdOrCtrl+Plus'), item('Zoom Out', 'zoom-out', 'CmdOrCtrl+-'), item('Actual Size', 'zoom-reset', 'CmdOrCtrl+0'), { type: 'separator' }, { role: 'togglefullscreen' }, { role: 'toggleDevTools' }] },
+    { label: 'History', submenu: [item('Back', 'back', 'Alt+Left'), item('Forward', 'forward', 'Alt+Right'), item('Home', 'home', 'Alt+Home'), { type: 'separator' }, item('Show History', 'history')] },
+    { label: 'Tools', submenu: [item('Downloads', 'downloads', 'CmdOrCtrl+J'), item('Extensions', 'extensions'), item('Settings', 'settings', 'CmdOrCtrl+,'), item('Command Palette', 'palette', 'CmdOrCtrl+K')] },
+    { label: 'Window', submenu: [{ role: 'minimize' }, { role: 'zoom' }, ...(process.platform === 'darwin' ? [{ role: 'front' }] : [{ role: 'close' }])] },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+function protectSessions(pu) {
+  const blockLog = [];
+  const report = (entry) => {
+    if (entry.kind !== 'reset') { blockLog.push(entry); if (blockLog.length > 2000) blockLog.shift(); }
+    try {
+      const guest = entry.webContentsId && webContents.fromId(entry.webContentsId);
+      const owner = guest?.hostWebContents;
+      if (owner && !owner.isDestroyed()) owner.send('shield:stat', { ...entry, host: guest.getURL() ? new URL(guest.getURL()).hostname : entry.host });
+    } catch { /* A tab may have closed. */ }
+  };
+  if (pu) {
+    const { installPrivacy } = require('./privacy');
+    for (const ses of [normalSession, privateSession]) {
+      const privacy = installPrivacy(ses, () => prefs, report, pu);
+      app.on('web-contents-created', (_e, contents) => {
+        if (contents.getType() === 'webview' && contents.session === ses) privacy.protectWebContents(contents);
+      });
+    }
+    log.info('Privacy engines attached to normal and private browsing sessions');
+  }
+  for (const [ses, privateMode] of [[normalSession, false], [privateSession, true]]) {
+    const granted = new Set();
+    ses.setPermissionRequestHandler((contents, permission, callback, details) => {
+      if (!['media', 'geolocation', 'notifications'].includes(permission) || privateMode) return callback(false);
+      const win = BrowserWindow.fromWebContents(contents.hostWebContents || contents);
+      if (!win) return callback(false);
+      dialog.showMessageBox(win, { type: 'question', message: `Allow ${details.requestingUrl} to use ${permission}?`, buttons: ['Block', 'Allow'], defaultId: 0, cancelId: 0, noLink: true }).then((r) => { if (r.response === 1) granted.add(details.requestingUrl + ':' + permission); callback(r.response === 1); });
+    });
+    ses.setPermissionCheckHandler((_contents, permission, origin) => !privateMode && granted.has(origin + ':' + permission));
+    downloadManager.attach(ses, privateMode);
+  }
+}
+function wireWebContents() {
+  app.on('web-contents-created', (_e, contents) => {
+    if (contents.getType() === 'webview') {
+      contents.setWindowOpenHandler(({ url }) => {
+        if (/^https?:\/\//i.test(url)) contents.hostWebContents?.send('browser:new-tab', url);
+        return { action: 'deny' };
+      });
+      contents.on('context-menu', (_event, params) => {
+        const win = BrowserWindow.fromWebContents(contents.hostWebContents || contents);
+        if (!win) return;
+        const template = [];
+        if (params.linkURL && /^https?:/.test(params.linkURL)) template.push(
+          { label: 'Open link in new tab', click: () => contents.hostWebContents.send('browser:new-tab', params.linkURL) },
+          { label: 'Copy link address', click: () => require('electron').clipboard.writeText(params.linkURL) },
+          { label: 'Save link as…', click: () => contents.downloadURL(params.linkURL) },
+          { type: 'separator' },
+        );
+        if (params.mediaType === 'image' && params.srcURL) template.push({ label: 'Save image as…', click: () => contents.downloadURL(params.srcURL) });
+        if (params.isEditable) template.push({ role: 'cut' }, { role: 'copy' }, { role: 'paste' });
+        else if (params.selectionText) template.push({ role: 'copy' });
+        template.push({ label: 'Back', enabled: contents.canGoBack(), click: () => contents.goBack() }, { label: 'Reload', click: () => contents.reload() });
+        if (!app.isPackaged) template.push({ type: 'separator' }, { label: 'Inspect page', click: () => contents.inspectElement(params.x, params.y) });
+        Menu.buildFromTemplate(template).popup({ window: win });
+      });
+    }
+  });
 
-// Anti-automation / fingerprint surface reduction flags
-// (must be set before the app is ready).
+}
+
+app.whenReady().then(async () => {
+  log.info(`Vespera ${app.getVersion()} starting (Electron ${process.versions.electron}, ${process.platform})`);
+  try { serverHandle = await require('../server/server').createServer({ port: 4600, host: '127.0.0.1' }); }
+  catch (err) { log.error('Local service failed', err); dialog.showErrorBox('Vespera could not start', `${err.message}\n\nLog: ${log.getLogFile()}`); app.quit(); return; }
+  normalSession = session.fromPartition('persist:vespera');
+  privateSession = session.fromPartition('incognito');
+  downloadManager = new DownloadManager(() => prefs, () => [...windows], log);
+  extensionManager = installExtensions(normalSession, () => prefs, persistPrefs, () => BrowserWindow.getFocusedWindow() || mainWindow, log);
+  let pu = null;
+  try { pu = await import('../src/shared/privacy-utils.mjs'); } catch (err) { log.error('Privacy utilities unavailable; network filtering is disabled', err); }
+  protectSessions(pu);
+  registerIpc();
+  wireWebContents(); createWindow(); buildMenu();
+  await extensionManager.restore();
+  app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
+}).catch((err) => { log.error('Startup failed', err); dialog.showErrorBox('Vespera startup failed', `${err.stack || err}\n\nLog: ${log.getLogFile()}`); app.quit(); });
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('before-quit', () => { persistPrefs(); windows.clear(); });
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 app.commandLine.appendSwitch('disable-features', 'Translate,MediaRouter');
-
-function formatBytes(n) {
-  if (!n || n < 0) return '';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let i = 0;
-  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
-  return `${n.toFixed(n >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
-}

@@ -95,8 +95,13 @@ npm start
 # …or run the web preview of the same UI (browser-in-browser demo)
 npm run preview   # then open http://localhost:4600
 
-# Run the test suite (25 tests incl. engine benchmarks)
+# Run the unit/service test suite
 npm test
+
+# Run real Chromium UI checks (after npx playwright install chromium)
+npm run test:ui
+
+# Current release: 0.1.3 (desktop installers are published via GitHub Releases)
 
 # Build installers for your current platform (output in dist/)
 npm run dist
@@ -104,13 +109,19 @@ npm run dist
 
 **Requirements:** Node.js 20+ and npm. That's it.
 
+### Live web preview / installable app
+
+`npm run preview` serves the same browser UI at `http://localhost:4600`. In a hosted preview, Vespera runs directly in the browser: tabs, Home, right-click menus, settings, downloads, extensions and customization work without installing the desktop shell. The web app includes a manifest and app-shell cache, so supported browsers can offer **Install Vespera as an app** from the Vespera menu. Open **What’s new** (`vespera://updates`) for build notes and the published Releases link.
+
+The preview proxy is intentionally limited: some sites block embedding or are unreachable from the host environment. Use **Open original** for those sites. The Electron desktop app remains the full Chromium runtime.
+
 ---
 
 ## 🗺️ Roadmap — shipped in this build
 
 - [x] **Core privacy engine optimization** — EasyList-subset filter engine with precompiled regexes and domain-bucketed matching (50k matches in milliseconds), tracking-parameter stripping, HTTPS upgrades, strict referrer policy, GPC/DNT headers.
 - [x] **Sleek, modern UI theme overhaul** — the *Twilight* design system: dark/light themes, four accent colors, glass panels, animated starfield, drag-reorder tabs (horizontal **or** vertical layout), unified omnibox with smart suggestions, command palette (`Ctrl+K`), full keyboard control.
-- [x] **Advanced built-in tracker and ad blocking** — bundled tracker/ad/annoyance blocklists enforced at the network layer in Chromium, live per-site shield counters, one-click site allowlist, Privacy Dashboard with real statistics.
+- [x] **Advanced built-in tracker and ad blocking** — bundled tracker/ad/annoyance blocklists enforced at the network layer in Chromium, live per-site shield counters, one-click site allowlist, Privacy Hub with real statistics and compact per-site controls.
 - [x] **Community feature-request voting system** — in-app board: post ideas, upvote/downvote, comment, track statuses (open → planned → in-progress → shipped). The most-voted ideas define what gets built next.
 
 ### What's next (vote on these in `vespera://community`!)
@@ -145,7 +156,7 @@ Vespera-beta/
 ├── scripts/            Icon generator + friendly postinstall
 ├── electron-builder.yml            Installer config (win/mac/linux)
 ├── .github/workflows/release.yml   Automated multi-OS build & release
-└── test/               25 tests: engine semantics, auth, store, benchmarks
+└── test/               Unit/service tests: engine semantics, auth, store, benchmarks
 ```
 
 * **Accounts** — scrypt-hashed passwords, HMAC-signed stateless tokens, rate limiting. Nothing leaves your machine.

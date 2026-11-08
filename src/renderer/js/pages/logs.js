@@ -26,9 +26,7 @@ export function renderLogs(container, ctx) {
 
   async function refresh() {
     if (!window.vespera) {
-      body.textContent =
-        'Log viewing is available in the Vespera desktop app (npm start).\n' +
-        'In this web preview, server logs are printed to the terminal that runs `npm run preview`.';
+      body.textContent = 'Browser diagnostics\n\n' + (ctx.diagnostics().map((d) => new Date(d.at).toISOString() + ' ' + d.message).join('\n') || 'No browser errors recorded.') + '\n\nHosted service logs are kept by the preview host. Desktop file logs are available in the installed app.';
       return;
     }
     const [text, p] = await Promise.all([
@@ -47,8 +45,8 @@ export function renderLogs(container, ctx) {
   container.querySelector('#log-refresh').addEventListener('click', () => refresh());
   container.querySelector('#log-open').addEventListener('click', async () => {
     if (!window.vespera) return toast('Available in the desktop app', 'info');
-    const dir = await window.vespera.app.openLogs();
-    toast('Opened ' + dir, 'ok');
+    const result = await window.vespera.app.openLogs();
+    toast(result.ok ? 'Opened ' + result.path : result.message || 'Could not open log folder', result.ok ? 'ok' : 'error');
   });
 
   refresh();

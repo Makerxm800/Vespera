@@ -54,6 +54,7 @@ function issueToken(user, secret) {
   return signToken(
     {
       sub: user.id,
+      jti: crypto.randomBytes(12).toString('base64url'),
       tv: user.tokenVersion || 1,
       exp: Date.now() + TOKEN_TTL_MS,
       iat: Date.now(),

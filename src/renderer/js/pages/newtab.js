@@ -1,83 +1,58 @@
-/** New Tab page — clock, search, quick links, privacy stats. */
+/** The Vespera home: a real local clock, private search, and useful places to start. */
 import { icon } from '../icons.js';
-import { state } from '../state.js';
+import { state, bus } from '../state.js';
 import { escapeHtml } from '../toasts.js';
+import { SEARCH_ENGINES } from '../../../shared/privacy-utils.mjs';
 
+const START_LINKS = [
+  { title: 'Welcome to Vespera', sub: 'Meet your new browser', url: 'vespera://welcome', ic: 'sparkle', color: 'gold' },
+  { title: 'Make it yours', sub: 'Wallpapers & colors', url: 'vespera://settings#appearance', ic: 'palette', color: 'violet' },
+  { title: 'Extensions', sub: 'Small tools, big difference', url: 'vespera://extensions', ic: 'split', color: 'teal' },
+  { title: 'Explore GitHub', sub: 'Build something great', url: 'https://github.com/explore', ic: 'code', color: 'blue' },
+];
 export function renderNewtab(container, ctx) {
-  const topSites = [...state.history.reduce((map, h) => {
-    let host = h.url;
-    try { host = new URL(h.url).hostname; } catch { /* keep */ }
-    if (!map.has(host)) map.set(host, { host, url: h.url, visits: 0 });
-    map.get(host).visits++;
-    return map;
-  }, new Map()).values()].slice(0, 8);
-
-  container.innerHTML = `
-    <div class="newtab-page">
-      ${starBg()}
-      <div class="nt-clock">
-        <div class="time" id="nt-time">--:--</div>
-        <div class="date" id="nt-date"></div>
-      </div>
-      <div class="nt-search">
-        <div class="omnibox">
-          <div class="site-info">${icon('search')}</div>
-          <input id="nt-input" type="text" placeholder="Search the web with Startpage — privately" spellcheck="false">
-          <button class="icon-btn go-btn" id="nt-go">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
-          </button>
-        </div>
-      </div>
-      <div class="nt-stats">
-        <div class="nt-stat">${icon('shield')} <b id="nt-blocked">0</b> trackers &amp; ads blocked</div>
-        <div class="nt-stat">${icon('link')} <b id="nt-links">0</b> tracking links cleaned</div>
-        <div class="nt-stat">${icon('bolt')} <b>0</b> bytes of telemetry sent</div>
-      </div>
-      ${topSites.length ? `
-        <div class="nt-stats" style="margin-top:2px">
-          ${topSites.map((s) => `
-            <button class="nt-stat" data-url="${escapeHtml(s.url)}" style="cursor:pointer">
-              ${icon('globe')} <span>${escapeHtml(s.host)}</span>
-            </button>`).join('')}
-        </div>` : ''}
-    </div>`;
-
+  const engine = SEARCH_ENGINES[state.settings.searchEngine] || SEARCH_ENGINES.startpage;
+  const recent = state.history.slice(0, 4);
+  container.innerHTML = `<div class="newtab-page">
+    <div class="nt-wallpaper"></div><div class="nt-shade"></div>
+    <div class="nt-topline"><span class="nt-brand">${icon('sparkle')} Vespera</span><button class="nt-customize" id="nt-customize">${icon('palette')} Customize</button></div>
+    <div class="nt-hero"><div class="nt-welcome">A little space. A better web.</div><h1>Welcome to <span>Vespera</span></h1>
+      <div class="nt-clock"><time class="time" id="nt-time">--:--</time><div class="date" id="nt-date"></div></div>
+      <form class="nt-search" id="nt-search"><div class="omnibox"><div class="site-info">${icon('search')}</div><input id="nt-input" type="text" placeholder="${ctx.previewRestricted() ? 'Search GitHub or enter a website…' : 'Search the web privately with ' + escapeHtml(engine.name) + '…'}" spellcheck="false" autocomplete="off" aria-label="Search from home"><button class="nt-go" id="nt-go" type="submit" aria-label="Search">${icon('search')}</button></div><div class="nt-search-note">${icon('lock')} ${ctx.previewRestricted() ? 'Preview search · public GitHub repositories' : escapeHtml(engine.name) + ' · Your search, your business'}</div></form>
+    </div>
+    <div class="nt-shortcuts">${START_LINKS.map((l, i) => `<button class="nt-shortcut" style="--i:${i}" data-url="${l.url}"><span class="shortcut-icon ${l.color}">${icon(l.ic)}</span><span><b>${l.title}</b><small>${l.sub}</small></span><span class="shortcut-arrow">↗</span></button>`).join('')}</div>
+    ${recent.length ? `<div class="nt-recent"><div class="nt-section-label">Pick up where you left off</div><div class="nt-recent-list">${recent.map((h) => `<button data-url="${escapeHtml(h.url)}">${icon('clock')}<span>${escapeHtml(h.title || h.url)}</span><small>${escapeHtml(new URL(h.url).hostname)}</small></button>`).join('')}</div></div>` : ''}
+    <div class="nt-bottom"><span>${icon('shield')} <b id="nt-blocked">0</b> trackers & ads blocked</span><i></i><span>${icon('eyeOff')} Zero telemetry. Always.</span><button id="nt-privacy">Your privacy ${icon('external')}</button></div>
+  </div>`;
+  const time = container.querySelector('#nt-time'), date = container.querySelector('#nt-date');
   function tick() {
     const now = new Date();
-    const t = container.querySelector('#nt-time');
-    const d = container.querySelector('#nt-date');
-    if (t) t.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    if (d) d.textContent = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+    time.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: state.settings.clockSeconds ? '2-digit' : undefined, hour12: !state.settings.clock24 });
+    time.dateTime = now.toISOString();
+    date.textContent = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
   }
   tick();
-  const timer = setInterval(tick, 10000);
-
-  const blocked = container.querySelector('#nt-blocked');
-  const links = container.querySelector('#nt-links');
-  const syncStats = () => {
-    if (blocked) blocked.textContent = String(state.stats.trackers + state.stats.ads);
-    if (links) links.textContent = String(state.stats.linksCleaned);
+  let lastSecond = Math.floor(Date.now() / 1000);
+  const timer = setInterval(() => { const second = Math.floor(Date.now() / 1000); if (second !== lastSecond) { lastSecond = second; tick(); } }, 250);
+  const syncStats = () => { container.querySelector('#nt-blocked').textContent = (state.stats.trackers + state.stats.ads).toLocaleString(); };
+  syncStats(); const off = bus.on('stats', syncStats);
+  const form = container.querySelector('#nt-search');
+  const searchInput = container.querySelector('#nt-input');
+  let searchTimer = null;
+  searchInput.addEventListener('focus', () => form.classList.add('is-focused'));
+  searchInput.addEventListener('blur', () => form.classList.remove('is-focused'));
+  searchInput.addEventListener('input', () => { form.classList.toggle('has-value', Boolean(searchInput.value.trim())); form.classList.remove('is-empty'); });
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    const q = searchInput.value.trim();
+    if (!q) { form.classList.remove('is-empty'); void form.offsetWidth; form.classList.add('is-empty'); searchInput.focus(); return; }
+    if (form.classList.contains('is-searching')) return;
+    form.classList.add('is-searching'); form.setAttribute('aria-busy', 'true');
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    searchTimer = setTimeout(() => ctx.navigate(q, { kind: 'auto' }), reduced ? 0 : 220);
   };
-  syncStats();
-
-  const input = container.querySelector('#nt-input');
-  const go = () => {
-    const v = input.value.trim();
-    if (v) ctx.navigate(v, { kind: 'auto' });
-  };
-  input?.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
-  container.querySelector('#nt-go')?.addEventListener('click', go);
-  container.querySelectorAll('[data-url]').forEach((el) => {
-    el.addEventListener('click', () => ctx.navigate(el.dataset.url, { kind: 'url' }));
-  });
-
-  return () => clearInterval(timer);
-}
-
-function starBg() {
-  let s = '<div class="starfield">';
-  for (let i = 0; i < 18; i++) {
-    s += `<i style="left:${Math.random() * 100}%;top:${Math.random() * 100}%;animation-delay:${(Math.random() * 5).toFixed(1)}s"></i>`;
-  }
-  return s + '</div>';
+  container.querySelector('#nt-customize').onclick = () => ctx.navigate('vespera://settings#appearance');
+  container.querySelector('#nt-privacy').onclick = () => ctx.navigate('vespera://privacy');
+  container.querySelectorAll('[data-url]').forEach((el) => el.onclick = () => ctx.navigate(el.dataset.url));
+  return () => { clearInterval(timer); clearTimeout(searchTimer); off(); };
 }
