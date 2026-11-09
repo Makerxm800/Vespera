@@ -56,7 +56,14 @@ function createWindow({ privateMode = false } = {}) {
   win.on('unmaximize', () => win.webContents.send('window:maximized', false));
   win.on('enter-full-screen', () => { win.webContents.send('window:maximized', true); win.webContents.send('browser:fullscreen', true); });
   win.on('leave-full-screen', () => { win.webContents.send('window:maximized', win.isMaximized()); win.webContents.send('browser:fullscreen', false); });
-  win.on('closed', () => { clearTimeout(fallback); windows.delete(win); if (mainWindow === win) mainWindow = [...windows].find((w) => !w.__vesperaPrivate) || null; });
+  win.on('closed', () => {
+    clearTimeout(fallback); windows.delete(win);
+    if (mainWindow === win) mainWindow = [...windows].find((w) => !w.__vesperaPrivate) || null;
+    if (privateMode && ![...windows].some((other) => other.__vesperaPrivate && !other.isDestroyed())) {
+      downloadManager?.clear(true);
+      Promise.all([privateSession?.clearStorageData(), privateSession?.clearCache()]).catch((err) => log.warn('Could not fully clear the private session', err));
+    }
+  });
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url).catch((err) => log.error('Open external failed', err)); return { action: 'deny' }; });
   log.info(`${privateMode ? 'Private' : 'Normal'} window created`);
   return win;
