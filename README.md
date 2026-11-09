@@ -1,5 +1,7 @@
 # Vespera Browser 🚀
 
+Im Very sorry i dont like to use AI on my serious projects so i try to vibe code it to test if its futur use and etc meta stuff :P
+
 > **A next-gen, community-first browser engineered for absolute privacy and superior performance.**
 > Real Chromium core · sleek Twilight UI · zero telemetry · accounts + sync · community-voted roadmap.
 
