@@ -7,7 +7,7 @@ let nextId = 1;
 export function createTabModel(url = 'vespera://newtab', opts = {}) {
   return {
     id: 'tab' + nextId++, url, title: opts.title || 'New Tab', favicon: null,
-    loading: false, pinned: Boolean(opts.pinned), view: null, pageCleanup: null,
+    loading: false, pinned: Boolean(opts.pinned), groupId: opts.groupId || null, groupName: opts.groupName || '', groupColor: opts.groupColor || '', view: null, pageCleanup: null,
     disposeView: null, loadTimer: null, error: null, zoom: 1,
     entries: [{ url, title: opts.title || 'New Tab' }], entryIndex: 0,
     shields: { blocked: 0, ads: 0, trackers: 0, cleaned: 0 },
@@ -20,6 +20,7 @@ export class TabManager {
     this.tabs = [];
     this.activeId = null;
     this.closedStack = [];
+    this.groupCounter = 0;
     this.onActiveChange = onActiveChange || (() => {});
     this.onClose = onClose || (() => {});
     this.onMount = onMount || (() => {});
@@ -56,7 +57,15 @@ export class TabManager {
         e.preventDefault();
         const row = e.target.closest('[data-id]');
         row?.classList.remove('drag-over');
-        if (row) this.move(e.dataTransfer.getData('text/tab-id'), row.dataset.id);
+        if (!row) return;
+        const fromId = e.dataTransfer.getData('text/tab-id');
+        const rect = row.getBoundingClientRect();
+        const vertical = el === this.vlist;
+        const start = vertical ? rect.top : rect.left;
+        const extent = vertical ? rect.height : rect.width;
+        const ratio = extent ? ((vertical ? e.clientY : e.clientX) - start) / extent : 0;
+        if (fromId !== row.dataset.id && ratio > .32 && ratio < .68) this.groupWith(fromId, row.dataset.id);
+        else this.move(fromId, row.dataset.id);
       });
       el?.addEventListener('contextmenu', (e) => {
         const row = e.target.closest('[data-id]');
@@ -71,11 +80,11 @@ export class TabManager {
     const row = e.target.closest('[data-id]');
     if (row) this.activate(row.dataset.id);
   }
-  add(url = 'vespera://newtab', { activate = true, title, pinned = false } = {}) {
+  add(url = 'vespera://newtab', { activate = true, title, pinned = false, groupId = null, groupName = '', groupColor = '' } = {}) {
     url = safeTabUrl(url);
     if (!url) throw new Error('This address cannot be opened in a tab.');
     if (this.tabs.length >= 60) { this.close(this.tabs.find((t) => !t.pinned && t.id !== this.activeId)?.id); }
-    const tab = createTabModel(url, { title, pinned });
+    const tab = createTabModel(url, { title, pinned, groupId, groupName, groupColor });
     this.tabs.push(tab);
     this.onMount(tab);
     this.render();
@@ -106,6 +115,32 @@ export class TabManager {
   closeOthers(id) { for (const t of [...this.tabs]) if (t.id !== id && !t.pinned) this.close(t.id); this.activate(id); }
   duplicate(id) { const t = this.tabs.find((t) => t.id === id); if (t) this.add(t.url, { title: t.title }); }
   togglePin(id) { const t = this.tabs.find((t) => t.id === id); if (t) { t.pinned = !t.pinned; this.render(); this.onChange(); } }
+  createGroup(id, name = '') {
+    const tab = this.tabs.find((t) => t.id === id);
+    if (!tab) return null;
+    const number = ++this.groupCounter;
+    const groupId = 'group-' + Date.now().toString(36) + '-' + number;
+    const colors = ['#8b7cf6', '#42b6a8', '#e6a23c', '#e879a8', '#60a5fa', '#8cbd64'];
+    tab.groupId = groupId; tab.groupName = String(name || 'Group ' + number).trim().slice(0, 24) || 'Group ' + number;
+    tab.groupColor = colors[(number - 1) % colors.length];
+    this.render(); this.onChange();
+    return groupId;
+  }
+  groupWith(fromId, toId) {
+    const from = this.tabs.find((t) => t.id === fromId), to = this.tabs.find((t) => t.id === toId);
+    if (!from || !to || from === to) return;
+    let groupId = to.groupId || from.groupId;
+    if (!groupId) groupId = this.createGroup(toId);
+    const reference = this.tabs.find((t) => t.groupId === groupId);
+    for (const tab of [from, to]) { tab.groupId = groupId; tab.groupName = reference?.groupName || 'Group'; tab.groupColor = reference?.groupColor || '#8b7cf6'; }
+    this.move(fromId, toId); this.render(); this.onChange();
+  }
+  ungroup(id) {
+    const tab = this.tabs.find((t) => t.id === id);
+    if (!tab?.groupId) return;
+    delete tab.groupId; tab.groupName = ''; tab.groupColor = '';
+    this.render(); this.onChange();
+  }
   activate(id) {
     if (!this.tabs.some((t) => t.id === id)) return;
     this.activeId = id;
@@ -146,8 +181,11 @@ export class TabManager {
   }
   tabHtml(tab, vertical = false) {
     const cls = vertical ? 'vtab' : 'tab';
-    return `<div class="${cls} ${tab.id === this.activeId ? 'active' : ''} ${tab.pinned ? 'pinned' : ''}" data-id="${tab.id}" draggable="true" role="tab" tabindex="${tab.id === this.activeId ? 0 : -1}" aria-selected="${tab.id === this.activeId}" title="${escapeHtml(tab.title)}">
+    const grouped = Boolean(tab.groupId);
+    const color = /^#[0-9a-f]{6}$/i.test(tab.groupColor) ? tab.groupColor : '#8b7cf6';
+    return `<div class="${cls} ${tab.id === this.activeId ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${grouped ? 'grouped' : ''}" data-id="${tab.id}" data-group-id="${escapeHtml(tab.groupId || '')}" draggable="true" role="tab" tabindex="${tab.id === this.activeId ? 0 : -1}" aria-selected="${tab.id === this.activeId}" title="${escapeHtml(tab.title)}">
       <div class="favicon">${this.faviconHtml(tab)}</div>
+      ${grouped ? `<span class="tab-group-label" style="--tab-group-color:${color}">${escapeHtml(tab.groupName || 'Group')}</span>` : ''}
       <div class="title">${escapeHtml(tab.title)}</div>
       ${tab.pinned ? '<span class="pin-marker" aria-label="Pinned">•</span>' : ''}
       <button class="close" data-close="${tab.id}" title="Close tab" aria-label="Close ${escapeHtml(tab.title)}">${icon('x')}</button>
@@ -190,6 +228,13 @@ export class TabManager {
       const active = tab.id === this.activeId;
       row.classList.toggle('active', active);
       row.classList.toggle('pinned', tab.pinned);
+      row.classList.toggle('grouped', Boolean(tab.groupId));
+      row.dataset.groupId = tab.groupId || '';
+      const groupLabel = row.querySelector('.tab-group-label');
+      if (tab.groupId && !groupLabel) { const marker = document.createElement('span'); marker.className = 'tab-group-label'; marker.textContent = tab.groupName || 'Group'; row.querySelector('.favicon')?.after(marker); }
+      else if (!tab.groupId && groupLabel) groupLabel.remove();
+      else if (groupLabel) groupLabel.textContent = tab.groupName || 'Group';
+      row.style.setProperty('--tab-group-color', /^#[0-9a-f]{6}$/i.test(tab.groupColor) ? tab.groupColor : '#8b7cf6');
       row.tabIndex = active ? 0 : -1;
       row.setAttribute('aria-selected', String(active));
       row.title = tab.title;
