@@ -38,10 +38,10 @@ win:
   artifactName: Vespera-${version}-win-${arch}.${ext}
 
 nsis:
-  # Classic install wizard (Welcome → Install → Finish) with a
-  # "Run Vespera" checkbox on the Finish page — like every real installer.
+  # Classic install wizard with a "Run Vespera" checkbox on the Finish page.
   oneClick: false
   perMachine: false
+  allowElevation: true
   allowToChangeInstallationDirectory: true
   runAfterFinish: true
   createDesktopShortcut: true
@@ -51,9 +51,8 @@ nsis:
   installerIcon: build/icon.ico
   uninstallerIcon: build/icon.ico
   installerHeaderIcon: build/icon.ico
-  # A clean uninstall: removes the app, its registry entries AND all local
-  # Vespera data (accounts, history, settings) — nothing left behind.
-  deleteAppDataOnUninstall: true
+  # Preserve local Vespera data (accounts, history, settings) when uninstalling.
+  deleteAppDataOnUninstall: false
   artifactName: Vespera-Setup-${version}.${ext}
 
 portable:
@@ -82,7 +81,8 @@ linux:
   maintainer: Vespera Community <vespera@users.noreply.github.com>
   vendor: Vespera Community
   synopsis: A private, community-first Chromium browser
-  description: Vespera is a next-gen browser engineered for absolute privacy —
+  description: >-
+    Vespera is a next-gen browser engineered for absolute privacy —
     zero telemetry, built-in tracker and ad blocking, and a community-voted roadmap.
   artifactName: Vespera-${version}-${os}-${arch}.${ext}
   syncDesktopName: true
