@@ -607,6 +607,14 @@ function boot() {
       if (actions[action]) actions[action]();
     });
     window.vespera.on('browser:fullscreen', (active) => document.body.classList.toggle('browser-fullscreen', Boolean(active)));
+    window.vespera.on('browser:zoom-changed', (detail) => {
+      if (!detail || !Number.isFinite(detail.factor)) return;
+      const tab = tabs.tabs.find((item) => platform.inner(item.view)?.getWebContentsId?.() === detail.webContentsId);
+      if (!tab) return;
+      tab.zoom = Math.max(.5, Math.min(2, detail.factor));
+      if (tab.id === tabs.activeId) updateChromeFor(tab);
+      tabs.onChange();
+    });
     window.vespera.on('menu:action', (action) => {
       const actions = { newtab: () => tabs.add('vespera://newtab'), reopen: () => tabs.reopenClosed(), closetab: () => tabs.close(tabs.activeId), private: () => window.vespera.window.incognito(), reload: () => reload(), find: openFind, 'zoom-in': () => setZoom(.1), 'zoom-out': () => setZoom(-.1), 'zoom-reset': () => setZoom(0, true), back: () => goBack(), forward: () => goForward(), home: () => navigate(state.settings.homepage), palette: () => openPalette({ actions: paletteActions() }) };
       if (actions[action]) actions[action]();
