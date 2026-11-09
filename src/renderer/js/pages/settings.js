@@ -5,6 +5,7 @@ import { SEARCH_ENGINES, safeTabUrl } from '../../../shared/privacy-utils.mjs';
 import { escapeHtml } from '../toasts.js';
 import { WALLPAPERS, saveWallpaper, applyWallpaper } from '../wallpaper.js';
 import { confirmAction } from '../dialog.js';
+import { downloadText } from '../downloads.js';
 
 export function renderSettings(container, ctx) {
   const s = state.settings;
@@ -48,7 +49,8 @@ export function renderSettings(container, ctx) {
       <div class="setting-row"><div><div class="s-label">Download folder</div><div class="s-desc" id="download-folder-label">${escapeHtml(s.downloadPath || 'System Downloads folder')}</div></div><button class="btn" id="choose-download-folder" ${!window.vespera ? 'disabled title="Available in the desktop app"' : ''}>Choose folder</button></div>
       <div class="setting-row"><div><div class="s-label">Downloaded files</div><div class="s-desc">${window.vespera ? 'See progress, open files, or reveal them in your file manager.' : 'Files are saved by the browser running this preview.'}</div></div><button class="btn" id="settings-downloads">Open downloads</button></div>
     </section>
-    <section class="section" id="account"><h2>${icon('user')} Account & sync</h2><div class="setting-row"><div><div class="s-label">${state.user ? escapeHtml(state.user.displayName) : 'Not signed in'}</div><div class="s-desc">Sync settings, bookmarks and history with your Vespera service.</div></div><button class="btn btn-primary" id="btn-account">${state.user ? 'Manage account' : 'Sign in'}</button></div></section>
+    <section class="section" id="account"><h2>${icon('user')} Account & sync</h2><div class="setting-row"><div><div class="s-label">${state.user ? escapeHtml(state.user.displayName) : 'Not signed in'}</div><div class="s-desc">Sync settings, bookmarks and history with your Vespera service.</div></div><button class="btn btn-primary" id="btn-account">${state.user ? 'Manage account' : 'Sign in'}</button></div>
+      <div class="setting-row"><div><div class="s-label">Download a local backup</div><div class="s-desc">Export settings, bookmarks and browsing history as a JSON file. Passwords, session tokens and sign-in credentials are never included.</div></div><button class="btn" id="download-local-backup" ${state.private ? 'disabled title="Unavailable in private windows"' : ''}>${icon('download')} Save backup</button></div></section>
     <section class="section" id="about"><h2>${icon('info')} About Vespera</h2><div class="card"><div class="row"><div class="about-mark">${icon('sparkle')}</div><div class="grow"><b>Vespera Browser</b><div class="small muted">Version ${escapeHtml(ctx.version() || '0.1.3')} · ${window.vespera ? 'Chromium desktop' : 'Web preview'} · MIT licensed</div></div><div class="s-control"><button class="btn btn-sm" id="settings-updates">Release notes</button><button class="btn btn-sm" id="settings-welcome">Welcome & help</button></div></div><p class="small muted" style="margin-top:16px">No analytics. No telemetry. Settings are local-first; wallpaper images are never synced.</p></div></section>
   </div>`;
   container.querySelectorAll('[data-section]').forEach((a) => a.onclick = (e) => { e.preventDefault(); container.querySelector('#' + a.dataset.section)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
@@ -90,6 +92,12 @@ export function renderSettings(container, ctx) {
   container.querySelector('#btn-clear-allowlist').onclick = () => { state.set('allowlist', {}); ctx.rerenderPage(); ctx.toast('Site exceptions cleared. Reload open sites to apply.', 'ok'); };
   container.querySelector('#btn-clear-history').onclick = async () => { if (await confirmAction({ title: 'Clear browsing history?', message: 'This removes saved history from this device and your connected sync store. Open tabs stay open.', confirmText: 'Clear history', danger: true })) { state.clearHistory(); ctx.toast('Browsing history cleared', 'ok'); } };
   container.querySelector('#btn-account').onclick = () => ctx.navigate('vespera://account');
+  container.querySelector('#download-local-backup').onclick = () => {
+    if (state.private) return ctx.toast('Local backups are disabled in private windows.', 'info');
+    const backup = { format: 'vespera-local-backup', schemaVersion: 1, exportedAt: new Date().toISOString(), settings: state.settings, bookmarks: state.bookmarks, history: state.history };
+    const date = new Date().toISOString().slice(0, 10);
+    downloadText(JSON.stringify(backup, null, 2), `Vespera-Backup-${date}.json`, 'application/json;charset=utf-8');
+  };
   container.querySelector('#settings-extensions').onclick = () => ctx.navigate('vespera://extensions');
   container.querySelector('#settings-downloads').onclick = () => ctx.navigate('vespera://downloads');
   container.querySelector('#settings-welcome').onclick = () => ctx.navigate('vespera://welcome');

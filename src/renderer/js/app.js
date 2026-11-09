@@ -10,10 +10,11 @@ import { icon } from './icons.js';
 import { classifyInput, buildSearchUrl, isInternal, internalPageKey, INTERNAL_PAGES, cleanTrackingParams, safeTabUrl, SEARCH_ENGINES } from '../../shared/privacy-utils.mjs';
 import { closePopover, openPopover } from './popover.js';
 import { confirmAction } from './dialog.js';
-import { initDownloads, downloadUrl } from './downloads.js';
+import { initDownloads, downloadUrl, downloads, downloadAction, formatBytes } from './downloads.js';
 import * as api from './api.js';
 import { renderWelcome } from './pages/welcome.js';
 import { renderNewtab } from './pages/newtab.js';
+import { renderPrivate } from './pages/private.js';
 import { renderSettings } from './pages/settings.js';
 import { renderPrivacy } from './pages/privacy.js';
 import { renderCommunity } from './pages/community.js';
@@ -25,7 +26,7 @@ import { renderReader, renderSearch, renderNotFound } from './pages/tools.js';
 import { renderUpdates } from './pages/updates.js';
 
 const PAGE_RENDERERS = {
-  'vespera://newtab': renderNewtab, 'vespera://welcome': renderWelcome,
+  'vespera://newtab': renderNewtab, 'vespera://private': renderPrivate, 'vespera://welcome': renderWelcome,
   'vespera://settings': renderSettings, 'vespera://privacy': renderPrivacy,
   'vespera://community': renderCommunity, 'vespera://account': renderAccount,
   'vespera://history': renderHistory, 'vespera://bookmarks': renderBookmarks,
@@ -279,6 +280,58 @@ async function copyText(text) {
   try { await navigator.clipboard.writeText(text); toast('Copied to clipboard', 'ok', 1600); }
   catch { toast('Clipboard access was blocked by your browser.', 'error'); }
 }
+
+function showSiteInfoMenu(anchor, tab = tabs.active) {
+  if (!tab) return;
+  let origin = '', secure = false, host = 'Vespera internal page';
+  try {
+    const url = new URL(tab.url);
+    origin = url.origin; host = url.hostname; secure = url.protocol === 'https:';
+  } catch { /* Internal page. */ }
+  const protections = state.settings.shields;
+  const connection = secure ? 'Connection is secure' : origin ? 'Connection is not secure' : 'Vespera page';
+  const pop = openPopover(anchor, `
+    <div class="site-info-panel-head">
+      <div class="site-info-mark">${icon(secure ? 'lock' : 'shield')}</div>
+      <div><b>${connection}</b><div class="small muted">${escapeHtml(host)}</div></div>
+    </div>
+    <div class="site-info-panel-body">
+      <div class="site-info-row"><span>${icon('shield')} Fingerprinting protection</span><b>${protections.antiFingerprint !== false ? 'On' : 'Off'}</b></div>
+      <div class="site-info-row"><span>${icon('lock')} Cookies &amp; site data</span><b>${origin ? 'Stored per site' : 'Not applicable'}</b></div>
+      <div class="site-info-note">Site data stays in this browser profile. Private-window cookies, site data and download history are cleared after the last private window closes. Vespera does not expose saved passwords or authentication tokens here.</div>
+      <button class="btn btn-sm" data-site-action="shields">${icon('shield')} Vespera Shields</button>
+      <button class="btn btn-sm btn-ghost" data-site-action="privacy">${icon('gear')} Site privacy settings</button>
+    </div>`, { className: 'popover site-info-popover', label: 'Connection and site information' });
+  if (!pop) return;
+  pop.el.addEventListener('click', (event) => {
+    const action = event.target.closest('[data-site-action]')?.dataset.siteAction;
+    if (!action) return;
+    pop.close();
+    if (action === 'shields') toggleShields($('btn-shields'), tab, { onNavigate: navigate, onReload: () => reload(tab) });
+    if (action === 'privacy') navigate('vespera://settings#privacy', { tab });
+  });
+}
+function showRecentDownloadsMenu(anchor) {
+  const recent = downloads.items.slice(0, 5);
+  const rows = recent.length ? recent.map((entry) => {
+    const status = { completed: 'Downloaded', browser: 'Saved by browser', progressing: 'Downloading…', paused: 'Paused', interrupted: 'Interrupted', cancelled: 'Cancelled' }[entry.status] || entry.status;
+    return `<button class="recent-download-row" data-download-id="${escapeHtml(entry.id)}"><span class="recent-download-icon">${icon(entry.status === 'completed' ? 'check' : 'download')}</span><span class="recent-download-copy"><b>${escapeHtml(entry.name)}</b><small>${escapeHtml(status)} · ${formatBytes(entry.received || entry.size)}</small></span></button>`;
+  }).join('') : '<div class="popover-copy">Your recent downloads will appear here.</div>';
+  const pop = openPopover(anchor, `<div class="menu-label">Recent downloads</div>${rows}<div class="menu-sep"></div><button class="menu-item" data-open-downloads>${icon('history')} Show all downloads</button>`, { className: 'menu recent-downloads-menu', label: 'Recent downloads' });
+  if (!pop) return;
+  pop.el.addEventListener('click', async (event) => {
+    const id = event.target.closest('[data-download-id]')?.dataset.downloadId;
+    if (id) {
+      const entry = downloads.items.find((item) => item.id === id);
+      pop.close();
+      if (entry?.status === 'completed' && window.vespera) await downloadAction('open', id);
+      else navigate('vespera://downloads');
+      return;
+    }
+    if (event.target.closest('[data-open-downloads]')) { pop.close(); navigate('vespera://downloads'); }
+  });
+}
+
 function showContextMenu(tab, x, y, info = {}) {
   if (!tab) return;
   const item = (act, ic, label, disabled = false) => `<button class="menu-item" data-ctx="${act}" ${disabled ? 'disabled' : ''}>${icon(ic)} ${label}</button>`;
@@ -456,13 +509,13 @@ function wireKeyboard() {
     else if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); goForward(); }
     else if (e.altKey && key === 'home') { e.preventDefault(); navigate(state.settings.homepage); }
     else if (e.key === 'F5') { e.preventDefault(); reload(); }
-    else if (e.key === 'F11') { e.preventDefault(); $('wc-max').click(); }
+    else if (e.key === 'F11') { e.preventDefault(); platform.isElectron ? window.vespera.window.toggleFullscreen() : $('wc-max').click(); }
     else if (!field && e.key === '/') { e.preventDefault(); omnibox?.focus(); }
   });
 }
 function persistSession() {
   if (state.private || !tabs) return;
-  try { localStorage.setItem('vespera.session', JSON.stringify({ tabs: tabs.tabs.map((t) => ({ url: t.url, title: t.title, pinned: t.pinned })), activeIndex: tabs.tabs.findIndex((t) => t.id === tabs.activeId) })); } catch { /* Storage errors are reported by state saves. */ }
+  try { localStorage.setItem('vespera.session', JSON.stringify({ tabs: tabs.tabs.map((t) => ({ url: t.url, title: t.title, pinned: t.pinned, groupId: t.groupId || null, groupName: t.groupName || '', groupColor: t.groupColor || '' })), activeIndex: tabs.tabs.findIndex((t) => t.id === tabs.activeId) })); } catch { /* Storage errors are reported by state saves. */ }
 }
 function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(persistSession, 150); }
 
@@ -475,9 +528,12 @@ function boot() {
     onActiveChange: updateChromeFor, onChange: scheduleSave,
     onContextMenu: (id, x, y) => {
       const tab = tabs.tabs.find((t) => t.id === id);
-      const anchor = document.querySelector(`#tabstrip [data-id="${id}"]`) || $('btn-menu');
-      const pop = openPopover(anchor, `<button class="menu-item" data-action="pin">${icon('star')} ${tab.pinned ? 'Unpin' : 'Pin'} tab</button><button class="menu-item" data-action="duplicate">${icon('plus')} Duplicate tab</button><button class="menu-item" data-action="others">${icon('x')} Close other tabs</button><button class="menu-item" data-action="close">${icon('x')} Close tab</button>`, { label: 'Tab actions' });
-      pop?.el.addEventListener('click', (e) => { const act = e.target.closest('[data-action]')?.dataset.action; if (!act) return; pop.close(); if (act === 'pin') tabs.togglePin(id); if (act === 'duplicate') tabs.duplicate(id); if (act === 'others') tabs.closeOthers(id); if (act === 'close') tabs.close(id); });
+      const anchor = document.querySelector(`#tabstrip [data-id="${id}"], #vtabs-list [data-id="${id}"]`) || $('btn-menu');
+      const groupAction = tab.groupId ? 'ungroup' : 'group';
+      const groupLabel = tab.groupId ? 'Remove from group' : 'Add to new group';
+      const rename = tab.groupId ? `<div class="menu-sep"></div><div class="menu-label">Group name</div><input class="input tab-group-name-input" data-group-name value="${escapeHtml(tab.groupName || 'Group')}" maxlength="24" aria-label="Tab group name"><button class="menu-item" data-action="rename-group">${icon('check')} Save group name</button>` : '';
+      const pop = openPopover(anchor, `<button class="menu-item" data-action="pin">${icon('star')} ${tab.pinned ? 'Unpin' : 'Pin'} tab</button><button class="menu-item" data-action="duplicate">${icon('plus')} Duplicate tab</button><button class="menu-item" data-action="${groupAction}">${icon('split')} ${groupLabel}</button>${rename}<button class="menu-item" data-action="others">${icon('x')} Close other tabs</button><button class="menu-item" data-action="close">${icon('x')} Close tab</button>`, { label: 'Tab actions' });
+      pop?.el.addEventListener('click', (e) => { const act = e.target.closest('[data-action]')?.dataset.action; if (!act) return; if (act === 'rename-group') { tabs.renameGroup(id, pop.el.querySelector('[data-group-name]')?.value); pop.close(); return; } pop.close(); if (act === 'pin') tabs.togglePin(id); if (act === 'duplicate') tabs.duplicate(id); if (act === 'group') tabs.createGroup(id); if (act === 'ungroup') tabs.ungroup(id); if (act === 'others') tabs.closeOthers(id); if (act === 'close') tabs.close(id); });
     },
   });
   buildRail(); positionTabUI(); renderBookmarksBar();
@@ -492,7 +548,12 @@ function boot() {
   $('btn-palette').onclick = () => openPalette({ actions: paletteActions() });
   $('btn-menu').onclick = (e) => openMenu(e.currentTarget);
   $('btn-shields').onclick = (e) => toggleShields(e.currentTarget, tabs.active, { onNavigate: navigate, onReload: () => reload() });
-  $('site-info').onclick = (e) => toggleShields(e.currentTarget, tabs.active, { onNavigate: navigate, onReload: () => reload() });
+  $('site-info').onclick = (e) => showSiteInfoMenu(e.currentTarget, tabs.active);
+  $('btn-downloads').onclick = (e) => showRecentDownloadsMenu(e.currentTarget);
+  $('content').addEventListener('wheel', (e) => {
+    if (!e.ctrlKey || !tabs.active || e.deltaY === 0) return;
+    e.preventDefault(); setZoom(e.deltaY < 0 ? .1 : -.1);
+  }, { passive: false });
   $('preview-details').onclick = (e) => openPopover(e.currentTarget, `<div class="menu-label">Vespera is running live</div><p class="popover-copy">Tabs, Home, search, settings, extensions, downloads and customization work right here — no setup needed. Some websites restrict embedded pages or are unreachable from this hosted environment; “Open original” visits them directly.</p><p class="popover-copy">Right-click pages, links and images for browser actions. Use the menu to install Vespera as a standalone app when your browser offers it.</p><button class="btn" data-dismiss>Got it</button>`, { className: 'popover info-popover', label: 'About this live browser' });
   $('dismiss-preview').onclick = () => $('preview-banner').classList.add('hidden');
   $('open-original').target = '_blank'; $('open-original').rel = 'noopener noreferrer';
@@ -525,12 +586,12 @@ function boot() {
     try {
       const session = JSON.parse(localStorage.getItem('vespera.session') || 'null');
       if (Array.isArray(session?.tabs) && session.tabs.length) {
-        for (const t of session.tabs.slice(0, 60)) if (safeTabUrl(t.url)) tabs.add(t.url, { title: t.title, pinned: t.pinned, activate: false });
+        for (const t of session.tabs.slice(0, 60)) if (safeTabUrl(t.url)) tabs.add(t.url, { title: t.title, pinned: t.pinned, groupId: t.groupId, groupName: t.groupName, groupColor: t.groupColor, activate: false });
         if (tabs.tabs.length) { tabs.activate(tabs.tabs[Math.max(0, Math.min(session.activeIndex || 0, tabs.tabs.length - 1))].id); restored = true; }
       }
     } catch { diagnostic('Could not restore the previous session.'); }
   }
-  if (!restored) tabs.add('vespera://newtab');
+  if (!restored) tabs.add(state.private ? 'vespera://private' : 'vespera://newtab');
   initDownloads().catch((err) => diagnostic(err.message));
   if (platform.isElectron) {
     window.vespera.on('browser:new-tab', (url) => { if (safeTabUrl(url)) tabs.add(url); });
@@ -541,6 +602,21 @@ function boot() {
       else if (['tracker', 'ad'].includes(event.kind)) { tab.shields[event.kind === 'tracker' ? 'trackers' : 'ads']++; tab.shields.blocked++; state.recordBlock(event.kind, event.host); }
       else if (event.kind === 'link') { tab.shields.cleaned += event.count || 1; state.recordBlock('link', event.host); }
       tabs.update(tab);
+    });
+    window.vespera.on('browser:shortcut', (action) => {
+      const actions = { newtab: () => tabs.add('vespera://newtab'), reopen: () => tabs.reopenClosed(), closetab: () => tabs.close(tabs.activeId), private: () => window.vespera.window.incognito(), reload: () => reload(), find: openFind, 'focus-address': () => omnibox?.focus(), bookmark: bookmarkActive, 'zoom-in': () => setZoom(.1), 'zoom-out': () => setZoom(-.1), 'zoom-reset': () => setZoom(0, true), back: () => goBack(), forward: () => goForward(), 'tab-next': () => tabs.next(), 'tab-prev': () => tabs.prev(), downloads: () => navigate('vespera://downloads'), palette: () => openPalette({ actions: paletteActions() }), fullscreen: () => window.vespera.window.toggleFullscreen() };
+      if (actions[action]) actions[action]();
+    });
+    window.vespera.on('browser:fullscreen', (active) => document.body.classList.toggle('browser-fullscreen', Boolean(active)));
+    window.vespera.on('browser:new-tab-background', (url) => { if (safeTabUrl(url)) tabs.add(url, { activate: false }); });
+    window.vespera.on('browser:search-selection', (query) => { if (String(query || '').trim()) tabs.add(buildSearchUrl(String(query).trim(), state.settings.searchEngine)); });
+    window.vespera.on('browser:zoom-changed', (detail) => {
+      if (!detail || !Number.isFinite(detail.factor)) return;
+      const tab = tabs.tabs.find((item) => platform.inner(item.view)?.getWebContentsId?.() === detail.webContentsId);
+      if (!tab) return;
+      tab.zoom = Math.max(.5, Math.min(2, detail.factor));
+      if (tab.id === tabs.activeId) updateChromeFor(tab);
+      tabs.onChange();
     });
     window.vespera.on('menu:action', (action) => {
       const actions = { newtab: () => tabs.add('vespera://newtab'), reopen: () => tabs.reopenClosed(), closetab: () => tabs.close(tabs.activeId), private: () => window.vespera.window.incognito(), reload: () => reload(), find: openFind, 'zoom-in': () => setZoom(.1), 'zoom-out': () => setZoom(-.1), 'zoom-reset': () => setZoom(0, true), back: () => goBack(), forward: () => goForward(), home: () => navigate(state.settings.homepage), palette: () => openPalette({ actions: paletteActions() }) };

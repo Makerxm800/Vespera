@@ -54,9 +54,16 @@ function createWindow({ privateMode = false } = {}) {
   win.webContents.on('did-fail-load', (_e, code, description) => { if (code !== -3) log.error(`Browser UI load failed: ${description} (${code})`); });
   win.on('maximize', () => win.webContents.send('window:maximized', true));
   win.on('unmaximize', () => win.webContents.send('window:maximized', false));
-  win.on('enter-full-screen', () => win.webContents.send('window:maximized', true));
-  win.on('leave-full-screen', () => win.webContents.send('window:maximized', win.isMaximized()));
-  win.on('closed', () => { clearTimeout(fallback); windows.delete(win); if (mainWindow === win) mainWindow = [...windows].find((w) => !w.__vesperaPrivate) || null; });
+  win.on('enter-full-screen', () => { win.webContents.send('window:maximized', true); win.webContents.send('browser:fullscreen', true); });
+  win.on('leave-full-screen', () => { win.webContents.send('window:maximized', win.isMaximized()); win.webContents.send('browser:fullscreen', false); });
+  win.on('closed', () => {
+    clearTimeout(fallback); windows.delete(win);
+    if (mainWindow === win) mainWindow = [...windows].find((w) => !w.__vesperaPrivate) || null;
+    if (privateMode && ![...windows].some((other) => other.__vesperaPrivate && !other.isDestroyed())) {
+      downloadManager?.clear(true);
+      Promise.all([privateSession?.clearStorageData(), privateSession?.clearCache()]).catch((err) => log.warn('Could not fully clear the private session', err));
+    }
+  });
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url).catch((err) => log.error('Open external failed', err)); return { action: 'deny' }; });
   log.info(`${privateMode ? 'Private' : 'Normal'} window created`);
   return win;
@@ -67,6 +74,7 @@ function registerIpc() {
   on('window:minimize', (win) => win.minimize());
   on('window:maximize', (win) => win.isMaximized() ? win.unmaximize() : win.maximize());
   on('window:close', (win) => win.close());
+  on('window:fullscreen-toggle', (win) => win.setFullScreen(!win.isFullScreen()));
   on('window:incognito', () => createWindow({ privateMode: true }));
   handle('app:version', () => app.getVersion());
   handle('prefs:save', (event, value) => {
@@ -151,20 +159,66 @@ function wireWebContents() {
         if (/^https?:\/\//i.test(url)) contents.hostWebContents?.send('browser:new-tab', url);
         return { action: 'deny' };
       });
+      contents.on('before-input-event', (event, input) => {
+        if (input.type !== 'keyDown') return;
+        const key = String(input.key || '').toLowerCase();
+        const mod = Boolean(input.control || input.meta), shift = Boolean(input.shift), alt = Boolean(input.alt);
+        let action = null;
+        if (mod && shift && key === 't') action = 'reopen';
+        else if (mod && shift && key === 'n') action = 'private';
+        else if (mod && key === 't') action = 'newtab';
+        else if (mod && key === 'w') action = 'closetab';
+        else if (mod && key === 'r') action = 'reload';
+        else if (mod && key === 'l') action = 'focus-address';
+        else if (mod && key === 'f') action = 'find';
+        else if (mod && key === 'j') action = 'downloads';
+        else if (mod && key === 'd') action = 'bookmark';
+        else if (mod && key === 'k') action = 'palette';
+        else if (mod && (key === '+' || key === '=' || input.code === 'NumpadAdd')) action = 'zoom-in';
+        else if (mod && (key === '-' || input.code === 'NumpadSubtract')) action = 'zoom-out';
+        else if (mod && key === '0') action = 'zoom-reset';
+        else if (mod && key === 'tab') action = shift ? 'tab-prev' : 'tab-next';
+        else if (alt && key === 'arrowleft') action = 'back';
+        else if (alt && key === 'arrowright') action = 'forward';
+        else if (key === 'f5') action = 'reload';
+        else if (key === 'f11') action = 'fullscreen';
+        if (!action) return; // Site-specific keys, including YouTube's F, stay with the page.
+        event.preventDefault();
+        contents.hostWebContents?.send('browser:shortcut', action);
+      });
+      contents.on('zoom-changed', () => {
+        contents.hostWebContents?.send('browser:zoom-changed', { webContentsId: contents.id, factor: contents.getZoomFactor() });
+      });
+      contents.on('enter-html-full-screen', () => {
+        const win = BrowserWindow.fromWebContents(contents.hostWebContents);
+        if (win && !win.isDestroyed() && !win.isFullScreen()) win.setFullScreen(true);
+        contents.hostWebContents?.send('browser:fullscreen', true);
+      });
+      contents.on('leave-html-full-screen', () => {
+        const win = BrowserWindow.fromWebContents(contents.hostWebContents);
+        if (win && !win.isDestroyed() && win.isFullScreen()) win.setFullScreen(false);
+        contents.hostWebContents?.send('browser:fullscreen', false);
+      });
       contents.on('context-menu', (_event, params) => {
         const win = BrowserWindow.fromWebContents(contents.hostWebContents || contents);
         if (!win) return;
         const template = [];
         if (params.linkURL && /^https?:/.test(params.linkURL)) template.push(
-          { label: 'Open link in new tab', click: () => contents.hostWebContents.send('browser:new-tab', params.linkURL) },
+          { label: 'Open link in new tab', click: () => contents.hostWebContents?.send('browser:new-tab', params.linkURL) },
+          { label: 'Open link in background tab', click: () => contents.hostWebContents?.send('browser:new-tab-background', params.linkURL) },
           { label: 'Copy link address', click: () => require('electron').clipboard.writeText(params.linkURL) },
           { label: 'Save link as…', click: () => contents.downloadURL(params.linkURL) },
           { type: 'separator' },
         );
-        if (params.mediaType === 'image' && params.srcURL) template.push({ label: 'Save image as…', click: () => contents.downloadURL(params.srcURL) });
-        if (params.isEditable) template.push({ role: 'cut' }, { role: 'copy' }, { role: 'paste' });
-        else if (params.selectionText) template.push({ role: 'copy' });
-        template.push({ label: 'Back', enabled: contents.canGoBack(), click: () => contents.goBack() }, { label: 'Reload', click: () => contents.reload() });
+        if (params.mediaType === 'image' && params.srcURL) template.push(
+          { label: 'Open image in new tab', click: () => contents.hostWebContents?.send('browser:new-tab', params.srcURL) },
+          { label: 'Copy image address', click: () => require('electron').clipboard.writeText(params.srcURL) },
+          { label: 'Save image as…', click: () => contents.downloadURL(params.srcURL) },
+          { type: 'separator' },
+        );
+        if (params.isEditable) template.push({ role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' });
+        else if (params.selectionText) template.push({ role: 'copy' }, { type: 'separator' }, { label: 'Search with Startpage', click: () => contents.hostWebContents?.send('browser:search-selection', params.selectionText) });
+        template.push({ label: 'Back', enabled: contents.canGoBack(), click: () => contents.goBack() }, { label: 'Forward', enabled: contents.canGoForward(), click: () => contents.goForward() }, { label: 'Reload', click: () => contents.reload() }, { type: 'separator' }, { label: 'Copy page address', click: () => require('electron').clipboard.writeText(contents.getURL()) });
         if (!app.isPackaged) template.push({ type: 'separator' }, { label: 'Inspect page', click: () => contents.inspectElement(params.x, params.y) });
         Menu.buildFromTemplate(template).popup({ window: win });
       });

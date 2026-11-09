@@ -4,6 +4,11 @@ import { escapeHtml } from '../toasts.js';
 
 const RELEASES = 'https://github.com/Makerxm800/Vespera-beta/releases';
 const NOTES = [
+  ['Browser shell polish', 'A full-width tab row, drag-to-group tabs with editable names, native link and image context actions, recent downloads, and a clearer connection/site-information panel.'],
+  ['Keyboard and zoom fixes', 'Page-specific keys such as YouTube’s F key stay with the website; browser shortcuts now route from embedded pages, fullscreen requests work, and Ctrl+wheel zoom stays in sync.'],
+  ['Private browsing', 'Private windows start with a clear privacy explainer and do not save browsing history or sync activity. Cookies, site data and download history are cleared after the last private window closes; downloaded files remain on the device.'],
+  ['Local data backup', 'Download a JSON backup of settings, bookmarks and history from Settings. Passwords and session tokens are excluded.'],
+  ['Faster suggestions', 'Address-bar history and bookmark searches use cached lowercase indexes and frame-batched rendering.'],
   ['Smoother tabs', 'Tabs animate when opened, closed, switched and reordered. Close buttons are softer, rounded and keyboard accessible.'],
   ['Privacy Hub', 'A compact hub with live counters, working protection toggles, per-site exceptions and honest privacy notes.'],
   ['Personal accounts', 'Smaller account controls with working email/password registration, sign-in, profile updates, sync and sign-out.'],
@@ -12,7 +17,7 @@ const NOTES = [
 ];
 
 export function renderUpdates(container, ctx) {
-  const version = ctx.version?.() || '0.1.3';
+  const version = ctx.version?.() || '0.1.5';
   container.innerHTML = `
     <div class="page page-narrow updates-page">
       <header class="account-header"><span class="account-mark">${icon('sparkle')}</span><div><span class="eyebrow">RELEASE NOTES</span><h1 class="page-title">What’s new in Vespera</h1></div></header>
@@ -24,7 +29,7 @@ export function renderUpdates(container, ctx) {
       </section>
       <section class="card account-card">
         <div class="account-card-head"><h2>Earlier releases</h2></div>
-        <div class="release-links"><a href="${RELEASES}/tag/v0.1.2" target="_blank" rel="noopener noreferrer">v0.1.2 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.1" target="_blank" rel="noopener noreferrer">v0.1.1 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.0" target="_blank" rel="noopener noreferrer">v0.1.0 ${icon('external')}</a></div>
+        <div class="release-links"><a href="${RELEASES}/tag/v0.1.4" target="_blank" rel="noopener noreferrer">v0.1.4 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.3" target="_blank" rel="noopener noreferrer">v0.1.3 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.2" target="_blank" rel="noopener noreferrer">v0.1.2 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.1" target="_blank" rel="noopener noreferrer">v0.1.1 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.0" target="_blank" rel="noopener noreferrer">v0.1.0 ${icon('external')}</a></div>
       </section>
     </div>`;
 }
