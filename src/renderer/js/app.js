@@ -411,6 +411,28 @@ function paletteActions() {
     { title: 'Clear Browsing History', icon: 'trash', run: async () => { if (await confirmAction({ title: 'Clear browsing history?', message: 'This removes history on this device and from your connected sync store.', confirmText: 'Clear history', danger: true })) { state.clearHistory(); toast('History cleared', 'ok'); } } },
   ];
 }
+async function showExtensionsMenu(anchor) {
+  const pop = openPopover(anchor, '<div class="menu-label">Extensions</div><div class="popover-copy">Loading extensions…</div>', { className: 'menu browser-menu extensions-menu', label: 'Installed extensions' });
+  if (!pop) return;
+  const trigger = $('btn-extensions');
+  trigger?.setAttribute('aria-expanded', 'true');
+  const close = pop.close.bind(pop);
+  pop.close = () => { trigger?.setAttribute('aria-expanded', 'false'); close(); };
+  let items = [];
+  if (platform.isElectron && !state.private) {
+    try { items = await window.vespera.extensions.list() || []; }
+    catch (err) { diagnostic('Could not list extensions: ' + err.message); }
+  }
+  const rows = items.length ? items.map((ext) => '<div class="extension-menu-row"><span class="extension-menu-mark">' + icon('puzzle') + '</span><span class="extension-menu-name">' + escapeHtml(ext.name || 'Unnamed extension') + '<small>v' + escapeHtml(ext.version || '?') + '</small></span><span class="chip chip-ok">Loaded</span></div>').join('') : '<div class="popover-copy">No third-party extensions are loaded yet. Built-in tools are available in the Extensions page.</div>';
+  pop.el.innerHTML = '<div class="menu-label">Extensions <span class="chip">' + items.length + '</span></div>' + rows + '<div class="extension-menu-actions"><button class="btn btn-primary" data-ext-manage>Manage extensions</button><button class="btn" data-ext-load ' + (!platform.isElectron || state.private ? 'disabled' : '') + '>Load unpacked</button></div><p class="small faint">Only load extensions from sources you trust. Some Chrome APIs are not supported by Electron.</p>';
+  pop.el.querySelector('[data-ext-manage]')?.addEventListener('click', () => { pop.close(); navigate('vespera://extensions'); });
+  pop.el.querySelector('[data-ext-load]')?.addEventListener('click', async () => {
+    if (!platform.isElectron || state.private) return;
+    const result = await window.vespera.extensions.install();
+    if (result.ok) { toast('Extension loaded.', 'ok'); pop.close(); showExtensionsMenu(anchor); }
+    else if (!result.canceled) toast(result.message || 'Could not load this extension.', 'error', 6000);
+  });
+}
 function wireKeyboard() {
   document.addEventListener('keydown', (e) => {
     const mod = e.ctrlKey || e.metaKey, key = e.key.toLowerCase();
@@ -465,6 +487,7 @@ function boot() {
   $('btn-reload').onclick = () => tabs.active?.loading ? (platform.stop(tabs.active.view), tabs.update(tabs.active, { loading: false })) : reload();
   $('btn-home').onclick = () => navigate(state.settings.homepage || 'vespera://newtab');
   $('btn-newtab').onclick = $('btn-newtab-vt').onclick = () => tabs.add('vespera://newtab');
+  $('btn-extensions').onclick = (e) => showExtensionsMenu(e.currentTarget);
   $('btn-bookmark').onclick = bookmarkActive;
   $('btn-palette').onclick = () => openPalette({ actions: paletteActions() });
   $('btn-menu').onclick = (e) => openMenu(e.currentTarget);
