@@ -8,7 +8,7 @@ export function renderPrivate(container, ctx) {
         <div class="private-mark">${icon('eyeOff')}</div>
         <span class="eyebrow">VESPERA PRIVATE WINDOW</span>
         <h1>You're browsing privately</h1>
-        <p>Vespera won't save your browsing history, synced activity, or site data after this private window closes.</p>
+        <p>Vespera won't save your browsing history or synced activity. Private cookies and site data are cleared after the last private window closes.</p>
         <button class="btn btn-primary" id="private-new-tab">${icon('plus')} Open a private tab</button>
       </div>
       <div class="private-info-grid">
@@ -16,7 +16,7 @@ export function renderPrivate(container, ctx) {
           <h2>Vespera won't save</h2>
           <ul>
             <li>Browsing history in this private window</li>
-            <li>Cookies and site data after the window closes</li>
+            <li>Cookies and site data after the last private window closes</li>
             <li>Form entries or account sync activity</li>
           </ul>
           <p class="small muted">Files you download are still saved on your device. Extensions are disabled in private windows.</p>
