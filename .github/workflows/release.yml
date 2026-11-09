@@ -1,0 +1,85 @@
+name: Build and publish releases
+
+on:
+  push:
+    tags:
+      - "v*" # Runs when you push a version tag like v1.0.0
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22" # Change this to the Node version your project uses
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # Assumes your build creates a "dist" folder.
+      - name: Package Windows build
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release | Out-Null
+          Compress-Archive -Path dist/* -DestinationPath release/myapp-windows.zip
+
+      - name: Package macOS build
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p release
+          tar -czf release/myapp-macos.tar.gz -C dist .
+
+      - name: Package Ubuntu/Linux build
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p release
+          tar -czf release/myapp-ubuntu.tar.gz -C dist .
+
+      - name: Save build for release job
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.os }}
+          path: release/*
+
+  publish:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all platform builds
+        uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          path: release-files
+          merge-multiple: true
+
+      - name: Create GitHub release and attach files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release-files/* \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
