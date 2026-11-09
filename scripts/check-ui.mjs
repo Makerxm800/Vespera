@@ -213,7 +213,7 @@ try {
     const backupDownload = page.waitForEvent('download');
     await page.locator('#download-local-backup').click();
     const backup = await backupDownload;
-    assert.match(backup.suggestedFilename(), /Vespera-Backup-.*\\.json/);
+    assert.ok(backup.suggestedFilename().startsWith('Vespera-Backup-') && backup.suggestedFilename().endsWith('.json'));
   });
   await step('release notes identify the running build and link to published installers', async () => {
     await menu('updates'); await page.waitForSelector('.updates-page');
