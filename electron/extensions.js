@@ -4,8 +4,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { dialog } = require('electron');
 function installExtensions(session, getPrefs, persistPrefs, getWindow, log) {
-  const list = () => session.getAllExtensions().map((e) => ({ id: e.id, name: e.name, version: e.version, path: e.path }));
+  const list = () => session.getAllExtensions().map((e) => ({ id: e.id, name: e.name, version: e.version, path: e.path, manifestVersion: e.manifest?.manifest_version || null }));
   async function load(folder) {
+    const existing = session.getAllExtensions().find((item) => path.resolve(item.path) === path.resolve(folder));
+    if (existing) return existing;
     const ext = await session.loadExtension(folder, { allowFileAccess: false });
     const prefs = getPrefs();
     prefs.extensionPaths = [...new Set([...(prefs.extensionPaths || []), ext.path])];
@@ -22,11 +24,14 @@ function installExtensions(session, getPrefs, persistPrefs, getWindow, log) {
       if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
       const folder = result.filePaths[0];
       try {
+        if (!fs.statSync(folder).isDirectory()) throw new Error('Choose an extension folder.');
         const manifestPath = path.join(folder, 'manifest.json');
-        if (fs.statSync(manifestPath).size > 1024 * 1024) throw new Error('Extension manifest is too large.');
+        const manifestStat = fs.statSync(manifestPath);
+        if (!manifestStat.isFile() || manifestStat.size > 1024 * 1024) throw new Error('The extension manifest is missing or too large.');
         const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-        if (![2, 3].includes(manifest.manifest_version) || typeof manifest.name !== 'string') throw new Error('A valid Chrome extension manifest.json is required.');
-        const permissions = [...(manifest.permissions || []), ...(manifest.host_permissions || []), ...(manifest.content_scripts || []).flatMap((s) => s.matches || [])].map((p) => typeof p === 'string' ? p : JSON.stringify(p));
+        if (![2, 3].includes(manifest.manifest_version) || typeof manifest.name !== 'string' || !manifest.name.trim()) throw new Error('A valid Chrome extension manifest.json is required.');
+        for (const key of ['permissions', 'host_permissions', 'content_scripts']) if (manifest[key] !== undefined && !Array.isArray(manifest[key])) throw new Error('The extension manifest has an invalid ' + key + ' field.');
+        const permissions = [...(manifest.permissions || []), ...(manifest.host_permissions || []), ...(manifest.content_scripts || []).flatMap((s) => Array.isArray(s.matches) ? s.matches : [])].filter((p) => typeof p === 'string').slice(0, 80);
         const answer = await dialog.showMessageBox(win, { type: 'warning', title: 'Review extension permissions', message: `Load “${manifest.name}”?`, detail: `Folder: ${folder}\n\nRequested access:\n${permissions.join('\n') || 'No permissions declared'}\n\nExtensions can read or change website content. Only load code you trust. Electron supports a subset of Chrome APIs; unsupported features may not work.`, buttons: ['Cancel', 'Load extension'], defaultId: 0, cancelId: 0, noLink: true });
         if (answer.response !== 1) return { ok: false, canceled: true };
         await load(folder);
