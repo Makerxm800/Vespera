@@ -166,6 +166,7 @@ export function isInternal(url) {
 /** Internal page registry — label + icon key for the chrome UI. */
 export const INTERNAL_PAGES = {
   'vespera://newtab': { title: 'New Tab', icon: 'sparkle' },
+  'vespera://private': { title: 'Private Browsing', icon: 'eyeOff' },
   'vespera://welcome': { title: 'Welcome', icon: 'sparkle' },
   'vespera://settings': { title: 'Settings', icon: 'gear' },
   'vespera://privacy': { title: 'Privacy Hub', icon: 'shield' },
