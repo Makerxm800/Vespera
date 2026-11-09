@@ -135,6 +135,14 @@ export class TabManager {
     for (const tab of [from, to]) { tab.groupId = groupId; tab.groupName = reference?.groupName || 'Group'; tab.groupColor = reference?.groupColor || '#8b7cf6'; }
     this.move(fromId, toId); this.render(); this.onChange();
   }
+  renameGroup(id, name) {
+    const tab = this.tabs.find((t) => t.id === id);
+    if (!tab?.groupId) return;
+    const label = String(name || '').trim().slice(0, 24);
+    if (!label) return;
+    for (const item of this.tabs) if (item.groupId === tab.groupId) item.groupName = label;
+    this.render(); this.onChange();
+  }
   ungroup(id) {
     const tab = this.tabs.find((t) => t.id === id);
     if (!tab?.groupId) return;
