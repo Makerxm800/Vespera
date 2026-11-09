@@ -296,11 +296,11 @@ function showSiteInfoMenu(anchor, tab = tabs.active) {
       <div><b>${connection}</b><div class="small muted">${escapeHtml(host)}</div></div>
     </div>
     <div class="site-info-panel-body">
-      <div class="site-info-row"><span>${icon('fingerprint')} Fingerprinting protection</span><b>${protections.antiFingerprint !== false ? 'On' : 'Off'}</b></div>
-      <div class="site-info-row"><span>${icon('cookie')} Cookies &amp; site data</span><b>${origin ? 'Stored per site' : 'Not applicable'}</b></div>
+      <div class="site-info-row"><span>${icon('shield')} Fingerprinting protection</span><b>${protections.antiFingerprint !== false ? 'On' : 'Off'}</b></div>
+      <div class="site-info-row"><span>${icon('lock')} Cookies &amp; site data</span><b>${origin ? 'Stored per site' : 'Not applicable'}</b></div>
       <div class="site-info-note">Site data stays in this browser profile. Private-window data is cleared when that window closes. Vespera does not expose saved passwords or authentication tokens here.</div>
       <button class="btn btn-sm" data-site-action="shields">${icon('shield')} Vespera Shields</button>
-      <button class="btn btn-sm btn-ghost" data-site-action="privacy">${icon('settings')} Site privacy settings</button>
+      <button class="btn btn-sm btn-ghost" data-site-action="privacy">${icon('gear')} Site privacy settings</button>
     </div>`, { className: 'popover site-info-popover', label: 'Connection and site information' });
   if (!pop) return;
   pop.el.addEventListener('click', (event) => {
@@ -317,7 +317,7 @@ function showRecentDownloadsMenu(anchor) {
     const status = { completed: 'Downloaded', browser: 'Saved by browser', progressing: 'Downloading…', paused: 'Paused', interrupted: 'Interrupted', cancelled: 'Cancelled' }[entry.status] || entry.status;
     return `<button class="recent-download-row" data-download-id="${escapeHtml(entry.id)}"><span class="recent-download-icon">${icon(entry.status === 'completed' ? 'check' : 'download')}</span><span class="recent-download-copy"><b>${escapeHtml(entry.name)}</b><small>${escapeHtml(status)} · ${formatBytes(entry.received || entry.size)}</small></span></button>`;
   }).join('') : '<div class="popover-copy">Your recent downloads will appear here.</div>';
-  const pop = openPopover(anchor, `<div class="menu-label">Recent downloads</div>${rows}<div class="menu-sep"></div><button class="menu-item" data-open-downloads>${icon('list')} Show all downloads</button>`, { className: 'menu recent-downloads-menu', label: 'Recent downloads' });
+  const pop = openPopover(anchor, `<div class="menu-label">Recent downloads</div>${rows}<div class="menu-sep"></div><button class="menu-item" data-open-downloads>${icon('history')} Show all downloads</button>`, { className: 'menu recent-downloads-menu', label: 'Recent downloads' });
   if (!pop) return;
   pop.el.addEventListener('click', async (event) => {
     const id = event.target.closest('[data-download-id]')?.dataset.downloadId;
@@ -528,10 +528,10 @@ function boot() {
     onActiveChange: updateChromeFor, onChange: scheduleSave,
     onContextMenu: (id, x, y) => {
       const tab = tabs.tabs.find((t) => t.id === id);
-      const anchor = document.querySelector(`#tabstrip [data-id="${id}"]`) || $('btn-menu');
+      const anchor = document.querySelector(`#tabstrip [data-id="${id}"], #vtabs-list [data-id="${id}"]`) || $('btn-menu');
       const groupAction = tab.groupId ? 'ungroup' : 'group';
       const groupLabel = tab.groupId ? 'Remove from group' : 'Add to new group';
-      const pop = openPopover(anchor, `<button class="menu-item" data-action="pin">${icon('star')} ${tab.pinned ? 'Unpin' : 'Pin'} tab</button><button class="menu-item" data-action="duplicate">${icon('plus')} Duplicate tab</button><button class="menu-item" data-action="${groupAction}">${icon('folder')} ${groupLabel}</button><button class="menu-item" data-action="others">${icon('x')} Close other tabs</button><button class="menu-item" data-action="close">${icon('x')} Close tab</button>`, { label: 'Tab actions' });
+      const pop = openPopover(anchor, `<button class="menu-item" data-action="pin">${icon('star')} ${tab.pinned ? 'Unpin' : 'Pin'} tab</button><button class="menu-item" data-action="duplicate">${icon('plus')} Duplicate tab</button><button class="menu-item" data-action="${groupAction}">${icon('split')} ${groupLabel}</button><button class="menu-item" data-action="others">${icon('x')} Close other tabs</button><button class="menu-item" data-action="close">${icon('x')} Close tab</button>`, { label: 'Tab actions' });
       pop?.el.addEventListener('click', (e) => { const act = e.target.closest('[data-action]')?.dataset.action; if (!act) return; pop.close(); if (act === 'pin') tabs.togglePin(id); if (act === 'duplicate') tabs.duplicate(id); if (act === 'group') tabs.createGroup(id); if (act === 'ungroup') tabs.ungroup(id); if (act === 'others') tabs.closeOthers(id); if (act === 'close') tabs.close(id); });
     },
   });
@@ -549,6 +549,10 @@ function boot() {
   $('btn-shields').onclick = (e) => toggleShields(e.currentTarget, tabs.active, { onNavigate: navigate, onReload: () => reload() });
   $('site-info').onclick = (e) => showSiteInfoMenu(e.currentTarget, tabs.active);
   $('btn-downloads').onclick = (e) => showRecentDownloadsMenu(e.currentTarget);
+  $('content').addEventListener('wheel', (e) => {
+    if (!e.ctrlKey || !tabs.active || e.deltaY === 0) return;
+    e.preventDefault(); setZoom(e.deltaY < 0 ? .1 : -.1);
+  }, { passive: false });
   $('preview-details').onclick = (e) => openPopover(e.currentTarget, `<div class="menu-label">Vespera is running live</div><p class="popover-copy">Tabs, Home, search, settings, extensions, downloads and customization work right here — no setup needed. Some websites restrict embedded pages or are unreachable from this hosted environment; “Open original” visits them directly.</p><p class="popover-copy">Right-click pages, links and images for browser actions. Use the menu to install Vespera as a standalone app when your browser offers it.</p><button class="btn" data-dismiss>Got it</button>`, { className: 'popover info-popover', label: 'About this live browser' });
   $('dismiss-preview').onclick = () => $('preview-banner').classList.add('hidden');
   $('open-original').target = '_blank'; $('open-original').rel = 'noopener noreferrer';
