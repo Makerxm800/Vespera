@@ -68,6 +68,17 @@ try {
     await page.locator('#tabstrip .tab.grouped').first().click({ button: 'right' });
     await page.locator('[data-action="ungroup"]').click();
     assert.equal(await page.locator('#tabstrip .tab.grouped').count(), 1);
+    await page.keyboard.press('Control+w');
+    assert.equal(await page.locator('#tabstrip .tab').count(), 1);
+  });
+  await step('private browsing landing page explains what is and is not hidden', async () => {
+    await go('vespera://private'); await page.waitForSelector('.private-page');
+    assert.match(await page.locator('.private-page').textContent(), /browsing privately/);
+    assert.match(await page.locator('.private-page').textContent(), /internet service provider/);
+    await page.locator('#private-new-tab').click();
+    assert.equal(await page.locator('#tabstrip .tab').count(), 2);
+    await page.keyboard.press('Control+w');
+    await go('vespera://newtab');
   });
   await step('menu toggles closed on the same anchor and opens Settings', async () => {
     await page.locator('#btn-menu').click(); assert.equal(await page.locator('.browser-menu').count(), 1);
@@ -206,7 +217,7 @@ try {
   });
   await step('release notes identify the running build and link to published installers', async () => {
     await menu('updates'); await page.waitForSelector('.updates-page');
-    assert.match(await page.locator('.updates-page').textContent(), /0\.1\.4/);
+    assert.match(await page.locator('.updates-page').textContent(), /0\.1\.5/);
     assert.match(await page.locator('.updates-page a[href*="releases"]').first().getAttribute('href'), /github\.com\/Makerxm800\/Vespera-beta\/releases/);
   });
   await step('session restores the active tab after a real reload', async () => {
