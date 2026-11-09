@@ -1,4 +1,4 @@
-name: Build release files
+name: Build and publish Vespera
 
 on:
   push:
@@ -29,53 +29,37 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "22" # Change to the version your project needs
+          node-version: "22"
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build project
-        run: npm run build
+      - name: Run tests
+        run: npm test
 
-      - name: Package Windows files
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force release | Out-Null
-          Compress-Archive -Path dist/* -DestinationPath release/myapp-windows.zip
+      - name: Build platform installers
+        run: npm run dist
 
-      - name: Package macOS files
-        if: runner.os == 'macOS'
-        run: |
-          mkdir -p release
-          tar -czf release/myapp-macos.tar.gz -C dist .
-
-      - name: Package Ubuntu/Linux files
-        if: runner.os == 'Linux'
-        run: |
-          mkdir -p release
-          tar -czf release/myapp-ubuntu.tar.gz -C dist .
-
-      - name: Upload packaged files
+      - name: Upload installers
         uses: actions/upload-artifact@v7
         with:
-          name: release-${{ matrix.os }}
-          path: release/*
+          name: installers-${{ matrix.os }}
+          path: dist/**
+          if-no-files-found: error
 
   publish:
-    name: Publish GitHub release
+    name: Publish GitHub Release
     needs: build
     runs-on: ubuntu-latest
-
-    # Only publish a GitHub Release for a pushed v* tag.
-    # Manual runs from a branch will still build and save artifacts.
+    # Manual runs build and upload artifacts; tag runs also publish a Release.
     if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
-      - name: Download all platform files
+      - name: Download installers
         uses: actions/download-artifact@v8
         with:
-          pattern: release-*
+          pattern: installers-*
           path: release-files
           merge-multiple: true
 
