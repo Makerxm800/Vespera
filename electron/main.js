@@ -54,8 +54,8 @@ function createWindow({ privateMode = false } = {}) {
   win.webContents.on('did-fail-load', (_e, code, description) => { if (code !== -3) log.error(`Browser UI load failed: ${description} (${code})`); });
   win.on('maximize', () => win.webContents.send('window:maximized', true));
   win.on('unmaximize', () => win.webContents.send('window:maximized', false));
-  win.on('enter-full-screen', () => win.webContents.send('window:maximized', true));
-  win.on('leave-full-screen', () => win.webContents.send('window:maximized', win.isMaximized()));
+  win.on('enter-full-screen', () => { win.webContents.send('window:maximized', true); win.webContents.send('browser:fullscreen', true); });
+  win.on('leave-full-screen', () => { win.webContents.send('window:maximized', win.isMaximized()); win.webContents.send('browser:fullscreen', false); });
   win.on('closed', () => { clearTimeout(fallback); windows.delete(win); if (mainWindow === win) mainWindow = [...windows].find((w) => !w.__vesperaPrivate) || null; });
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url).catch((err) => log.error('Open external failed', err)); return { action: 'deny' }; });
   log.info(`${privateMode ? 'Private' : 'Normal'} window created`);
@@ -178,6 +178,9 @@ function wireWebContents() {
         if (!action) return; // Site-specific keys, including YouTube's F, stay with the page.
         event.preventDefault();
         contents.hostWebContents?.send('browser:shortcut', action);
+      });
+      contents.on('zoom-changed', () => {
+        contents.hostWebContents?.send('browser:zoom-changed', { webContentsId: contents.id, factor: contents.getZoomFactor() });
       });
       contents.on('enter-html-full-screen', () => {
         const win = BrowserWindow.fromWebContents(contents.hostWebContents);
