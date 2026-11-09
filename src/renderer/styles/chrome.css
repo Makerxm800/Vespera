@@ -878,3 +878,6 @@ body.browser-fullscreen .content-col { height:100dvh; }
   .tabstrip .tab { min-width:58px; }
   .tab-group-label { max-width:48px; font-size:8px; padding:2px 4px; }
 }
+
+.tab-group-name-input { width:100%; margin:2px 0 6px; padding:7px 10px; font-size:12px; }
+.tab-group-label { text-overflow:ellipsis; }
