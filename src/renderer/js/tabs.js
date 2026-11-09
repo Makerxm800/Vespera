@@ -16,7 +16,7 @@ export function createTabModel(url = 'vespera://newtab', opts = {}) {
 }
 
 export class TabManager {
-  constructor({ onActiveChange, onClose, onMount, onChange } = {}) {
+  constructor({ onActiveChange, onClose, onMount, onChange, onContextMenu } = {}) {
     this.tabs = [];
     this.activeId = null;
     this.closedStack = [];
@@ -25,6 +25,7 @@ export class TabManager {
     this.onClose = onClose || (() => {});
     this.onMount = onMount || (() => {});
     this.onChange = onChange || (() => {});
+    this.onContextMenu = onContextMenu || (() => {});
     this.strip = document.getElementById('tabstrip');
     this.vlist = document.getElementById('vtabs-list');
     for (const el of [this.strip, this.vlist]) el?.addEventListener('click', (e) => this.handleClick(e));
