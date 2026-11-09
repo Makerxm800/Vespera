@@ -38,7 +38,7 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Build platform installers
+      - name: Build installers
         run: npm run dist
 
       - name: Upload installers
@@ -52,7 +52,6 @@ jobs:
     name: Publish GitHub Release
     needs: build
     runs-on: ubuntu-latest
-    # Manual runs build and upload artifacts; tag runs also publish a Release.
     if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
