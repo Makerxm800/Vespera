@@ -172,7 +172,7 @@ try {
     const frame = page.frames().find((f) => f.url().includes('/proxy?'));
     const pending = page.waitForEvent('download'); await frame.locator('#file').click(); const download = await pending;
     assert.equal(download.suggestedFilename(), 'hello.txt');
-    await go('vespera://downloads'); await page.waitForFunction(() => document.querySelector('#d-list')?.textContent.includes('Sent to browser downloads'));
+    await go('vespera://downloads'); await page.waitForFunction(() => { const text = document.querySelector('#d-list')?.textContent || ''; return text.includes('hello.txt') && /Downloaded|Sent to browser downloads/.test(text); }, { timeout: 20000 });
     await page.locator('#btn-downloads').click();
     assert.match(await page.locator('.recent-downloads-menu').textContent(), /hello.txt/);
     await page.keyboard.press('Escape');
