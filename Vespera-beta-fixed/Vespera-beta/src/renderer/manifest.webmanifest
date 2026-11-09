@@ -1,0 +1,17 @@
+{
+  "name": "Vespera Browser",
+  "short_name": "Vespera",
+  "description": "A calmer, private browsing space with tabs, home, extensions and customization.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0e1c",
+  "theme_color": "#0a0e1c",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    { "src": "/assets/icon-256.png", "sizes": "256x256", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
