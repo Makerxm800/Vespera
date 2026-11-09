@@ -176,7 +176,7 @@ try {
   });
   await step('release notes identify the running build and link to published installers', async () => {
     await menu('updates'); await page.waitForSelector('.updates-page');
-    assert.match(await page.locator('.updates-page').textContent(), /0\.1\.3/);
+    assert.match(await page.locator('.updates-page').textContent(), /0\.1\.4/);
     assert.match(await page.locator('.updates-page a[href*="releases"]').first().getAttribute('href'), /github\.com\/Makerxm800\/Vespera-beta\/releases/);
   });
   await step('session restores the active tab after a real reload', async () => {
