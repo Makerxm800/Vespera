@@ -197,15 +197,21 @@ function wireWebContents() {
         if (!win) return;
         const template = [];
         if (params.linkURL && /^https?:/.test(params.linkURL)) template.push(
-          { label: 'Open link in new tab', click: () => contents.hostWebContents.send('browser:new-tab', params.linkURL) },
+          { label: 'Open link in new tab', click: () => contents.hostWebContents?.send('browser:new-tab', params.linkURL) },
+          { label: 'Open link in background tab', click: () => contents.hostWebContents?.send('browser:new-tab-background', params.linkURL) },
           { label: 'Copy link address', click: () => require('electron').clipboard.writeText(params.linkURL) },
           { label: 'Save link as…', click: () => contents.downloadURL(params.linkURL) },
           { type: 'separator' },
         );
-        if (params.mediaType === 'image' && params.srcURL) template.push({ label: 'Save image as…', click: () => contents.downloadURL(params.srcURL) });
-        if (params.isEditable) template.push({ role: 'cut' }, { role: 'copy' }, { role: 'paste' });
-        else if (params.selectionText) template.push({ role: 'copy' });
-        template.push({ label: 'Back', enabled: contents.canGoBack(), click: () => contents.goBack() }, { label: 'Reload', click: () => contents.reload() });
+        if (params.mediaType === 'image' && params.srcURL) template.push(
+          { label: 'Open image in new tab', click: () => contents.hostWebContents?.send('browser:new-tab', params.srcURL) },
+          { label: 'Copy image address', click: () => require('electron').clipboard.writeText(params.srcURL) },
+          { label: 'Save image as…', click: () => contents.downloadURL(params.srcURL) },
+          { type: 'separator' },
+        );
+        if (params.isEditable) template.push({ role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' });
+        else if (params.selectionText) template.push({ role: 'copy' }, { type: 'separator' }, { label: 'Search with Startpage', click: () => contents.hostWebContents?.send('browser:search-selection', params.selectionText) });
+        template.push({ label: 'Back', enabled: contents.canGoBack(), click: () => contents.goBack() }, { label: 'Forward', enabled: contents.canGoForward(), click: () => contents.goForward() }, { label: 'Reload', click: () => contents.reload() }, { type: 'separator' }, { label: 'Copy page address', click: () => require('electron').clipboard.writeText(contents.getURL()) });
         if (!app.isPackaged) template.push({ type: 'separator' }, { label: 'Inspect page', click: () => contents.inspectElement(params.x, params.y) });
         Menu.buildFromTemplate(template).popup({ window: win });
       });
