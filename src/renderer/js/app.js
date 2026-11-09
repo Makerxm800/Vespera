@@ -298,7 +298,7 @@ function showSiteInfoMenu(anchor, tab = tabs.active) {
     <div class="site-info-panel-body">
       <div class="site-info-row"><span>${icon('shield')} Fingerprinting protection</span><b>${protections.antiFingerprint !== false ? 'On' : 'Off'}</b></div>
       <div class="site-info-row"><span>${icon('lock')} Cookies &amp; site data</span><b>${origin ? 'Stored per site' : 'Not applicable'}</b></div>
-      <div class="site-info-note">Site data stays in this browser profile. Private-window data is cleared when that window closes. Vespera does not expose saved passwords or authentication tokens here.</div>
+      <div class="site-info-note">Site data stays in this browser profile. Private-window data is cleared after the last private window closes. Vespera does not expose saved passwords or authentication tokens here.</div>
       <button class="btn btn-sm" data-site-action="shields">${icon('shield')} Vespera Shields</button>
       <button class="btn btn-sm btn-ghost" data-site-action="privacy">${icon('gear')} Site privacy settings</button>
     </div>`, { className: 'popover site-info-popover', label: 'Connection and site information' });
