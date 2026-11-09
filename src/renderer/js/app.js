@@ -531,8 +531,9 @@ function boot() {
       const anchor = document.querySelector(`#tabstrip [data-id="${id}"], #vtabs-list [data-id="${id}"]`) || $('btn-menu');
       const groupAction = tab.groupId ? 'ungroup' : 'group';
       const groupLabel = tab.groupId ? 'Remove from group' : 'Add to new group';
-      const pop = openPopover(anchor, `<button class="menu-item" data-action="pin">${icon('star')} ${tab.pinned ? 'Unpin' : 'Pin'} tab</button><button class="menu-item" data-action="duplicate">${icon('plus')} Duplicate tab</button><button class="menu-item" data-action="${groupAction}">${icon('split')} ${groupLabel}</button><button class="menu-item" data-action="others">${icon('x')} Close other tabs</button><button class="menu-item" data-action="close">${icon('x')} Close tab</button>`, { label: 'Tab actions' });
-      pop?.el.addEventListener('click', (e) => { const act = e.target.closest('[data-action]')?.dataset.action; if (!act) return; pop.close(); if (act === 'pin') tabs.togglePin(id); if (act === 'duplicate') tabs.duplicate(id); if (act === 'group') tabs.createGroup(id); if (act === 'ungroup') tabs.ungroup(id); if (act === 'others') tabs.closeOthers(id); if (act === 'close') tabs.close(id); });
+      const rename = tab.groupId ? `<div class="menu-sep"></div><div class="menu-label">Group name</div><input class="input tab-group-name-input" data-group-name value="${escapeHtml(tab.groupName || 'Group')}" maxlength="24" aria-label="Tab group name"><button class="menu-item" data-action="rename-group">${icon('check')} Save group name</button>` : '';
+      const pop = openPopover(anchor, `<button class="menu-item" data-action="pin">${icon('star')} ${tab.pinned ? 'Unpin' : 'Pin'} tab</button><button class="menu-item" data-action="duplicate">${icon('plus')} Duplicate tab</button><button class="menu-item" data-action="${groupAction}">${icon('split')} ${groupLabel}</button>${rename}<button class="menu-item" data-action="others">${icon('x')} Close other tabs</button><button class="menu-item" data-action="close">${icon('x')} Close tab</button>`, { label: 'Tab actions' });
+      pop?.el.addEventListener('click', (e) => { const act = e.target.closest('[data-action]')?.dataset.action; if (!act) return; if (act === 'rename-group') { tabs.renameGroup(id, pop.el.querySelector('[data-group-name]')?.value); pop.close(); return; } pop.close(); if (act === 'pin') tabs.togglePin(id); if (act === 'duplicate') tabs.duplicate(id); if (act === 'group') tabs.createGroup(id); if (act === 'ungroup') tabs.ungroup(id); if (act === 'others') tabs.closeOthers(id); if (act === 'close') tabs.close(id); });
     },
   });
   buildRail(); positionTabUI(); renderBookmarksBar();
@@ -607,6 +608,8 @@ function boot() {
       if (actions[action]) actions[action]();
     });
     window.vespera.on('browser:fullscreen', (active) => document.body.classList.toggle('browser-fullscreen', Boolean(active)));
+    window.vespera.on('browser:new-tab-background', (url) => { if (safeTabUrl(url)) tabs.add(url, { activate: false }); });
+    window.vespera.on('browser:search-selection', (query) => { if (String(query || '').trim()) tabs.add(buildSearchUrl(String(query).trim(), state.settings.searchEngine)); });
     window.vespera.on('browser:zoom-changed', (detail) => {
       if (!detail || !Number.isFinite(detail.factor)) return;
       const tab = tabs.tabs.find((item) => platform.inner(item.view)?.getWebContentsId?.() === detail.webContentsId);
