@@ -6,7 +6,7 @@ const RELEASES = 'https://github.com/Makerxm800/Vespera-beta/releases';
 const NOTES = [
   ['Browser shell polish', 'A full-width tab row, drag-to-group tabs with editable names, native link and image context actions, recent downloads, and a clearer connection/site-information panel.'],
   ['Keyboard and zoom fixes', 'Page-specific keys such as YouTube’s F key stay with the website; browser shortcuts now route from embedded pages, fullscreen requests work, and Ctrl+wheel zoom stays in sync.'],
-  ['Private browsing', 'Private windows start with a clear privacy explainer and do not save browsing history or sync activity. Site data is cleared after the last private window closes; downloaded files remain on the device.'],
+  ['Private browsing', 'Private windows start with a clear privacy explainer and do not save browsing history or sync activity. Cookies, site data and download history are cleared after the last private window closes; downloaded files remain on the device.'],
   ['Local data backup', 'Download a JSON backup of settings, bookmarks and history from Settings. Passwords and session tokens are excluded.'],
   ['Faster suggestions', 'Address-bar history and bookmark searches use cached lowercase indexes and frame-batched rendering.'],
   ['Smoother tabs', 'Tabs animate when opened, closed, switched and reordered. Close buttons are softer, rounded and keyboard accessible.'],
