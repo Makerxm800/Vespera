@@ -67,6 +67,7 @@ function registerIpc() {
   on('window:minimize', (win) => win.minimize());
   on('window:maximize', (win) => win.isMaximized() ? win.unmaximize() : win.maximize());
   on('window:close', (win) => win.close());
+  on('window:fullscreen-toggle', (win) => win.setFullScreen(!win.isFullScreen()));
   on('window:incognito', () => createWindow({ privateMode: true }));
   handle('app:version', () => app.getVersion());
   handle('prefs:save', (event, value) => {
@@ -150,6 +151,43 @@ function wireWebContents() {
       contents.setWindowOpenHandler(({ url }) => {
         if (/^https?:\/\//i.test(url)) contents.hostWebContents?.send('browser:new-tab', url);
         return { action: 'deny' };
+      });
+      contents.on('before-input-event', (event, input) => {
+        if (input.type !== 'keyDown') return;
+        const key = String(input.key || '').toLowerCase();
+        const mod = Boolean(input.control || input.meta), shift = Boolean(input.shift), alt = Boolean(input.alt);
+        let action = null;
+        if (mod && shift && key === 't') action = 'reopen';
+        else if (mod && shift && key === 'n') action = 'private';
+        else if (mod && key === 't') action = 'newtab';
+        else if (mod && key === 'w') action = 'closetab';
+        else if (mod && key === 'r') action = 'reload';
+        else if (mod && key === 'l') action = 'focus-address';
+        else if (mod && key === 'f') action = 'find';
+        else if (mod && key === 'j') action = 'downloads';
+        else if (mod && key === 'd') action = 'bookmark';
+        else if (mod && key === 'k') action = 'palette';
+        else if (mod && (key === '+' || key === '=' || input.code === 'NumpadAdd')) action = 'zoom-in';
+        else if (mod && (key === '-' || input.code === 'NumpadSubtract')) action = 'zoom-out';
+        else if (mod && key === '0') action = 'zoom-reset';
+        else if (mod && key === 'tab') action = shift ? 'tab-prev' : 'tab-next';
+        else if (alt && key === 'arrowleft') action = 'back';
+        else if (alt && key === 'arrowright') action = 'forward';
+        else if (key === 'f5') action = 'reload';
+        else if (key === 'f11') action = 'fullscreen';
+        if (!action) return; // Site-specific keys, including YouTube's F, stay with the page.
+        event.preventDefault();
+        contents.hostWebContents?.send('browser:shortcut', action);
+      });
+      contents.on('enter-html-full-screen', () => {
+        const win = BrowserWindow.fromWebContents(contents.hostWebContents);
+        if (win && !win.isDestroyed() && !win.isFullScreen()) win.setFullScreen(true);
+        contents.hostWebContents?.send('browser:fullscreen', true);
+      });
+      contents.on('leave-html-full-screen', () => {
+        const win = BrowserWindow.fromWebContents(contents.hostWebContents);
+        if (win && !win.isDestroyed() && win.isFullScreen()) win.setFullScreen(false);
+        contents.hostWebContents?.send('browser:fullscreen', false);
       });
       contents.on('context-menu', (_event, params) => {
         const win = BrowserWindow.fromWebContents(contents.hostWebContents || contents);
