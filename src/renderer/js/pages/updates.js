@@ -8,6 +8,7 @@ const NOTES = [
   ['Privacy Hub', 'A compact hub with live counters, working protection toggles, per-site exceptions and honest privacy notes.'],
   ['Personal accounts', 'Smaller account controls with working email/password registration, sign-in, profile updates, sync and sign-out.'],
   ['Live preview repairs', 'Usable tabs and window controls, Home clock, wallpapers, themes, right-click menus, animated search, downloads and built-in extensions.'],
+  ['Extension manager', 'A toolbar menu for installed extensions, quick access to extension management, and a safer unpacked-extension loading flow. Chrome Web Store extensions are not installed directly; compatibility depends on Electron support.'],
 ];
 
 export function renderUpdates(container, ctx) {
@@ -17,7 +18,7 @@ export function renderUpdates(container, ctx) {
       <header class="account-header"><span class="account-mark">${icon('sparkle')}</span><div><span class="eyebrow">RELEASE NOTES</span><h1 class="page-title">What’s new in Vespera</h1></div></header>
       <p class="page-sub">You’re running build ${escapeHtml(version)}. These notes describe this build. Published desktop installers are available on GitHub Releases.</p>
       <section class="card account-card">
-        <div class="account-card-head"><h2>Vespera 0.1.3</h2><span class="chip chip-accent">${window.vespera ? 'Desktop build' : 'Web preview'}</span></div>
+        <div class="account-card-head"><h2>Vespera ${escapeHtml(version)}</h2><span class="chip chip-accent">${window.vespera ? 'Desktop build' : 'Web preview'}</span></div>
         <div class="release-notes">${NOTES.map(([title, body]) => `<div class="release-note">${icon('check')}<div><b>${title}</b><p>${body}</p></div></div>`).join('')}</div>
         <div class="account-actions"><span class="small faint">Desktop downloads for Windows, macOS and Linux.</span><a class="btn btn-primary btn-sm" href="${RELEASES}" target="_blank" rel="noopener noreferrer">${icon('download')} Open Releases</a></div>
       </section>
