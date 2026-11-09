@@ -26,7 +26,7 @@ contextBridge.exposeInMainWorld('vespera', {
     remove: (id) => invoke('extensions:remove', id),
   },
   on: (channel, fn) => {
-    const allowed = ['download:started', 'download:updated', 'download:done', 'shield:stat', 'window:maximized', 'menu:action', 'browser:new-tab', 'browser:shortcut', 'browser:fullscreen'];
+    const allowed = ['download:started', 'download:updated', 'download:done', 'shield:stat', 'window:maximized', 'menu:action', 'browser:new-tab', 'browser:shortcut', 'browser:fullscreen', 'browser:zoom-changed'];
     if (!allowed.includes(channel) || typeof fn !== 'function') return () => {};
     const listener = (_event, data) => fn(data);
     ipcRenderer.on(channel, listener);
