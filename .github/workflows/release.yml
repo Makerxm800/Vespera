@@ -1,15 +1,15 @@
 # Vespera — Build & Release
 #
-# Triggered by pushing a version tag (v*). Builds real desktop installers on
-# GitHub's native runners (Windows / macOS / Linux) and publishes a GitHub
-# Release with all artifacts attached. Also runnable manually (workflow_dispatch)
-# to produce downloadable installer artifacts without publishing.
+# Runs on pull requests for validation. Version-tag pushes publish releases;
+# merging a commit titled "Release Vespera vX.Y.Z" to main also builds and
+# publishes that package version automatically.
 
 name: Build & Release
 
 on:
   pull_request:
   push:
+    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -90,9 +90,10 @@ jobs:
   release:
     name: Publish release
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'Release Vespera v'))
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           path: dist
@@ -103,10 +104,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" dist/* \
+          RELEASE_TAG="v$(node -p "require('./package.json').version")"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then RELEASE_TAG="$GITHUB_REF_NAME"; fi
+          gh release create "$RELEASE_TAG" dist/* \
             --repo "${GITHUB_REPOSITORY}" \
-            --title "Vespera ${GITHUB_REF_NAME}" \
+            --target "$GITHUB_SHA" \
+            --title "Vespera ${RELEASE_TAG}" \
             --generate-notes || \
-          gh release upload "${GITHUB_REF_NAME}" dist/* \
+          gh release upload "$RELEASE_TAG" dist/* \
             --repo "${GITHUB_REPOSITORY}" \
             --clobber
