@@ -101,7 +101,7 @@ npm test
 # Run real Chromium UI checks (after npx playwright install chromium)
 npm run test:ui
 
-# Current release: 0.1.3 (desktop installers are published via GitHub Releases)
+# Current release: 0.1.4 (desktop installers are published via GitHub Releases)
 
 # Build installers for your current platform (output in dist/)
 npm run dist
