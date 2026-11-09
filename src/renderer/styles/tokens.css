@@ -1,0 +1,79 @@
+/* ============================================================
+   Vespera Design System — "Twilight" theme
+   Deep dusk surfaces, starlight gold accent, soft glass panels.
+   ============================================================ */
+
+:root {
+  /* Type */
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+  /* Radii & motion */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+  --r-pill: 999px;
+  --ease: cubic-bezier(.22, .8, .28, 1);
+  --fast: 140ms var(--ease);
+  --med: 240ms var(--ease);
+
+  /* Sizing */
+  --titlebar-h: 42px;
+  --toolbar-h: 48px;
+  --rail-w: 56px;
+  --sidebar-w: 232px;
+}
+
+/* ---------- Dark (default): twilight ---------- */
+[data-theme="dark"] {
+  --bg: #0a0e1c;
+  --bg-2: #0e1428;
+  --surface: #141c36;
+  --surface-2: #1a2444;
+  --surface-3: #212c52;
+  --glass: rgba(20, 28, 54, .72);
+  --border: rgba(150, 168, 224, .14);
+  --border-strong: rgba(150, 168, 224, .26);
+  --text: #e9edfb;
+  --text-dim: #9ba6c9;
+  --text-faint: #626d92;
+  --shadow: 0 12px 40px rgba(2, 4, 14, .55);
+  --shadow-soft: 0 4px 18px rgba(2, 4, 14, .38);
+  --glow: 0 0 22px rgba(246, 185, 59, .18);
+  --star: rgba(255, 255, 255, .8);
+  color-scheme: dark;
+}
+
+/* ---------- Light: warm dawn ---------- */
+[data-theme="light"] {
+  --bg: #f4f1ea;
+  --bg-2: #ebe7dd;
+  --surface: #ffffff;
+  --surface-2: #f3f0e9;
+  --surface-3: #e9e5da;
+  --glass: rgba(255, 255, 255, .8);
+  --border: rgba(35, 40, 66, .12);
+  --border-strong: rgba(35, 40, 66, .22);
+  --text: #232640;
+  --text-dim: #5d6280;
+  --text-faint: #9297b1;
+  --shadow: 0 12px 34px rgba(40, 40, 70, .14);
+  --shadow-soft: 0 3px 14px rgba(40, 40, 70, .10);
+  --glow: 0 0 18px rgba(214, 154, 30, .16);
+  --star: rgba(35, 40, 66, .5);
+  color-scheme: light;
+}
+
+/* ---------- Accent variants ---------- */
+[data-accent="gold"]   { --accent: #f6b93b; --accent-2: #ffcf70; --accent-ink: #211703; --accent-soft: rgba(246,185,59,.15); }
+[data-accent="violet"] { --accent: #8b7cf6; --accent-2: #b1a5ff; --accent-ink: #0e0a26; --accent-soft: rgba(139,124,246,.16); }
+[data-accent="teal"]   { --accent: #2dd4bf; --accent-2: #6ee7d5; --accent-ink: #03211c; --accent-soft: rgba(45,212,191,.15); }
+[data-accent="rose"]   { --accent: #fb7185; --accent-2: #fda4af; --accent-ink: #26060c; --accent-soft: rgba(251,113,133,.15); }
+
+/* ---------- Density ---------- */
+[data-density="compact"] {
+  --titlebar-h: 36px;
+  --toolbar-h: 42px;
+}
