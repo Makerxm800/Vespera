@@ -52,6 +52,23 @@ try {
     await page.locator('.nt-hero h1').click({ button: 'right' }); assert.equal(await page.locator('.context-menu').count(), 1);
     assert.match(await page.locator('.context-menu').textContent(), /Customize home/); await page.keyboard.press('Escape');
   });
+  await step('tab groups can be created, renamed and joined by dragging', async () => {
+    const first = page.locator('#tabstrip .tab').first();
+    await first.click({ button: 'right' });
+    await page.locator('.menu [data-action="group"]').click();
+    assert.equal(await page.locator('#tabstrip .tab.grouped').count(), 1);
+    await page.keyboard.press('Control+t');
+    assert.equal(await page.locator('#tabstrip .tab').count(), 2);
+    await page.locator('#tabstrip .tab').nth(1).dragTo(page.locator('#tabstrip .tab').first());
+    assert.equal(await page.locator('#tabstrip .tab.grouped').count(), 2);
+    await page.locator('#tabstrip .tab.grouped').first().click({ button: 'right' });
+    await page.locator('[data-group-name]').fill('Research');
+    await page.locator('[data-action="rename-group"]').click();
+    assert.equal(await page.locator('.tab-group-label').first().textContent(), 'Research');
+    await page.locator('#tabstrip .tab.grouped').first().click({ button: 'right' });
+    await page.locator('[data-action="ungroup"]').click();
+    assert.equal(await page.locator('#tabstrip .tab.grouped').count(), 1);
+  });
   await step('menu toggles closed on the same anchor and opens Settings', async () => {
     await page.locator('#btn-menu').click(); assert.equal(await page.locator('.browser-menu').count(), 1);
     await page.locator('#btn-menu').click(); assert.equal(await page.locator('.browser-menu').count(), 0);
@@ -100,6 +117,10 @@ try {
     await go(fixtureUrl + '/?utm_source=test');
     await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'Fixture Home');
     assert.equal(await page.locator('#omni-input').inputValue(), fixtureUrl + '/');
+    await page.locator('#site-info').click();
+    assert.match(await page.locator('.site-info-popover').textContent(), /Connection is not secure/);
+    assert.match(await page.locator('.site-info-popover').textContent(), /Cookies & site data/);
+    await page.keyboard.press('Escape');
     const frame = page.frames().find((f) => f.url().includes('/proxy?'));
     await frame.locator('#next').click({ button: 'right' });
     await page.waitForSelector('.context-menu'); assert.match(await page.locator('.context-menu').textContent(), /Open link in new tab/); await page.keyboard.press('Escape');
@@ -141,6 +162,9 @@ try {
     const pending = page.waitForEvent('download'); await frame.locator('#file').click(); const download = await pending;
     assert.equal(download.suggestedFilename(), 'hello.txt');
     await go('vespera://downloads'); await page.waitForFunction(() => document.querySelector('#d-list')?.textContent.includes('Sent to browser downloads'));
+    await page.locator('#btn-downloads').click();
+    assert.match(await page.locator('.recent-downloads-menu').textContent(), /hello.txt/);
+    await page.keyboard.press('Escape');
   });
   await step('Reader View extracts the last article and returns to the extensions page', async () => {
     await go(fixtureUrl); await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'Fixture Home');
@@ -173,6 +197,12 @@ try {
     await page.locator('#a-pass').fill('correct-horse-battery');
     await page.locator('#a-submit').click(); await page.waitForSelector('#p-sync-now');
     await page.locator('#p-signout').click(); await page.waitForSelector('#auth-form');
+    await go('vespera://settings#account');
+    await page.waitForSelector('#download-local-backup');
+    const backupDownload = page.waitForEvent('download');
+    await page.locator('#download-local-backup').click();
+    const backup = await backupDownload;
+    assert.match(backup.suggestedFilename(), /Vespera-Backup-.*\\.json/);
   });
   await step('release notes identify the running build and link to published installers', async () => {
     await menu('updates'); await page.waitForSelector('.updates-page');
