@@ -18,7 +18,7 @@ electronVersion: 33.4.11
 electronDist: node_modules/electron/dist
 
 directories:
-  output: release
+  output: dist
   buildResources: build
 
 # Packed asar archive. On some machines (Malwarebytes' mbamchameleon driver)
