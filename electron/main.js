@@ -9,6 +9,9 @@ const { installExtensions } = require('./extensions');
 const permissions = require('./permissions');
 
 app.setName('Vespera');
+// Dev/test escape hatch: point the whole profile (preferences, logs, single-instance
+// lock) at a scratch folder so an automated run never collides with a real install.
+if (process.env.VESPERA_USER_DATA) app.setPath('userData', process.env.VESPERA_USER_DATA);
 if (process.platform === 'win32') app.setAppUserModelId('app.vespera.browser');
 if (app.isPackaged && !process.env.VESPERA_DATA) process.env.VESPERA_DATA = path.join(app.getPath('userData'), 'data');
 log.init(path.join(app.getPath('userData'), 'logs'));
@@ -43,7 +46,9 @@ function createWindow({ privateMode = false } = {}) {
   });
   win.__vesperaPrivate = privateMode;
   win.webContents.on('will-attach-webview', (_event, webPreferences) => {
-    delete webPreferences.preload;
+    // Our own preload (never the page's): patches window.chrome + UA-CH brands
+    // in the guest so sites see a stock-Chrome identity (Google sign-in).
+    webPreferences.preload = path.join(__dirname, 'webview-preload.js');
     webPreferences.nodeIntegration = false; webPreferences.contextIsolation = true; webPreferences.sandbox = true;
     webPreferences.partition = privateMode ? 'incognito' : 'persist:vespera';
   });
@@ -110,6 +115,7 @@ function registerIpc() {
   handle('permissions:reset', (event) => { if (!isPrivateEvent(event)) { permissions.reset(prefs.sitePermissions); persistPrefs(); } return { ok: true }; });
   handle('extensions:list', (event) => isPrivateEvent(event) ? [] : extensionManager.list());
   handle('extensions:install', (event) => isPrivateEvent(event) ? { ok: false, message: 'Extensions are disabled in private windows.' } : extensionManager.install());
+  handle('extensions:install-store', (event, url) => isPrivateEvent(event) ? { ok: false, message: 'Extensions are disabled in private windows.' } : extensionManager.installFromStoreUrl(url));
   handle('extensions:remove', (event, id) => isPrivateEvent(event) ? { ok: false, message: 'Extensions are disabled in private windows.' } : extensionManager.remove(String(id)));
 }
 function buildMenu() {
@@ -260,13 +266,22 @@ app.whenReady().then(async () => {
   catch (err) { log.error('Local service failed', err); dialog.showErrorBox('Vespera could not start', `${err.message}\n\nLog: ${log.getLogFile()}`); app.quit(); return; }
   normalSession = session.fromPartition('persist:vespera');
   privateSession = session.fromPartition('incognito');
+  // Present as a stock Chrome build: sites (Google sign-in included) serve
+  // their modern UI when the UA looks like a current Chrome on this OS.
+  const chromeUA = `Mozilla/5.0 (${process.platform === 'win32' ? 'Windows NT 10.0; Win64; x64' : process.platform === 'darwin' ? 'Macintosh; Intel Mac OS X 10_15_7' : 'X11; Linux x86_64'}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36`;
+  normalSession.setUserAgent(chromeUA);
+  privateSession.setUserAgent(chromeUA);
+  app.userAgentFallback = chromeUA;
   downloadManager = new DownloadManager(() => prefs, () => [...windows], log);
   extensionManager = installExtensions(normalSession, () => prefs, persistPrefs, () => BrowserWindow.getFocusedWindow() || mainWindow, log);
   let pu = null;
-  try { pu = await import('../src/shared/privacy-utils.mjs'); } catch (err) { log.error('Privacy utilities unavailable; network filtering is disabled', err); }
-  protectSessions(pu);
+  const puPromise = import('../src/shared/privacy-utils.mjs').then((m) => { pu = m; }).catch((err) => { log.error('Privacy utilities unavailable; network filtering is disabled', err); });
+  // Wire privacy + IPC and show the window immediately; don't wait on the
+  // privacy-utils import — installPrivacy() only needs `pu` a moment later.
   registerIpc();
   wireWebContents(); createWindow(); buildMenu();
+  await puPromise;
+  protectSessions(pu);
   await extensionManager.restore();
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 }).catch((err) => { log.error('Startup failed', err); dialog.showErrorBox('Vespera startup failed', `${err.stack || err}\n\nLog: ${log.getLogFile()}`); app.quit(); });
@@ -274,3 +289,6 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(
 app.on('before-quit', () => { persistPrefs(); windows.clear(); });
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 app.commandLine.appendSwitch('disable-features', 'Translate,MediaRouter');
+// Faster, quieter web views: no background throttling for visible tabs and
+// an instant-start renderer cache.
+app.commandLine.appendSwitch('enable-features', 'CalculateNativeWinOcclusion');

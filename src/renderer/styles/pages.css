@@ -528,8 +528,18 @@
 
 /* Home — a wallpaper-backed, live dashboard rather than an empty frame. */
 .newtab-page { --home-muted: #c0c9df; justify-content: flex-start; gap: 0; min-height: 100%; padding: 25px 42px 24px; color: #f4f6ff; background: #10182b; isolation: isolate; }
-.nt-wallpaper { position: absolute; inset: 0; z-index: -2; background-image: var(--wallpaper-image, url('../assets/twilight.jpg')); background-size: cover; background-position: center; }
-.nt-shade { position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(5,9,22,.08), rgba(5,9,22,.12) 40%, rgba(5,9,22,.72)), rgba(5,9,22,var(--wallpaper-dim, .4)); }
+.nt-wallpaper { position: absolute; inset: 0; z-index: -2; background-image: var(--wallpaper-image, url('../assets/twilight.jpg')); background-size: var(--wp-size, cover); background-position: var(--wp-pos, center); filter: var(--wp-filter, none); transition: filter var(--med), background-size var(--med), background-position var(--med); }
+/* Shade: a vertical scrim plus a soft centre vignette, so light wallpapers
+   never wash out the clock, headline or search field that sit on top. */
+.nt-shade { position: absolute; inset: 0; z-index: -1; background:
+    linear-gradient(180deg, rgba(5,9,22,.26) 0%, rgba(5,9,22,.14) 26%, rgba(5,9,22,.30) 62%, rgba(5,9,22,.74) 100%),
+    radial-gradient(ellipse 74% 48% at 50% 44%, rgba(5,9,22,.30), transparent 78%),
+    rgba(5,9,22,var(--wallpaper-dim, .4));
+  transition: background var(--med); }
+/* Gentle Ken-Burns breathing on the home wallpaper (disabled with reduced motion). */
+@keyframes wp-drift { from { transform: scale(1.04); } to { transform: scale(1.09) translate(-0.6%, -0.5%); } }
+[data-wallpaper="on"][data-wp-drift!="off"] .nt-wallpaper { animation: wp-drift 36s ease-in-out infinite alternate; will-change: transform; }
+@media (prefers-reduced-motion: reduce) { [data-wallpaper="on"] .nt-wallpaper { animation: none; } }
 [data-wallpaper="off"] .newtab-page { background: var(--bg); color: var(--text); --home-muted: var(--text-dim); }
 [data-wallpaper="off"] .nt-wallpaper, [data-wallpaper="off"] .nt-shade { display: none; }
 .nt-topline { display: flex; align-items: center; justify-content: space-between; width: 100%; position: relative; z-index: 1; }
@@ -538,12 +548,14 @@
 .nt-customize { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border: 1px solid #ffffff26; border-radius: 999px; background: #10182b66; color: inherit; font-size: 11px; cursor: pointer; backdrop-filter: blur(10px); }
 .nt-customize:hover { background: #ffffff20; border-color: #ffffff55; }
 .nt-customize svg { width: 13px; height: 13px; }
-.nt-hero { text-align: center; width: 100%; margin-top: clamp(22px, 5vh, 56px); }
+.nt-hero { text-align: center; width: 100%; margin-top: clamp(12px, 3.4vh, 38px); opacity: 1; }
+/* Text always carries its own shadow so it stays legible on bright images. */
+.nt-hero h1, .nt-welcome, .nt-clock .date { text-shadow: 0 2px 12px rgba(4,7,18,.75), 0 0 2px rgba(4,7,18,.6); }
 .nt-welcome { color: var(--home-muted); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; margin-bottom: 9px; }
 .nt-hero h1 { font-size: clamp(25px, 3vw, 34px); font-weight: 450; letter-spacing: -.035em; }
 .nt-hero h1 span { font-weight: 650; }
 .nt-clock { margin-top: 24px; }
-.nt-clock .time { display: block; font-size: clamp(52px, 6.5vw, 80px); font-weight: 250; letter-spacing: -.045em; line-height: 1.1; font-variant-numeric: tabular-nums; text-shadow: 0 3px 25px #00000020; }
+.nt-clock .time { display: block; font-size: clamp(52px, 6.5vw, 80px); font-weight: 250; letter-spacing: -.045em; line-height: 1.1; font-variant-numeric: tabular-nums; text-shadow: 0 4px 28px rgba(4,7,18,.85), 0 1px 3px rgba(4,7,18,.65); }
 .nt-clock .date { margin-top: 8px; color: var(--home-muted); font-size: 13px; }
 .nt-search { width: min(610px, 100%); margin: 27px auto 0; }
 .nt-search .omnibox { height: 52px; padding: 0 8px 0 18px; border-radius: 16px; border: 1px solid #ffffff30; background: rgba(13,20,39,.76); backdrop-filter: blur(18px); box-shadow: 0 8px 32px #00000020; }
@@ -556,8 +568,9 @@
 .nt-go svg { width: 16px; height: 16px; }
 .nt-search-note { display: flex; align-items: center; justify-content: center; gap: 5px; margin-top: 10px; color: var(--home-muted); font-size: 10px; }
 .nt-search-note svg { width: 10px; height: 10px; }
-.nt-shortcuts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; width: min(920px, 100%); margin-top: 33px; }
-.nt-shortcut { display: flex; align-items: center; gap: 11px; padding: 16px 13px; text-align: left; color: inherit; background: rgba(16,24,44,.72); border: 1px solid #ffffff1c; border-radius: 14px; cursor: pointer; backdrop-filter: blur(14px); transition: transform .18s ease, background .18s ease, border-color .18s ease; min-width: 0; }
+.nt-shortcuts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; width: min(920px, 100%); margin-top: 26px; }
+.nt-shortcut { display: flex; align-items: center; gap: 11px; padding: 16px 13px; text-align: left; color: inherit; background: rgba(16,24,44,.72); border: 1px solid #ffffff1c; border-radius: 14px; cursor: pointer; backdrop-filter: blur(14px); transition: transform .18s ease, background .18s ease, border-color .18s ease; min-width: 0; animation: nt-rise .5s var(--ease) both; animation-delay: calc(var(--i, 0) * 55ms); }
+@keyframes nt-rise { from { opacity: 0; transform: translateY(12px); } }
 .nt-shortcut:hover { transform: translateY(-3px); background: rgba(29,40,66,.88); border-color: #ffffff45; }
 .shortcut-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; flex: none; }
 .shortcut-icon svg { width: 17px; height: 17px; }
@@ -569,7 +582,7 @@
 .nt-shortcut b { display: block; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
 .nt-shortcut small { display: block; color: #a6b3ce; font-size: 9.5px; margin-top: 4px; white-space: nowrap; }
 .shortcut-arrow { margin-left: auto; color: #9aa9c4; font-size: 12px; }
-.nt-recent { width: min(920px, 100%); margin-top: 26px; }
+.nt-recent { width: min(920px, 100%); margin-top: 20px; }
 .nt-section-label { color: var(--home-muted); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 10px; }
 .nt-recent-list { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 16px; }
 .nt-recent-list button { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 0; border-radius: 7px; background: #10182b55; color: inherit; font-size: 11px; cursor: pointer; min-width: 0; }
@@ -577,7 +590,7 @@
 .nt-recent-list svg { width: 12px; height: 12px; flex: none; opacity: .65; }
 .nt-recent-list span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nt-recent-list small { margin-left: auto; font-size: 9px; color: var(--home-muted); white-space: nowrap; }
-.nt-bottom { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 16px; width: 100%; margin-top: auto; padding-top: 32px; color: var(--home-muted); font-size: 10px; }
+.nt-bottom { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 16px; width: 100%; margin-top: auto; padding-top: 24px; color: var(--home-muted); font-size: 10px; }
 .nt-bottom span { display: inline-flex; align-items: center; gap: 6px; }
 .nt-bottom svg { width: 12px; height: 12px; }
 .nt-bottom b { color: inherit; font-size: 11px; }
@@ -620,6 +633,39 @@
 .wallpaper-dim { margin-top: 19px; font-size: 11px; color: var(--text-dim); }
 .wallpaper-dim input { flex: 1; accent-color: var(--accent); min-width: 60px; }
 .wallpaper-dim output { min-width: 34px; }
+
+/* ---- v0.1.6: wallpaper tiles + settings feedback ---- */
+.wallpaper-preview.custom { background: linear-gradient(135deg, #2b2f52, #4a3f6b 45%, #8b7cf6); position: relative; }
+.wallpaper-preview.custom.live { background-image: var(--wallpaper-image); background-size: cover; background-position: center; }
+.wallpaper-preview.custom:not(.live)::after {
+  content: 'yours'; position: absolute; inset: auto 0 6px; text-align: center;
+  font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.72);
+}
+.wallpaper-choice { transition: transform var(--fast), border-color var(--fast), box-shadow var(--fast); }
+.wallpaper-choice:hover { transform: translateY(-2px); }
+.wallpaper-choice.selected { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.wallpaper-choice:active { transform: scale(.97); }
+/* A toggle that just fired sends a soft ripple down its row. */
+@keyframes row-pulse { 0% { background-color: color-mix(in srgb, var(--accent) 18%, transparent); } 100% { background-color: transparent; } }
+.setting-row.row-pulse, .appearance-card.row-pulse { animation: row-pulse .62s var(--ease); border-radius: 12px; }
+/* Accent dots pop when chosen. */
+.accent-dot { transition: transform var(--fast), outline-color var(--fast); }
+.accent-dot:hover { transform: scale(1.12); }
+.accent-dot.selected { animation: dot-pop .34s var(--ease); }
+@keyframes dot-pop { 45% { transform: scale(1.28); } }
+/* Segmented controls slide their highlight instead of blinking it. */
+.segmented button { transition: background .24s var(--ease), color .24s var(--ease), transform .24s var(--ease); }
+.segmented button:active { transform: scale(.95); }
+.segmented button.active { animation: seg-in .26s var(--ease); }
+@keyframes seg-in { from { transform: scale(.9); opacity: .55; } to { transform: scale(1); opacity: 1; } }
+/* Switch thumb gets a little spring when it lands. */
+.switch input:checked + .track + .thumb { animation: thumb-snap .32s var(--ease); }
+@keyframes thumb-snap { 60% { transform: translateX(21px) scale(1.08); } }
+@media (prefers-reduced-motion: reduce) {
+  .wallpaper-choice, .accent-dot, .segmented button { transition: none; }
+  .setting-row.row-pulse, .appearance-card.row-pulse, .accent-dot.selected, .segmented button.active, .switch input:checked + .track + .thumb { animation: none; }
+  .nt-shortcut { animation: none; }
+}
 .segmented button svg { width: 13px; height: 13px; vertical-align: middle; }
 .about-mark { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
 .about-mark svg { width: 24px; height: 24px; }
@@ -724,8 +770,12 @@
 .nt-search.is-searching .omnibox { animation: search-launch .24s var(--ease); }
 .nt-search.is-searching .nt-go svg { animation: search-spin .45s var(--ease); }
 .nt-search.is-empty .omnibox { animation: search-shake .3s ease; border-color: #fb7185; }
-.nt-hero { animation: home-rise .45s var(--ease) both; }
-.nt-shortcut { animation: home-rise .4s var(--ease) both; animation-delay: calc(70ms + var(--i, 0) * 55ms); }
+/* Entrance animation. `backwards` (not `both`) so the element ends at its
+   natural opacity: if the animation never starts or is cancelled (hidden tab,
+   reduced motion, a reparent), the content is still visible instead of being
+   pinned to the 0% keyframe's opacity: 0. */
+.nt-hero { animation: home-rise .45s var(--ease) backwards; }
+.nt-shortcut { animation: home-rise .4s var(--ease) backwards; animation-delay: calc(70ms + var(--i, 0) * 55ms); }
 .nt-shortcut:active { transform: translateY(0) scale(.97); }
 @keyframes home-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes search-ripple { 0% { opacity: .9; transform: scale(.2); } 100% { opacity: 0; transform: scale(2.4); } }
@@ -825,3 +875,39 @@
   .hub-row > div, .account-actions > span { min-width: 0; }
   .hub-summary, .hub-controls, .hub-site, .hub-exceptions, .account-card { padding: 14px; }
 }
+
+/* ---------- Wallpaper editor ---------- */
+.wp-editor {
+  margin-top: 16px; padding: 14px 16px 16px;
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--glass); backdrop-filter: blur(14px);
+  max-height: 0; opacity: 0; overflow: hidden;
+  transition: max-height 280ms var(--ease), opacity 240ms var(--ease), margin 240ms var(--ease);
+  margin-top: 0;
+}
+.wp-editor.open { max-height: 720px; opacity: 1; margin-top: 16px; }
+.wp-editor-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; font-size: 13px; }
+.wp-editor-head b { display: inline-flex; align-items: center; gap: 7px; color: var(--text); }
+.wp-editor-head svg { width: 15px; height: 15px; color: var(--accent); }
+.wp-preview-wrap {
+  position: relative; height: 170px; border-radius: 12px; overflow: hidden;
+  border: 1px solid var(--border-strong); cursor: grab; touch-action: none;
+  transition: cursor var(--fast), box-shadow var(--fast);
+}
+.wp-preview-wrap.grabbing { cursor: grabbing; box-shadow: 0 0 0 2px var(--accent-soft); }
+.wp-preview-live { position: absolute; inset: 0; background-repeat: no-repeat; transition: background-position 60ms linear, filter 120ms linear; }
+.wp-hint {
+  position: absolute; left: 10px; bottom: 10px; z-index: 2;
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10px; padding: 4px 9px; border-radius: var(--r-pill);
+  background: rgba(5, 9, 22, .55); color: #fff; backdrop-filter: blur(6px);
+  pointer-events: none; opacity: .85; transition: opacity var(--fast);
+}
+.wp-hint svg { width: 11px; height: 11px; }
+.wp-preview-wrap.grabbing .wp-hint { opacity: 0; }
+.wp-slider { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 11px; color: var(--text-dim); }
+.wp-slider label { width: 74px; flex: none; }
+.wp-slider input { flex: 1; accent-color: var(--accent); }
+.wp-slider output { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+.wp-editor-foot { display: flex; align-items: center; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.wp-editor-foot .btn { font-size: 11px; padding: 6px 12px; }

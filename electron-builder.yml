@@ -11,14 +11,24 @@ productName: Vespera
 copyright: Copyright © 2026 Vespera Community
 executableName: Vespera
 electronVersion: 33.4.11
+# Use the Electron already installed in node_modules instead of downloading and
+# re-extracting a zip at build time. Besides being faster, this avoids the
+# Windows Defender filter-driver race that transiently locks the freshly
+# extracted default_app.asar during the .tmp staging rename (EBUSY build fails).
+electronDist: node_modules/electron/dist
 
 directories:
-  output: dist
+  output: release
   buildResources: build
 
-# No asar archive: files are packed unpacked on disk. Slightly larger install,
-# but module loading (CJS *and* ESM) is bulletproof in the packaged app.
-asar: false
+# Packed asar archive. On some machines (Malwarebytes' mbamchameleon driver)
+# an unpacked build fails: electron-builder must delete Electron's
+# resources/default_app.asar, and the AV holds that handle, so the pack step
+# dies with EBUSY. With asar: true the builder simply writes app.asar next to
+# it and never has to unlink the locked file.
+asar: true
+asarUnpack:
+  - "src/shared/**"   # required by dynamic import() of .mjs at runtime
 
 files:
   - electron/**/*

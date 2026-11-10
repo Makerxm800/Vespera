@@ -2,22 +2,20 @@
 import { icon } from '../icons.js';
 import { escapeHtml } from '../toasts.js';
 
-const RELEASES = 'https://github.com/Makerxm800/Vespera-beta/releases';
+const RELEASES = 'https://github.com/Makerxm800/Vespera/releases';
 const NOTES = [
-  ['Browser shell polish', 'A full-width tab row, drag-to-group tabs with editable names, native link and image context actions, recent downloads, and a clearer connection/site-information panel.'],
-  ['Keyboard and zoom fixes', 'Page-specific keys such as YouTube’s F key stay with the website; browser shortcuts now route from embedded pages, fullscreen requests work, and Ctrl+wheel zoom stays in sync.'],
-  ['Private browsing', 'Private windows start with a clear privacy explainer and do not save browsing history or sync activity. Cookies, site data and download history are cleared after the last private window closes; downloaded files remain on the device.'],
-  ['Local data backup', 'Download a JSON backup of settings, bookmarks and history from Settings. Passwords and session tokens are excluded.'],
-  ['Faster suggestions', 'Address-bar history and bookmark searches use cached lowercase indexes and frame-batched rendering.'],
-  ['Smoother tabs', 'Tabs animate when opened, closed, switched and reordered. Close buttons are softer, rounded and keyboard accessible.'],
-  ['Privacy Hub', 'A compact hub with live counters, working protection toggles, per-site exceptions and honest privacy notes.'],
-  ['Personal accounts', 'Smaller account controls with working email/password registration, sign-in, profile updates, sync and sign-out.'],
-  ['Live preview repairs', 'Usable tabs and window controls, Home clock, wallpapers, themes, right-click menus, animated search, downloads and built-in extensions.'],
-  ['Extension manager', 'A toolbar menu for installed extensions, quick access to extension management, and a safer unpacked-extension loading flow. Chrome Web Store extensions are not installed directly; compatibility depends on Electron support.'],
+  ['Settings is now a panel', 'Settings opens as a floating drawer over whatever you are doing — Ctrl+, toggles it, Escape closes it, and the section pills jump you around. No more navigating away to change a preference.'],
+  ['Wallpapers that stick', 'Uploading an image, switching presets and coming back to your custom wallpaper all work again, and the Custom tile stays put so your image is always one click away.'],
+  ['Tab groups you can actually drag', 'Dropping a tab in the middle of another one groups it (hold Alt to make the whole row a target), the drop target is highlighted, and grouped tabs are tinted in their group colour.'],
+  ['Pinned tabs got a menu', 'A pinned tab is only a few pixels wide, so it now shows a ⋮ that opens the full tab menu — pin, unpin, group, close and rename.'],
+  ['Collapsible sidebar', 'Hide the icon rail so pages and the home screen get the full width, then bring it back with the tab on the left edge or from the browser menu.'],
+  ['Extensions, sorted', 'The Extensions page is split into General, Built-in, Installed and Catalog, with buttons that open the Chrome Web Store and each extension’s download page in a new tab.'],
+  ['A calmer home', 'Tighter spacing, a staggered entrance for the shortcuts, and a full-width layout once the sidebar is hidden.'],
+  ['Google sign-in', 'Client hints are rewritten and the webview identity patched so Google no longer blocks the sign-in page.'],
 ];
 
 export function renderUpdates(container, ctx) {
-  const version = ctx.version?.() || '0.1.5';
+  const version = ctx.version?.() || '0.1.6';
   container.innerHTML = `
     <div class="page page-narrow updates-page">
       <header class="account-header"><span class="account-mark">${icon('sparkle')}</span><div><span class="eyebrow">RELEASE NOTES</span><h1 class="page-title">What’s new in Vespera</h1></div></header>
@@ -29,7 +27,7 @@ export function renderUpdates(container, ctx) {
       </section>
       <section class="card account-card">
         <div class="account-card-head"><h2>Earlier releases</h2></div>
-        <div class="release-links"><a href="${RELEASES}/tag/v0.1.4" target="_blank" rel="noopener noreferrer">v0.1.4 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.3" target="_blank" rel="noopener noreferrer">v0.1.3 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.2" target="_blank" rel="noopener noreferrer">v0.1.2 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.1" target="_blank" rel="noopener noreferrer">v0.1.1 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.0" target="_blank" rel="noopener noreferrer">v0.1.0 ${icon('external')}</a></div>
+        <div class="release-links"><a href="${RELEASES}/tag/v0.1.5" target="_blank" rel="noopener noreferrer">v0.1.5 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.4" target="_blank" rel="noopener noreferrer">v0.1.4 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.3" target="_blank" rel="noopener noreferrer">v0.1.3 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.2" target="_blank" rel="noopener noreferrer">v0.1.2 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.1" target="_blank" rel="noopener noreferrer">v0.1.1 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.0" target="_blank" rel="noopener noreferrer">v0.1.0 ${icon('external')}</a></div>
       </section>
     </div>`;
 }

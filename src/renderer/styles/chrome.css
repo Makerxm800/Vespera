@@ -22,7 +22,7 @@
   flex: none;
   padding: 0 10px;
   -webkit-app-region: drag;
-  background: var(--bg-2);
+  background: var(--titlebar-tint, var(--bg-2)), var(--bg-2);
   border-bottom: 1px solid var(--border);
 }
 .titlebar .no-drag { -webkit-app-region: no-drag; }
@@ -44,17 +44,19 @@
   filter: drop-shadow(0 0 6px var(--accent-soft));
 }
 
-/* Tab strip */
+/* Tab strip — floating rounded tabs */
 .tabstrip {
   display: flex;
-  align-items: flex-end;
-  gap: 3px;
+  align-items: center;
+  gap: 4px;
   flex: 1;
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
   height: 100%;
+  padding: 6px 2px;
+  box-sizing: border-box;
 }
 .tabstrip::-webkit-scrollbar { display: none; }
 
@@ -62,35 +64,34 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  min-width: 56px;
-  max-width: 210px;
-  height: calc(100% - 8px);
+  min-width: 76px;
+  max-width: 240px;
+  height: 100%;
   padding: 0 8px 0 11px;
-  border-radius: 10px 10px 0 0;
+  border-radius: 11px;
   border: 1px solid transparent;
-  border-bottom: none;
   background: transparent;
   color: var(--text-dim);
   cursor: default;
   position: relative;
   transition: background var(--fast), color var(--fast), max-width var(--med);
   overflow: hidden;
-  flex: 0 1 205px;
+  flex: 0 1 230px;
 }
 .tab:hover { background: var(--surface-2); color: var(--text); }
 .tab.active {
   background: var(--surface);
   color: var(--text);
-  border-color: var(--border);
-  box-shadow: 0 -6px 20px rgba(2, 4, 14, .18);
-  flex: 0 1 235px;
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-soft);
+  flex: 0 1 250px;
 }
 .tab.active::after {
   content: "";
   position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 0;
+  left: 14px;
+  right: 14px;
+  bottom: 3px;
   height: 2px;
   border-radius: 2px;
   background: linear-gradient(90deg, transparent, var(--accent), transparent);
@@ -139,7 +140,7 @@
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .newtab-btn {
-  margin-bottom: 4px;
+  margin-bottom: 0;
   flex: none;
   border: none;
   background: transparent;
@@ -347,7 +348,7 @@ body.electron .window-controls { display: flex; }
   align-items: center;
   gap: 8px;
   padding: 7px 9px;
-  border-radius: var(--r-md);
+  border-radius: 10px;
   color: var(--text-dim);
   cursor: default;
   border: 1px solid transparent;
@@ -359,17 +360,19 @@ body.electron .window-controls { display: flex; }
 .vtab.active {
   background: var(--surface);
   color: var(--text);
-  border-color: var(--border);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-soft);
 }
 .vtab.active::before {
   content: "";
   position: absolute;
-  left: 0;
-  top: 8px;
-  bottom: 8px;
+  left: 3px;
+  top: 9px;
+  bottom: 9px;
   width: 3px;
   border-radius: 3px;
   background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-soft);
 }
 .vtab .favicon { width: 15px; height: 15px; flex: none; display: grid; place-items: center; }
 .vtab .favicon img { width: 15px; height: 15px; border-radius: 3px; }
@@ -469,7 +472,9 @@ body.vertical-tabs .main-row .sidebar { display: flex; }
   display: flex;
   justify-content: center;
   padding-top: 12vh;
+  animation: palette-veil .16s var(--ease);
 }
+@keyframes palette-veil { from { opacity: 0; } to { opacity: 1; } }
 .palette {
   width: min(620px, 92vw);
   height: fit-content;
@@ -477,10 +482,16 @@ body.vertical-tabs .main-row .sidebar { display: flex; }
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow), 0 0 34px var(--accent-soft);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transform-origin: top center;
+  animation: palette-spring .3s var(--ease-out);
+}
+@keyframes palette-spring {
+  from { opacity: 0; transform: translateY(-16px) scale(.955); }
+  to { opacity: 1; transform: none; }
 }
 .palette .palette-input {
   display: flex;
@@ -488,8 +499,28 @@ body.vertical-tabs .main-row .sidebar { display: flex; }
   gap: 10px;
   padding: 15px 18px;
   border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--accent-soft), transparent 90%);
+  position: relative;
 }
-.palette .palette-input svg { width: 17px; height: 17px; color: var(--text-faint); }
+.palette .palette-input::after {
+  content: "";
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), transparent);
+  transform: scaleX(0);
+  transform-origin: left;
+  animation: palette-underline .55s var(--ease) .12s forwards;
+}
+@keyframes palette-underline { to { transform: scaleX(1); } }
+.palette .palette-input svg {
+  width: 17px;
+  height: 17px;
+  color: var(--accent);
+  animation: icon-orbit .7s var(--ease) .15s;
+}
 .palette input {
   flex: 1;
   border: none;
@@ -503,13 +534,57 @@ body.vertical-tabs .main-row .sidebar { display: flex; }
   display: flex;
   align-items: center;
   gap: 11px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-radius: var(--r-md);
   cursor: pointer;
   color: var(--text);
+  position: relative;
+}
+/* Stagger only on open — filtering re-renders rows and must not re-spark. */
+.palette-list.animate .palette-item {
+  animation: palette-row .26s var(--ease) backwards;
+  animation-delay: calc(var(--i, 0) * 22ms);
+}
+@keyframes palette-row {
+  from { opacity: 0; transform: translateY(7px) scale(.98); }
+  to { opacity: 1; transform: none; }
 }
 .palette-item:hover, .palette-item.selected { background: var(--surface-2); }
-.palette-item svg { width: 16px; height: 16px; color: var(--text-dim); flex: none; }
+.palette-item.selected::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 22%;
+  bottom: 22%;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--accent);
+  transform: scaleY(0);
+  animation: palette-bar .2s var(--ease) forwards;
+}
+@keyframes palette-bar { to { transform: scaleY(1); } }
+/* Colored icon badges — the tint differs between dark and light (tokens.css). */
+.palette-item .p-icon {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--pal-blue-bg);
+  color: var(--pal-blue);
+  transition: transform var(--fast), box-shadow var(--fast);
+}
+.palette-item .p-icon svg { width: 15px; height: 15px; }
+.palette-item .p-icon.t-gold { background: var(--pal-gold-bg); color: var(--pal-gold); }
+.palette-item .p-icon.t-violet { background: var(--pal-violet-bg); color: var(--pal-violet); }
+.palette-item .p-icon.t-blue { background: var(--pal-blue-bg); color: var(--pal-blue); }
+.palette-item .p-icon.t-teal { background: var(--pal-teal-bg); color: var(--pal-teal); }
+.palette-item .p-icon.t-rose { background: var(--pal-rose-bg); color: var(--pal-rose); }
+.palette-item:hover .p-icon, .palette-item.selected .p-icon {
+  transform: scale(1.1) rotate(-4deg);
+  box-shadow: 0 2px 10px rgba(2, 4, 14, .18);
+}
 .palette-item .p-title { font-size: 13.5px; font-weight: 550; }
 .palette-item .p-sub { font-size: 11.5px; color: var(--text-faint); }
 .palette-item .p-kbd {
@@ -517,11 +592,14 @@ body.vertical-tabs .main-row .sidebar { display: flex; }
   font-size: 10.5px;
   font-family: var(--font-mono);
   color: var(--text-faint);
+  background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 5px;
   padding: 2px 6px;
   flex: none;
+  transition: border-color var(--fast), color var(--fast);
 }
+.palette-item.selected .p-kbd { border-color: var(--border-strong); color: var(--text-dim); }
 
 /* ---------------- Toasts ---------------- */
 .toasts {
@@ -650,9 +728,37 @@ body.vertical-tabs .main-row .sidebar { display: flex; }
 body:not(.electron) .preview-banner { display: flex; }
 .preview-banner svg { width: 13px; height: 13px; color: var(--accent-2, var(--accent)); }
 
+/* Chrome Web Store helper banner (desktop only) — Google refuses installs outside Chrome. */
+.store-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  min-height: 38px;
+  padding: 6px 12px;
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.store-banner .store-banner-icon { display: grid; place-items: center; flex: none; color: var(--accent); }
+.store-banner .store-banner-icon svg { width: 16px; height: 16px; }
+.store-banner .store-banner-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.store-banner .store-banner-text b { font-size: 12px; color: var(--text); letter-spacing: .01em; }
+.store-banner .store-banner-text span { font-size: 11px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.store-banner .btn { flex: none; height: 28px; padding: 0 12px; font-size: 11.5px; gap: 6px; }
+.store-banner .btn svg { width: 13px; height: 13px; }
+.store-banner .soft-close { flex: none; width: 24px; height: 24px; }
+.store-banner .soft-close svg { width: 13px; height: 13px; }
+.store-banner.is-installing .btn { opacity: .75; pointer-events: none; }
+@media (max-width: 720px) {
+  .store-banner .store-banner-text span { white-space: normal; }
+  .store-banner { flex-wrap: wrap; }
+}
+
 /* Layout and interaction refinements */
 .titlebar { z-index: 5; }
-.tabstrip { -webkit-app-region: drag; align-items: flex-end; }
+.tabstrip { -webkit-app-region: drag; align-items: center; }
 .tab, .tab button, .newtab-btn, .window-controls { -webkit-app-region: no-drag; }
 .tab .close { opacity: .55; }
 .tab:hover .close, .tab.active .close, .tab .close:focus-visible { opacity: 1; }
@@ -766,7 +872,7 @@ body.focus-mode .sidebar, body.focus-mode .bookmarks-bar { display: none !import
   transform-origin: 50% 100%;
 }
 .tab.active::after { animation: tab-accent-in .24s var(--ease); }
-.vtab { transition: background var(--med), color var(--fast), border-color var(--med), transform var(--med); }
+.vtab { transition: background var(--med), color var(--fast), border-color var(--med), box-shadow var(--med), transform var(--med); }
 .vtab.active::before { animation: tab-marker-in .22s var(--ease); }
 .tab-enter { animation: tab-open .24s var(--ease) both; }
 .vtab.tab-enter { animation-name: vtab-open; }
@@ -828,8 +934,11 @@ body.focus-mode .sidebar, body.focus-mode .bookmarks-bar { display: none !import
 
  
 /* v0.1.5 browser shell refinements */
-.tabstrip .tab { flex: 1 1 230px; max-width: none; min-width: 90px; }
-.tabstrip .tab.active { flex: 1 1 250px; max-width: none; }
+/* Tabs size to content instead of stretching: a stretched inactive tab reads as
+   an empty gap in the strip (it has no background of its own). */
+.tabstrip .tab { flex: 0 1 230px; max-width: 240px; min-width: 90px; }
+.tabstrip .tab.active { flex: 0 1 250px; max-width: 260px; }
+.tabstrip .tab.pinned { flex: 0 0 54px; min-width: 44px; max-width: 54px; }
 .tab-group-label {
   display: inline-flex; align-items: center; gap: 5px; flex: none;
   max-width: 74px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -882,11 +991,210 @@ body.browser-fullscreen .content-col { height:100dvh; }
 .tab-group-name-input { width:100%; margin:2px 0 6px; padding:7px 10px; font-size:12px; }
 .tab-group-label { text-overflow:ellipsis; }
 
-/* Tab drag & drop: insertion marker + dimmed source tab (only visible while dragging). */
-.drop-indicator { position: absolute; z-index: 6; pointer-events: none; background: var(--accent); border-radius: 2px; }
+/* Tab drag & drop: insertion marker + clearly visible source tab (only while dragging). */
+.drop-indicator { position: absolute; z-index: 8; pointer-events: none; background: var(--accent); border-radius: 3px; box-shadow: 0 0 10px var(--accent); }
 .drop-indicator[hidden] { display: none; }
-.tabstrip > .drop-indicator { top: 6px; bottom: 6px; width: 3px; margin-left: -1.5px; }
+.tabstrip > .drop-indicator { top: 5px; bottom: 5px; width: 3px; margin-left: -1.5px; }
 .vtabs-list > .drop-indicator { left: 6px; right: 6px; height: 3px; margin-top: -1.5px; }
-.tab.dragging, .vtab.dragging { opacity: .4; }
+/* The tab being moved stays fully readable (dashed outline + lift) so you can
+   always see what you are dragging and where it will land. */
+.tab.dragging, .vtab.dragging {
+  opacity: 1;
+  background: var(--surface-2);
+  border-color: var(--accent);
+  border-style: dashed;
+  box-shadow: var(--shadow-soft);
+  color: var(--text);
+}
 .vtab.drag-over { outline: 2px dashed var(--accent); outline-offset: -2px; }
 .menu-item .kbd { margin-left: auto; }
+
+/* ============================================================
+   Twilight polish pass � smoother depth, motion & focus
+   ============================================================ */
+
+/* Perceptual fluidity: tabs, buttons and cards animate on GPU-composited
+   properties only (transform/opacity) so hover feedback never jank-frames. */
+.tab,
+.icon-btn,
+.newtab-btn,
+.window-controls button,
+.omnibox {
+  will-change: auto;
+  contain: layout paint style;
+}
+
+/* -------- Icon micro-interactions -------------------------------------
+   Every tool icon reacts on hover: a springy pop as a base, plus a
+   personality per control (reload spins, back/forward nudge, home lifts…).
+   All motion stays inside the button box so `contain: paint` never clips it. */
+.icon-btn svg, .newtab-btn svg, .btn svg, .menu-item svg {
+  transition: transform var(--fast);
+  transform-origin: center;
+}
+.icon-btn:not(:active):hover svg,
+.newtab-btn:not(:active):hover svg {
+  animation: icon-pop .34s var(--ease);
+}
+@keyframes icon-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.22); }
+  100% { transform: scale(1); }
+}
+
+/* Active press = tactile sink */
+.icon-btn:active,
+.newtab-btn:active {
+  transform: scale(0.94);
+}
+.icon-btn:disabled:hover svg { animation: none; }
+
+/* Personality per toolbar tool */
+#btn-reload:hover svg { animation: icon-spin .5s var(--ease); }
+@keyframes icon-spin { from { transform: rotate(-110deg) scale(.78); opacity: .35; } 60% { transform: rotate(8deg) scale(1.05); opacity: 1; } to { transform: rotate(0) scale(1); } }
+#btn-back:hover svg { animation: icon-nudge-left .34s var(--ease); }
+#btn-forward:hover svg { animation: icon-nudge-right .34s var(--ease); }
+@keyframes icon-nudge-left { 40% { transform: translateX(-4px); } }
+@keyframes icon-nudge-right { 40% { transform: translateX(4px); } }
+#btn-home:hover svg { animation: icon-lift .42s var(--ease); }
+@keyframes icon-lift { 40% { transform: translateY(-3px) scale(1.08); } }
+#btn-shields:hover svg { animation: icon-shield .48s var(--ease); }
+@keyframes icon-shield { 35% { transform: scale(1.2) rotate(-7deg); } 70% { transform: scale(1.06) rotate(4deg); } }
+#btn-extensions:hover svg { animation: icon-swing .48s var(--ease); transform-origin: top center; }
+@keyframes icon-swing { 30% { transform: rotate(-9deg); } 65% { transform: rotate(7deg); } }
+#btn-downloads:hover svg { animation: icon-drop .46s var(--ease); }
+@keyframes icon-drop { 40% { transform: translateY(4px); } 70% { transform: translateY(-1px); } }
+#btn-bookmark:hover svg { animation: icon-flip .42s var(--ease); }
+@keyframes icon-flip { 45% { transform: scale(1.24) rotate(10deg); } }
+#btn-palette:hover svg { animation: icon-orbit .55s var(--ease); }
+@keyframes icon-orbit { 40% { transform: rotate(-14deg) scale(1.16); } 75% { transform: rotate(7deg) scale(1.04); } }
+#btn-menu:hover svg { animation: icon-bob .4s var(--ease); }
+@keyframes icon-bob { 35% { transform: translateY(-2.5px); } 70% { transform: translateY(2.5px); } }
+.newtab-btn:hover svg { animation: icon-plus .4s var(--ease); }
+@keyframes icon-plus { 45% { transform: rotate(45deg) scale(1.18); } 100% { transform: rotate(0) scale(1); } }
+.rail .icon-btn:hover svg { animation: icon-pop .34s var(--ease); }
+.btn:not(:disabled):hover svg { animation: icon-pop .34s var(--ease); }
+
+/* Tab close button rotates on hover — a tiny bit of playfulness */
+.tab .close:hover svg { transform: rotate(90deg); transition: transform 180ms var(--ease); }
+
+/* Omnibox glow deepens while focused */
+.omnibox:focus-within {
+  box-shadow: 0 0 0 3px var(--accent-soft), 0 8px 26px rgba(2, 4, 14, .28);
+}
+
+/* Suggestions float in */
+.suggestions { animation: suggestion-in 150ms var(--ease); transform-origin: top center; }
+@keyframes suggestion-in { from { opacity: 0; transform: translateY(-4px) scale(.985); } to { opacity: 1; transform: none; } }
+
+/* Toolbar buttons get a hairline divider rhythm */
+.toolbar { gap: 4px; }
+
+/* Softer global focus ring for keyboard users */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 6px; }
+
+/* Status bar uses mono numerals for zoom + tab counts */
+.status-bar, .status-bar span { font-variant-numeric: tabular-nums; }
+
+/* Reduced-motion users get none of the above animation */
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn svg, .tab .close svg, .suggestions, .icon-btn, .newtab-btn, .btn svg, .menu-item svg { transition: none !important; animation: none !important; }
+}
+
+/* ============================================================
+   v0.1.6 — collapsible rail, tab groups, pinned tabs,
+   floating settings panel
+   ============================================================ */
+
+/* ---- Collapsible icon rail (horizontal tabs) ---- */
+/* The sidebar is laid out by `body:not(.vertical-tabs) .main-row .sidebar`,
+   so this rule has to match that specificity to actually win. */
+body.rail-hidden .main-row .sidebar { display: none; }
+.rail-reveal {
+  position: fixed; left: 0; top: 50%; transform: translateY(-50%);
+  z-index: 6; width: 24px; height: 48px; padding: 0;
+  display: grid; place-items: center;
+  border: 1px solid var(--border); border-left: 0;
+  border-radius: 0 12px 12px 0;
+  background: var(--surface); color: var(--text-dim);
+  opacity: .62; cursor: pointer;
+  transition: opacity var(--fast), transform var(--fast), color var(--fast), background var(--fast);
+}
+.rail-reveal[hidden] { display: none; }
+.rail-reveal:hover { opacity: 1; color: var(--accent); background: var(--surface-2); transform: translateY(-50%) translateX(4px); }
+.rail-reveal svg { width: 14px; height: 14px; }
+
+/* ---- Tab groups: the drop target is obvious in both layouts ---- */
+.tab.drag-over { outline: 2px dashed var(--accent); outline-offset: -2px; }
+.tab.grouped { background: color-mix(in srgb, var(--tab-group-color, var(--accent)) 9%, transparent); }
+.tab.grouped:hover { background: color-mix(in srgb, var(--tab-group-color, var(--accent)) 15%, transparent); }
+.tab.grouped.active { background: var(--surface-2); }
+
+/* ---- Pinned tabs: compact, with a ⋮ that opens the tab menu ---- */
+.tabstrip .tab.pinned { flex: 0 0 62px; min-width: 54px; max-width: 62px; padding: 0 5px; gap: 4px; justify-content: center; }
+.tab.pinned .title, .tab.pinned .close, .tab.pinned .pin-marker { display: none; }
+.tab-more {
+  width: 20px; height: 24px; flex: none; display: grid; place-items: center;
+  border: 0; background: transparent; color: var(--text-faint);
+  border-radius: 6px; cursor: pointer; padding: 0; opacity: .7;
+  transition: opacity var(--fast), background var(--fast), color var(--fast), transform var(--fast);
+}
+.tab-more svg { width: 14px; height: 14px; }
+.tab-more:hover { opacity: 1; background: var(--surface-3); color: var(--text); transform: scale(1.08); }
+.tab-more:active { transform: scale(.9); }
+.tab.pinned:hover .tab-more, .tab.pinned.active .tab-more { opacity: 1; }
+/* A pinned tab is too narrow for the group name — show the colour dot only. */
+.tab.pinned .tab-group-label { max-width: 10px; padding: 2px; font-size: 0; gap: 0; }
+
+/* ============================================================
+   Floating settings panel — a UI you toggle, not a page you visit.
+   The layer never blocks the page: only the panel itself takes
+   pointer events, so you can keep browsing with Settings open.
+   ============================================================ */
+.settings-layer { position: fixed; inset: 0; z-index: 90; display: flex; justify-content: flex-end; pointer-events: none; }
+.settings-scrim {
+  position: absolute; inset: 0;
+  background: rgba(4, 7, 16, .34); backdrop-filter: blur(2px);
+  opacity: 0; transition: opacity .26s var(--ease);
+  pointer-events: none;
+}
+.settings-layer.open .settings-scrim { opacity: 1; }
+.settings-panel {
+  position: relative; display: flex; flex-direction: column; pointer-events: auto;
+  width: min(530px, 100vw); height: 100%;
+  background: var(--bg); border-left: 1px solid var(--border-strong);
+  box-shadow: -30px 0 70px rgba(0, 0, 0, .45);
+  transform: translateX(103%);
+  transition: transform .36s cubic-bezier(.22, .9, .24, 1);
+}
+.settings-layer.open .settings-panel { transform: none; }
+.settings-head { display: flex; align-items: center; gap: 12px; flex: none; padding: 15px 18px; border-bottom: 1px solid var(--border); }
+.settings-mark { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 12px; background: var(--accent-soft); color: var(--accent); }
+.settings-mark svg { width: 18px; height: 18px; }
+.settings-head-copy { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.settings-head-copy b { font-size: 14.5px; letter-spacing: -.01em; }
+.settings-head-copy small { font-size: 11px; color: var(--text-faint); }
+.settings-pills {
+  display: flex; gap: 4px 6px; flex: none; flex-wrap: wrap; padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-pills button {
+  flex: none; border: 1px solid transparent; background: transparent;
+  color: var(--text-dim); font: inherit; font-size: 11.5px; font-weight: 600;
+  padding: 6px 10px; border-radius: 999px; cursor: pointer;
+  transition: background .2s var(--ease), color .2s var(--ease), border-color .2s var(--ease), transform .2s var(--ease);
+}
+.settings-pills button:hover { background: var(--surface-2); color: var(--text); transform: translateY(-1px); }
+.settings-pills button.active {
+  background: var(--accent-soft); color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+  transform: translateY(-1px);
+}
+.settings-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 18px 34px; scroll-behavior: smooth; }
+.settings-body .page { max-width: none; margin: 0; padding: 8px 0 0; }
+.settings-body .settings-heading, .settings-body .settings-nav { display: none; }
+.settings-body .section:first-of-type { margin-top: 14px; }
+.settings-body .section { scroll-margin-top: 8px; }
+@media (prefers-reduced-motion: reduce) {
+  .settings-panel, .settings-scrim, .settings-pills button { transition: none; }
+}

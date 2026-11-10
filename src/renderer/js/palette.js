@@ -2,6 +2,16 @@
 import { icon } from './icons.js';
 import { state } from './state.js';
 
+/** Icon → tint so every command gets a colored badge (colors live in tokens.css
+ *  and are deliberately different for the dark and light themes). */
+const ICON_TINT = {
+  search: 'gold', star: 'gold', sparkle: 'gold', heart: 'gold',
+  plus: 'violet', x: 'violet', refresh: 'violet', split: 'violet', move: 'violet', copy: 'violet',
+  trash: 'rose', warning: 'rose', shieldOff: 'rose',
+  palette: 'teal', eye: 'teal', eyeOff: 'teal', moon: 'teal', sun: 'teal', flask: 'teal', bolt: 'teal',
+};
+const tintOf = (name) => ICON_TINT[name] || 'blue';
+
 export function openPalette({ actions }) {
   closePalette();
   const overlay = document.createElement('div');
@@ -21,6 +31,7 @@ export function openPalette({ actions }) {
   const list = overlay.querySelector('#palette-list');
   let results = [];
   let sel = 0;
+  let firstRender = true;
 
   function compute(query) {
     const f = query.trim().toLowerCase();
@@ -36,9 +47,11 @@ export function openPalette({ actions }) {
   function render() {
     results = compute(q.value);
     sel = Math.min(sel, Math.max(0, results.length - 1));
+    list.classList.toggle('animate', firstRender);
+    firstRender = false;
     list.innerHTML = results.map((r, i) => `
-      <div class="palette-item ${i === sel ? 'selected' : ''}" data-i="${i}">
-        ${icon(r.icon || 'sparkle')}
+      <div class="palette-item ${i === sel ? 'selected' : ''}" data-i="${i}" style="--i:${i}">
+        <span class="p-icon t-${tintOf(r.icon)}">${icon(r.icon || 'sparkle')}</span>
         <div>
           <div class="p-title">${escape(r.title)}</div>
           ${r.sub ? `<div class="p-sub">${escape(r.sub)}</div>` : ''}

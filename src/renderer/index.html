@@ -73,7 +73,7 @@
     <div class="main-row" id="main-row">
       <nav class="sidebar" id="sidebar">
         <div class="vtabs" id="vtabs">
-          <div class="vtabs-head"><span>Your tabs <span class="chip" data-tab-count>1</span></span><button class="icon-btn" id="btn-newtab-vt" title="New tab" aria-label="New tab">+</button></div>
+          <div class="vtabs-head"><span>Your tabs <span class="chip" data-tab-count>1</span></span><span class="vtabs-head-actions"><button class="icon-btn" id="btn-hide-vt" title="Show tabs on top" aria-label="Show tabs on top"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg></button><button class="icon-btn" id="btn-newtab-vt" title="New tab" aria-label="New tab">+</button></span></div>
           <div class="vtabs-list" id="vtabs-list" role="tablist" aria-label="Browser tabs"></div>
           <div class="vtabs-foot" id="vtabs-foot"></div>
         </div>
@@ -86,6 +86,13 @@
           <button class="text-btn hidden" id="open-original">Open original ↗</button>
           <button class="icon-btn soft-close" id="dismiss-preview" title="Dismiss preview notice" aria-label="Dismiss preview notice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         </div>
+        <!-- Shown on Chrome Web Store pages: Google blocks "Add to Chrome" outside Chrome. -->
+        <div class="store-banner hidden" id="store-banner">
+          <span class="store-banner-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v3a2 2 0 01-2 2H4v4h3a2 2 0 012 2v3h4v-3a2 2 0 012-2h3V8h-3a2 2 0 01-2-2V3z"/><path d="M9 21h6v-3a2 2 0 012-2h3"/></svg></span>
+          <span class="store-banner-text"><b>Chrome Web Store</b><span id="store-banner-copy">Google only lets Chrome install extensions — Vespera can install this one for you.</span></span>
+          <button class="btn btn-primary" id="store-install"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/></svg> Install in Vespera</button>
+          <button class="icon-btn soft-close" id="store-dismiss" title="Dismiss" aria-label="Dismiss Chrome Web Store notice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        </div>
         <div class="toolbar-vt" id="toolbar-vt"></div>
         <div class="bookmarks-bar hidden" id="bookmarks-bar" aria-label="Bookmarks bar"></div>
         <div class="find-bar hidden" id="find-bar">
@@ -96,6 +103,7 @@
           <button class="icon-btn soft-close" id="find-close" title="Close find" aria-label="Close find"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         </div>
         <div class="content" id="content" role="tabpanel" aria-label="Active tab content"></div>
+        <button class="rail-reveal" id="btn-show-rail" hidden title="Show sidebar" aria-label="Show sidebar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M5.5 8h1M5.5 12h1"/></svg></button>
         <footer class="status-bar"><span id="page-status">Ready</span><span class="grow"></span><span id="zoom-status">100%</span><span><span data-tab-count>1</span> tabs</span><span id="runtime-status">Web preview</span></footer>
       </div>
     </div>

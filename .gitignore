@@ -1,0 +1,28 @@
+# Dependencies & build tooling
+node_modules/
+
+# Generated icons (recreated by `npm run icons`)
+build/
+
+# Local build / packaging output
+dist/
+dist-*/
+release/
+release-*/
+build-*/
+
+# Local service data — never commit accounts or the signing secret
+data/
+
+# Logs & scratch output
+*.log
+scripts/_qa/out/
+
+# Local one-off build/debug helpers (not part of the project)
+scripts/*.ps1
+electron-builder-win.yml
+.codegpt-game.json
+
+# OS noise
+.DS_Store
+Thumbs.db

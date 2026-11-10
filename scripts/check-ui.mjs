@@ -43,12 +43,16 @@ try {
     const image = await page.locator('.nt-wallpaper').evaluate((el) => getComputedStyle(el).backgroundImage.match(/url\("?([^"\)]+)/)?.[1]);
     assert.ok(image); assert.equal((await page.request.get(image)).status(), 200);
   });
-  await step('home search animates on focus/submit and right-click opens a page menu', async () => {
+  await step('home search animates on focus/submit and Settings opens as a panel', async () => {
     await page.locator('#nt-input').focus(); assert.match(await page.locator('#nt-search').getAttribute('class'), /is-focused/);
     await page.locator('#nt-go').click(); assert.match(await page.locator('#nt-search').getAttribute('class'), /is-empty/);
     await page.locator('#nt-input').fill('vespera://settings'); await page.locator('#nt-go').click();
     assert.match(await page.locator('#nt-search').getAttribute('class'), /is-searching/);
-    await page.waitForSelector('.settings-page'); await page.locator('#btn-back').click(); await page.waitForSelector('.nt-hero');
+    // Settings is a floating panel: it must not navigate the tab away from home.
+    await page.waitForSelector('.settings-layer .settings-page');
+    assert.equal(await page.locator('#btn-back').isDisabled(), true);
+    await page.keyboard.press('Escape'); await page.waitForSelector('.settings-layer', { state: 'detached' });
+    await page.waitForSelector('.nt-hero');
     await page.locator('.nt-hero h1').click({ button: 'right' }); assert.equal(await page.locator('.context-menu').count(), 1);
     assert.match(await page.locator('.context-menu').textContent(), /Customize home/); await page.keyboard.press('Escape');
   });
@@ -86,7 +90,8 @@ try {
   await step('menu toggles closed on the same anchor and opens Settings', async () => {
     await page.locator('#btn-menu').click(); assert.equal(await page.locator('.browser-menu').count(), 1);
     await page.locator('#btn-menu').click(); assert.equal(await page.locator('.browser-menu').count(), 0);
-    await menu('settings'); assert.match(await page.locator('#omni-input').inputValue(), /settings/);
+    await menu('settings'); assert.equal(await page.locator('.settings-layer').count(), 1);
+    assert.match(await page.locator('.settings-pills button.active').textContent(), /Appearance/);
   });
   await step('theme, accent, wallpaper, homepage and clock toggles persist', async () => {
     await page.locator('[data-segment="theme"] [data-v="light"]').click(); assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
@@ -97,16 +102,23 @@ try {
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('vespera.settings')));
     assert.equal(saved.theme, 'light'); assert.equal(saved.accent, 'teal'); assert.equal(saved.wallpaper.id, 'aurora'); assert.equal(saved.clock24, true); assert.equal(saved.homepage, 'vespera://welcome');
     await page.locator('#btn-home').click(); assert.match(await page.locator('.welcome-hero').textContent(), /Welcome to Vespera/);
-    await page.locator('#btn-back').click(); assert.match(await page.locator('#omni-input').inputValue(), /settings/);
+    await page.locator('#btn-back').click(); await page.waitForSelector('.nt-hero');
+    assert.equal(await page.locator('#omni-input').inputValue(), ''); // the new tab page leaves the address box empty
     await page.locator('#btn-forward').click(); assert.match(await page.locator('.welcome-hero').textContent(), /Welcome to Vespera/);
   });
   await step('vertical tabs retain a working omnibox; all four built-in extensions render', async () => {
     await go('vespera://settings'); await page.locator('[data-segment="tabLayout"] [data-v="vertical"]').click();
     assert.equal(await page.locator('#omni-input').count(), 1); assert.equal(await page.locator('#toolbar').isVisible(), true);
-    await go('vespera://extensions'); assert.equal(await page.locator('.extension-card').count(), 4);
+    // The panel overlays the page — close it before driving the page below.
+    await page.keyboard.press('Escape'); await page.waitForSelector('.settings-layer', { state: 'detached' });
+    await go('vespera://extensions');
+    assert.equal(await page.locator('#ext-grid .extension-card').count(), 4);
+    assert.ok(await page.locator('#catalog-grid .extension-card').count() > 0);
+    assert.ok(await page.locator('.settings-nav [data-section="catalog"]').count() === 1);
     await page.locator('[data-ext-toggle="focusMode"]').check(); assert.equal(await page.locator('#sidebar').isVisible(), false);
     await page.locator('[data-ext-toggle="focusMode"]').uncheck(); assert.equal(await page.locator('#sidebar').isVisible(), true);
     await go('vespera://settings'); await page.locator('[data-segment="tabLayout"] [data-v="horizontal"]').click();
+    await page.keyboard.press('Escape'); await page.waitForSelector('.settings-layer', { state: 'detached' });
   });
   await step('new, close and reopen tab keyboard controls', async () => {
     await page.keyboard.press('Control+t'); assert.equal(await page.locator('#tabstrip .tab').count(), 2);
@@ -217,15 +229,16 @@ try {
     await page.locator('#download-local-backup').click();
     const backup = await backupDownload;
     assert.ok(backup.suggestedFilename().startsWith('Vespera-Backup-') && backup.suggestedFilename().endsWith('.json'));
+    await page.keyboard.press('Escape'); await page.waitForSelector('.settings-layer', { state: 'detached' });
   });
   await step('release notes identify the running build and link to published installers', async () => {
     await menu('updates'); await page.waitForSelector('.updates-page');
-    assert.match(await page.locator('.updates-page').textContent(), /0\.1\.5/);
-    assert.match(await page.locator('.updates-page a[href*="releases"]').first().getAttribute('href'), /github\.com\/Makerxm800\/Vespera-beta\/releases/);
+    assert.match(await page.locator('.updates-page').textContent(), /0\.1\.6/);
+    assert.match(await page.locator('.updates-page a[href*="releases"]').first().getAttribute('href'), /github\.com\/Makerxm800\/Vespera\/releases/);
   });
   await step('session restores the active tab after a real reload', async () => {
-    await go('vespera://settings'); await page.waitForTimeout(250); const count = await page.locator('#tabstrip .tab').count();
-    await page.reload(); await page.waitForSelector('#tabstrip .tab.active'); assert.equal(await page.locator('#tabstrip .tab').count(), count); assert.match(await page.locator('#omni-input').inputValue(), /settings/);
+    await go('vespera://history'); await page.waitForTimeout(250); const count = await page.locator('#tabstrip .tab').count();
+    await page.reload(); await page.waitForSelector('#tabstrip .tab.active'); assert.equal(await page.locator('#tabstrip .tab').count(), count); assert.match(await page.locator('#omni-input').inputValue(), /history/);
   });
   await step('preview minimize/close are honest, reversible dock actions', async () => {
     await page.locator('#wc-min').click(); assert.equal(await page.locator('#app').isVisible(), false); await page.locator('#web-restore').click();

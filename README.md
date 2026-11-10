@@ -1,41 +1,56 @@
-# Vespera (Beta) Browser 🚀
+# Vespera Browser 🚀
 
-Im Very sorry i dont like to use AI on my serious projects so i try to vibe code it to test if its futur use and etc meta stuff :P
+> **A community-first Chromium browser built for privacy, speed and a calm interface.**
+> Real Chromium core · Twilight UI · zero telemetry · local-first accounts + sync · community-voted roadmap.
 
-> **A next-gen, community-first browser engineered for absolute privacy and superior performance.**
-> Real Chromium core · sleek Twilight UI · zero telemetry · accounts + sync · community-voted roadmap.
+Im very sorry, i don't like using AI on my serious projects — i built Vespera by hand to see where the whole vibe-code experiment is actually going. It turned into a browser i use every day, so here it is. :P
 
-Most mainstream browsers are designed to serve advertisers, hoard your data, or lock you into corporate ecosystems. **Vespera** completely flips the script. Built from the ground up to be private by default, it strips away telemetry and tracking bloat while offering a lightning-fast, beautifully designed experience crafted entirely for the community.
+**Current release: [v0.1.6](https://github.com/Makerxm800/Vespera/releases)** — Windows, macOS and Linux installers are published automatically from every `v*` tag.
 
 ---
 
-## ✨ Why Vespera Beats the Competition
+## ✨ What's new in 0.1.6
 
-* **🔒 Privacy by Default:** Zero sneaky data harvesting or telemetry. Your browsing habits belong to you, and nobody else.
-* **⚡ Blazing Fast & Lightweight:** Stripped of heavy corporate bloatware so your system resources go toward what *you* are doing, not background tracking.
-* **🎨 Community-Driven Design:** Built around what real users actually want—clean aesthetics, intuitive navigation, and zero annoying clutter.
-* **🌐 Open Source & Transparent:** No hidden code or backdoors. Inspect, verify, and contribute to how your browser operates.
+* **Settings is a floating panel** — press `Ctrl+,` (or click Settings in the sidebar) and it slides in over whatever you are doing. Escape closes it, the section pills jump you around, and you never navigate away from your page.
+* **Wallpapers that stick** — uploading, switching presets and coming back to your custom image all work again, the **Custom** tile stays in the grid, and the editor unlocks whenever you have an image stored.
+* **Tab groups by dragging** — drop a tab on the *middle* of another one to group it (hold `Alt` to make the whole row a target). Drop zones highlight, grouped tabs pick up their group colour.
+* **Pinned tabs got a ⋮** — a pinned tab is only 62px wide, so it shows a menu button instead of a title and close button: pin, unpin, group, rename, close.
+* **Collapsible sidebar** — hide the icon rail so the home screen and pages go full width; a tab on the left edge (or the browser menu) brings it back.
+* **Extensions, sorted** — General / Built-in / Installed / Catalog sections, with buttons that open the Chrome Web Store, GitHub and each extension's download page in a new tab.
+* **A calmer home** — tighter spacing, staggered shortcut entrance, full width once the sidebar is hidden.
+* **Google sign-in fixed** — client hints are rewritten on every request and the webview identity is patched, so Google no longer refuses the sign-in page.
 
-### What makes Vespera *different* from Chrome & other browsers
+Full details in [CHANGELOG.md](CHANGELOG.md) and in-app at **`vespera://updates`**.
+
+---
+
+## ✨ Why Vespera
+
+* **🔒 Privacy by default** — no telemetry, no data harvesting, no usage profiles. Your browsing belongs to you.
+* **⚡ Fast and light** — no background tracking pipelines; your CPU goes to the page you are reading.
+* **🎨 Built the way you want** — dark/light/system themes, four accent colors (or your own), wallpapers with zoom/position/blur tuning, horizontal or vertical tabs, collapsible sidebar.
+* **🌐 Open source** — inspect it, verify it, contribute to it.
+
+### How it compares
 
 | | Vespera | Chrome / mainstream |
 |---|---|---|
-| Telemetry | **Zero, permanently (switch is locked off)** | Constant usage & crash reporting |
+| Telemetry | **Zero, permanently (no switch to turn on)** | Constant usage & crash reporting |
 | Trackers & ads | **Blocked out of the box** | Allowed (it's the business model) |
-| Tracking links (utm/fbclid/gclid) | **Stripped automatically** | Kept and profiled |
-| Vertical tabs + command palette | **Built in** | Extensions or nothing |
-| Feature roadmap | **Voted by the community, in-app** | Decided in a boardroom |
-| Sync accounts | **Your own store, scrypt-hashed passwords** | Corporate identity lock-in |
+| Tracking links (`utm_*`, `fbclid`, `gclid`) | **Stripped automatically** | Kept and profiled |
+| Vertical tabs, tab groups, command palette | **Built in** | Extensions or nothing |
+| Feature roadmap | **Voted in-app by the community** | Decided in a boardroom |
+| Sync accounts | **Your own server, scrypt-hashed passwords** | Corporate identity lock-in |
 | Global Privacy Control + DNT | **Sent on every request** | Off by default |
-| Per-site shields panel | **One click, live counters** | Buried settings |
+| Per-site Shields | **One click, live counters** | Buried settings |
 
 ---
 
 ## 📥 Download & install — no commands needed
 
 Grab the installer for your machine from the
-**[Releases page](https://github.com/Makerxm800/Vespera-beta/releases)** and
-double-click it — exactly like any commercial browser:
+**[Releases page](https://github.com/Makerxm800/Vespera/releases)** and
+double-click it — exactly like any other browser:
 
 | Platform | File to download | How to install |
 |---|---|---|
@@ -60,6 +75,20 @@ double-click it — exactly like any commercial browser:
 The Windows installer is a **classic step-by-step wizard**: Welcome →
 choose folder → Install → **Finish with a "Run Vespera" checkbox** — tick it
 and the browser launches right away.
+
+### Everyday shortcuts
+
+| Action | Shortcut |
+|---|---|
+| Settings panel | `Ctrl+,` |
+| Command palette | `Ctrl+K` |
+| New tab / close tab / reopen closed | `Ctrl+T` / `Ctrl+W` / `Ctrl+Shift+T` |
+| Switch to tab 1–9 | `Ctrl+1` … `Ctrl+9` |
+| Move the current tab | `Ctrl+Shift+PageUp` / `PageDown`, or `Shift+←/→` |
+| Find in page | `Ctrl+F` |
+| Bookmarks bar / History | `Ctrl+Shift+B` / `Ctrl+H` |
+| Hide the sidebar | browser menu → **Hide sidebar** |
+| Toggle the Shields panel | click the shield in the toolbar |
 
 ### 🩺 If something goes wrong — read the logs
 
@@ -103,17 +132,16 @@ npm test
 # Run real Chromium UI checks (after npx playwright install chromium)
 npm run test:ui
 
-# Current release: 0.1.4 (desktop installers are published via GitHub Releases)
-
 # Build installers for your current platform (output in dist/)
 npm run dist
 ```
 
 **Requirements:** Node.js 20+ and npm. That's it.
+**Current release: 0.1.6** — desktop installers are published by CI whenever a `v*` tag is pushed (see [RELEASING.md](RELEASING.md)).
 
 ### Live web preview / installable app
 
-`npm run preview` serves the same browser UI at `http://localhost:4600`. In a hosted preview, Vespera runs directly in the browser: tabs, Home, right-click menus, settings, downloads, extensions and customization work without installing the desktop shell. The web app includes a manifest and app-shell cache, so supported browsers can offer **Install Vespera as an app** from the Vespera menu. Open **What’s new** (`vespera://updates`) for build notes and the published Releases link.
+`npm run preview` serves the same browser UI at `http://localhost:4600`. In a hosted preview, Vespera runs directly in the browser: tabs, Home, right-click menus, the Settings panel, downloads, extensions and customization work without installing the desktop shell. The web app includes a manifest and app-shell cache, so supported browsers can offer **Install Vespera as an app** from the Vespera menu. Open **What's new** (`vespera://updates`) for build notes and the published Releases link.
 
 The preview proxy is intentionally limited: some sites block embedding or are unreachable from the host environment. Use **Open original** for those sites. The Electron desktop app remains the full Chromium runtime.
 
@@ -121,44 +149,48 @@ The preview proxy is intentionally limited: some sites block embedding or are un
 
 ## 🗺️ Roadmap — shipped in this build
 
-- [x] **Core privacy engine optimization** — EasyList-subset filter engine with precompiled regexes and domain-bucketed matching (50k matches in milliseconds), tracking-parameter stripping, HTTPS upgrades, strict referrer policy, GPC/DNT headers.
-- [x] **Sleek, modern UI theme overhaul** — the *Twilight* design system: dark/light themes, four accent colors, glass panels, animated starfield, drag-reorder tabs (horizontal **or** vertical layout), unified omnibox with smart suggestions, command palette (`Ctrl+K`), full keyboard control.
-- [x] **Advanced built-in tracker and ad blocking** — bundled tracker/ad/annoyance blocklists enforced at the network layer in Chromium, live per-site shield counters, one-click site allowlist, Privacy Hub with real statistics and compact per-site controls.
-- [x] **Community feature-request voting system** — in-app board: post ideas, upvote/downvote, comment, track statuses (open → planned → in-progress → shipped). The most-voted ideas define what gets built next.
+- [x] **Core privacy engine** — EasyList-subset filter engine with precompiled regexes and domain-bucketed matching (50k matches in milliseconds), tracking-parameter stripping, HTTPS upgrades, strict referrer policy, GPC/DNT headers.
+- [x] **Twilight design system** — dark/light themes, four accent colors, glass panels, animated starfield, horizontal **or** vertical tabs, collapsible sidebar, unified omnibox with smart suggestions, command palette (`Ctrl+K`), full keyboard control.
+- [x] **Built-in tracker and ad blocking** — bundled tracker/ad/annoyance blocklists enforced at the network layer, live per-site shield counters, one-click site allowlist, Privacy Hub with real statistics.
+- [x] **Community feature voting** — in-app board: post ideas, upvote/downvote, comment, track statuses (open → planned → in-progress → shipped).
+- [x] **Tab groups with colors** — drag-to-group, group rename, tinted tabs, context-menu join/leave.
+- [x] **Extension compatibility layer** — install from a Chrome Web Store link, a `.zip`/`.crx` package or an unpacked folder, with permissions reviewed before anything loads.
 
 ### What's next (vote on these in `vespera://community`!)
 
 - [ ] End-to-end encrypted sync (passphrase-derived keys)
 - [ ] Split view (two pages, one tab)
 - [ ] Reader mode with typography controls
-- [ ] Tab groups with colors
-- [ ] Browser extension compatibility layer
+- [ ] Per-group tab suspension to save memory
 
 ---
 
 ## 🏗️ Architecture (for the curious)
 
 ```
-Vespera-beta/
+Vespera/
 ├── electron/           Real Chromium shell
 │   ├── main.js         Window, downloads, incognito, service boot
+│   ├── client-hints.js Client hint headers so sites see a real Chrome
+│   ├── webview-preload.js  Identity patch for embedded pages (Google sign-in)
 │   ├── privacy.js      Network blocking, GPC/DNT, link cleaning, cosmetic filters
 │   └── preload.js      contextIsolation bridge
 ├── src/
-│   ├── shared/         Privacy engine shared by all layers
+│   ├── shared/         Privacy + tab logic shared by every layer
 │   │   ├── filter-engine.js    EasyList-subset matcher (optimized core)
 │   │   ├── blocklists.js       Bundled tracker/ad/annoyance lists
+│   │   ├── tab-order.mjs       Pure drag-and-drop ordering (unit tested)
 │   │   └── privacy-utils.mjs   Link cleaning, search engines, omnibox logic
 │   └── renderer/       The Vespera chrome UI (vanilla ESM, zero frameworks)
 │       ├── styles/     Twilight design system (tokens, chrome, pages)
-│       └── js/         Tabs, omnibox, shields, palette, state + all pages
+│       └── js/         Tabs, omnibox, shields, palette, state, Settings panel + all pages
 ├── server/             Bundled local service (zero dependencies)
 │   ├── routes/         Accounts, sync, community voting API
 │   └── lib/            Auth (scrypt+HMAC), atomic JSON store, preview proxy
-├── scripts/            Icon generator + friendly postinstall
+├── scripts/            Icon generator, UI checks, friendly postinstall
 ├── electron-builder.yml            Installer config (win/mac/linux)
 ├── .github/workflows/release.yml   Automated multi-OS build & release
-└── test/               Unit/service tests: engine semantics, auth, store, benchmarks
+└── test/               Unit/service tests: engine semantics, auth, store, tab ordering
 ```
 
 * **Accounts** — scrypt-hashed passwords, HMAC-signed stateless tokens, rate limiting. Nothing leaves your machine.
@@ -171,7 +203,7 @@ Vespera-beta/
 
 Vespera is shaped by its users. Whether you want to write code, submit bug reports, or pitch new features, your voice matters here — literally: launch the browser, open **`vespera://community`**, and vote.
 
-Drop a star ⭐ to support the project, open an issue, and let’s build a better internet together!
+Drop a star ⭐ to support the project, open an issue, and let's build a better internet together!
 
 ---
 

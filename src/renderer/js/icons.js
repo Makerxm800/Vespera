@@ -45,8 +45,11 @@ export const icons = {
   keyboard: S('<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M9 14h6"/>'),
   logout: S('<path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>'),
   split: S('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/>'),
+  panel: S('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M5.5 8h1M5.5 12h1"/>'),
   link: S('<path d="M10 14a5 5 0 007.5.5l2-2a5 5 0 00-7-7l-1 1"/><path d="M14 10a5 5 0 00-7.5-.5l-2 2a5 5 0 007 7l1-1"/>'),
   send: S('<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/>'),
+  move: S('<path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/>'),
+  puzzle: S('<path d="M9 3v3a2 2 0 01-2 2H4v4h3a2 2 0 012 2v3h4v-3a2 2 0 012-2h3V8h-3a2 2 0 01-2-2V3z"/><path d="M9 21h6v-3a2 2 0 012-2h3"/>'),
 };
 
 export function icon(name, cls = '') {

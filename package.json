@@ -1,6 +1,6 @@
 {
   "name": "vespera-browser",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Vespera — a next-gen, community-first Chromium browser engineered for absolute privacy and superior performance.",
   "main": "electron/main.js",
   "type": "commonjs",
@@ -19,7 +19,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Makerxm800/Vespera-beta"
+    "url": "https://github.com/Makerxm800/Vespera"
   },
   "keywords": [
     "browser",

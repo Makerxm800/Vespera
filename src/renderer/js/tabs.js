@@ -5,6 +5,8 @@ import { safeTabUrl } from '../../shared/privacy-utils.mjs';
 import { computeDrop, clampedInsertion, moveTabAfter, moveIntoGroup, pinnedFirst } from '../../shared/tab-order.mjs';
 
 let nextId = 1;
+/** Pinned tabs are ~60px wide: they trade title + close for this ⋮ menu button. */
+const tabMoreHtml = (id) => `<button class="tab-more" data-more="${id}" title="Tab actions" aria-label="Tab actions"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></button>`;
 export function createTabModel(url = 'vespera://newtab', opts = {}) {
   return {
     id: 'tab' + nextId++, url, title: opts.title || 'New Tab', favicon: null,
@@ -37,7 +39,7 @@ export class TabManager {
       // Activate on mousedown so switching tabs feels instant, like a native browser.
       el?.addEventListener('mousedown', (e) => {
         if (e.button !== 0) return;
-        if (e.target.closest('[data-close]')) return; // closing must not steal focus first
+        if (e.target.closest('[data-close],[data-more]')) return; // closing must not steal focus first
         const row = e.target.closest('[data-id]');
         if (row && row.dataset.id !== this.activeId) this.activate(row.dataset.id);
       });
@@ -79,7 +81,7 @@ export class TabManager {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         this.autoScrollStrip(el, e);
-        this.updateDropTarget(el, e); // Alt held = drop onto a tab to group
+        this.updateDropTarget(el, e); // middle of a tab groups, edges reorder
       });
       el?.addEventListener('dragleave', (e) => {
         if (e.relatedTarget && el.contains(e.relatedTarget)) return;
@@ -130,8 +132,15 @@ export class TabManager {
     const vertical = list === this.vlist;
     const rows = this.stripRows(list);
     const coord = vertical ? e.clientY : e.clientX;
-    const drop = computeDrop(rows, coord, { allowGroup: Boolean(e.altKey) });
     const drag = this._drag;
+    // Dropping onto the middle of a tab groups it (Chrome behaviour); the
+    // leading/trailing thirds reorder. Holding Alt makes the whole row a
+    // group target so grouping never depends on a precise drop.
+    const drop = computeDrop(rows, coord, { allowGroup: true });
+    if (e.altKey && drop.mode === 'move') {
+      const over = rows.find((r) => coord >= r.start && coord <= r.start + r.extent);
+      if (over && over.id !== drag?.fromId) { drop.mode = 'group'; drop.id = over.id; }
+    }
     if (drag) { drag.list = list; drag.mode = drop.mode; drag.index = drop.mode === 'move' ? drop.index : -1; drag.targetId = drop.mode === 'group' ? drop.id : null; }
     for (const r of rows) r.el.classList.toggle('drag-over', drop.mode === 'group' && r.id === drop.id && r.id !== drag?.fromId);
     const indicator = this.ensureIndicator(list);
@@ -187,6 +196,16 @@ export class TabManager {
   handleClick(e) {
     const close = e.target.closest('[data-close]');
     if (close) { e.stopPropagation(); this.close(close.dataset.close); return; }
+    const more = e.target.closest('[data-more]');
+    if (more) {
+      // Pinned tabs are too narrow for a close button — a ⋮ opens their menu.
+      e.stopPropagation();
+      const host = more.closest('[data-id]');
+      if (!host) return;
+      const box = more.getBoundingClientRect();
+      this.onContextMenu?.(host.dataset.id, Math.round(box.left), Math.round(box.bottom + 6));
+      return;
+    }
     const row = e.target.closest('[data-id]');
     if (!row) return;
     if (row.dataset.id !== this.activeId) this.activate(row.dataset.id);
@@ -366,11 +385,16 @@ export class TabManager {
     const cls = vertical ? 'vtab' : 'tab';
     const grouped = Boolean(tab.groupId);
     const color = /^#[0-9a-f]{6}$/i.test(tab.groupColor) ? tab.groupColor : '#8b7cf6';
+    // A pinned tab is only a few pixels wide, so it gets a ⋮ that opens its
+    // menu (pin, close, group) instead of a title + close button.
+    const pinnedControl = tab.pinned
+      ? (vertical ? '<span class="pin-marker" aria-label="Pinned">•</span>' : tabMoreHtml(tab.id))
+      : '';
     return `<div class="${cls} ${tab.id === this.activeId ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${grouped ? 'grouped' : ''}" data-id="${tab.id}" data-group-id="${escapeHtml(tab.groupId || '')}" draggable="true" role="tab" tabindex="${tab.id === this.activeId ? 0 : -1}" aria-selected="${tab.id === this.activeId}" title="${escapeHtml(tab.title)}">
       <div class="favicon">${this.faviconHtml(tab)}</div>
       ${grouped ? `<span class="tab-group-label" style="--tab-group-color:${color}">${escapeHtml(tab.groupName || 'Group')}</span>` : ''}
       <div class="title">${escapeHtml(tab.title)}</div>
-      ${tab.pinned ? '<span class="pin-marker" aria-label="Pinned">•</span>' : ''}
+      ${pinnedControl}
       <button class="close" data-close="${tab.id}" title="Close tab" aria-label="Close ${escapeHtml(tab.title)}">${icon('x')}</button>
     </div>`;
   }
@@ -431,9 +455,13 @@ export class TabManager {
       }
       const close = row.querySelector('.close');
       if (close) { close.title = 'Close tab'; close.setAttribute('aria-label', `Close ${tab.title}`); }
+      // Pinned horizontal tabs swap their title/close for a ⋮ menu button.
+      const more = row.querySelector('.tab-more');
+      if (tab.pinned && !vertical && !more) close?.insertAdjacentHTML('beforebegin', tabMoreHtml(tab.id));
+      else if ((!tab.pinned || vertical) && more) more.remove();
       const pin = row.querySelector('.pin-marker');
-      if (tab.pinned && !pin) close?.insertAdjacentHTML('beforebegin', '<span class="pin-marker" aria-label="Pinned">•</span>');
-      else if (!tab.pinned && pin) pin.remove();
+      if (tab.pinned && vertical && !pin) close?.insertAdjacentHTML('beforebegin', '<span class="pin-marker" aria-label="Pinned">•</span>');
+      else if ((!tab.pinned || !vertical) && pin) pin.remove();
       ordered.push(row);
     }
     ordered.forEach((row, index) => {

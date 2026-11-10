@@ -171,6 +171,50 @@ function ruleSignature(line) {
   return (isException ? '@@' : '') + body + (opts.length ? '$' + opts.join(',') : '');
 }
 
+/*
+ * Fast hostname extraction.
+ *
+ * The hot path used to allocate a `new URL()` per request just to read the
+ * hostname — that is one of the slowest things you can do per network hit.
+ * Most request URLs are plain `scheme://host[:port]/path`, so we slice the
+ * host out with indexOf and memoize the result. Bounded cache keeps memory
+ * flat during long sessions.
+ */
+const HOST_CACHE = new Map();
+const HOST_CACHE_MAX = 8192;
+
+function extractHostRaw(url) {
+  const scheme = url.indexOf('://');
+  if (scheme === -1) {
+    try { return new URL(url).hostname.toLowerCase(); } catch { return ''; }
+  }
+  let start = scheme + 3;
+  let end = url.length;
+  for (let i = start; i < url.length; i++) {
+    const c = url.charCodeAt(i);
+    if (c === 47 /* / */ || c === 63 /* ? */ || c === 35 /* # */) { end = i; break; }
+  }
+  let seg = url.slice(start, end);
+  const at = seg.lastIndexOf('@');
+  if (at !== -1) seg = seg.slice(at + 1);
+  if (seg.charCodeAt(0) === 91 /* [ */) {
+    const close = seg.indexOf(']');
+    return close === -1 ? '' : seg.slice(1, close);
+  }
+  const colon = seg.indexOf(':');
+  if (colon !== -1) seg = seg.slice(0, colon);
+  return seg.toLowerCase();
+}
+
+function fastHost(url) {
+  let h = HOST_CACHE.get(url);
+  if (h !== undefined) return h;
+  h = extractHostRaw(url);
+  if (HOST_CACHE.size >= HOST_CACHE_MAX) HOST_CACHE.clear();
+  HOST_CACHE.set(url, h);
+  return h;
+}
+
 class Rule {
   constructor(raw, isException, pattern, optionStr) {
     this.raw = raw;
@@ -342,8 +386,8 @@ class FilterEngine {
     let hit = null;
 
     // 1) host-bucketed rules: try each parent domain of the request URL host.
-    try {
-      const host = new URL(url).hostname.toLowerCase();
+    const host = fastHost(lower);
+    if (host) {
       let node = host;
       while (true) {
         const bucket = this.hostBuckets.get(node);
@@ -357,7 +401,7 @@ class FilterEngine {
         if (dot === -1) break;
         node = node.slice(dot + 1);
       }
-    } catch { /* invalid URL — fall through to generic */ }
+    }
 
     // 2) generic rules
     if (!hit) {

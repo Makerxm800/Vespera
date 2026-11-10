@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS = {
   density: 'comfortable',        // comfortable | compact
   searchEngine: 'startpage',
   tabLayout: 'horizontal',       // horizontal | vertical
+  railHidden: false,             // hide the icon rail so pages get the full width
   homepage: 'vespera://newtab',
   showBookmarksBar: false,
   shields: {
@@ -29,6 +30,8 @@ export const DEFAULT_SETTINGS = {
   allowlist: {},                 // hostname -> true (shields off for that site)
   wallpaper: { type: 'builtin', id: 'twilight' },
   wallpaperDim: 40,
+  wallpaperAdjust: { zoom: 1, x: 50, y: 50, blur: 0, brightness: 100, saturation: 100 },
+  wallpaperDrift: true,
   showWallpaper: true,
   customAccent: '#f6b93b',
   clockSeconds: true,
@@ -272,5 +275,6 @@ export function applyAppearance() {
   }
   document.body.classList.toggle('vertical-tabs', s.tabLayout === 'vertical');
   document.body.classList.toggle('focus-mode', Boolean(s.extensions?.focusMode));
+  document.documentElement.dataset.wpDrift = s.wallpaperDrift === false ? 'off' : 'on';
   void applyWallpaper(s);
 }

@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('vespera', {
   permissions: { list: () => invoke('permissions:list'), reset: () => invoke('permissions:reset') },
   extensions: {
     list: () => invoke('extensions:list'), install: () => invoke('extensions:install'),
+    installFromStore: (url) => invoke('extensions:install-store', url),
     remove: (id) => invoke('extensions:remove', id),
   },
   on: (channel, fn) => {

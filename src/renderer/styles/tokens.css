@@ -16,8 +16,10 @@
   --r-xl: 22px;
   --r-pill: 999px;
   --ease: cubic-bezier(.22, .8, .28, 1);
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
   --fast: 140ms var(--ease);
   --med: 240ms var(--ease);
+  --slow: 420ms var(--ease-out);
 
   /* Sizing */
   --titlebar-h: 42px;
@@ -28,49 +30,76 @@
 
 /* ---------- Dark (default): twilight ---------- */
 [data-theme="dark"] {
-  --bg: #0a0e1c;
-  --bg-2: #0e1428;
-  --surface: #141c36;
-  --surface-2: #1a2444;
-  --surface-3: #212c52;
-  --glass: rgba(20, 28, 54, .72);
-  --border: rgba(150, 168, 224, .14);
-  --border-strong: rgba(150, 168, 224, .26);
-  --text: #e9edfb;
-  --text-dim: #9ba6c9;
-  --text-faint: #626d92;
-  --shadow: 0 12px 40px rgba(2, 4, 14, .55);
-  --shadow-soft: 0 4px 18px rgba(2, 4, 14, .38);
-  --glow: 0 0 22px rgba(246, 185, 59, .18);
-  --star: rgba(255, 255, 255, .8);
+  --bg: #0b0f1e;
+  --bg-2: #0f1529;
+  --surface: #161d38;
+  --surface-2: #1c2546;
+  --surface-3: #242e54;
+  --glass: rgba(22, 29, 56, .78);
+  --border: rgba(154, 172, 232, .13);
+  --border-strong: rgba(154, 172, 232, .27);
+  --text: #edf1ff;
+  --text-dim: #a2adD1;
+  --text-faint: #68739c;
+  --shadow: 0 14px 44px rgba(2, 4, 14, .60);
+  --shadow-soft: 0 4px 18px rgba(2, 4, 14, .44);
+  --glow: 0 0 24px rgba(246, 185, 59, .16);
+  --star: rgba(255, 255, 255, .85);
+  --titlebar-tint: linear-gradient(180deg, rgba(139, 124, 246, .07), transparent);
   color-scheme: dark;
 }
 
-/* ---------- Light: warm dawn ---------- */
+/* ---------- Light: clean porcelain with cool depth ---------- */
 [data-theme="light"] {
-  --bg: #f4f1ea;
-  --bg-2: #ebe7dd;
+  --bg: #f4f6fc;
+  --bg-2: #eaedf8;
   --surface: #ffffff;
-  --surface-2: #f3f0e9;
-  --surface-3: #e9e5da;
-  --glass: rgba(255, 255, 255, .8);
-  --border: rgba(35, 40, 66, .12);
-  --border-strong: rgba(35, 40, 66, .22);
-  --text: #232640;
-  --text-dim: #5d6280;
-  --text-faint: #9297b1;
-  --shadow: 0 12px 34px rgba(40, 40, 70, .14);
-  --shadow-soft: 0 3px 14px rgba(40, 40, 70, .10);
+  --surface-2: #f1f4fc;
+  --surface-3: #e4e9f7;
+  --glass: rgba(255, 255, 255, .84);
+  --border: rgba(26, 33, 72, .11);
+  --border-strong: rgba(26, 33, 72, .20);
+  --text: #1a1f3d;
+  --text-dim: #545c83;
+  --text-faint: #8b93b7;
+  --shadow: 0 12px 34px rgba(30, 38, 82, .13);
+  --shadow-soft: 0 3px 14px rgba(30, 38, 82, .10);
   --glow: 0 0 18px rgba(214, 154, 30, .16);
-  --star: rgba(35, 40, 66, .5);
+  --star: rgba(30, 38, 82, .6);
+  --titlebar-tint: linear-gradient(180deg, rgba(139, 124, 246, .06), transparent);
   color-scheme: light;
 }
 
 /* ---------- Accent variants ---------- */
-[data-accent="gold"]   { --accent: #f6b93b; --accent-2: #ffcf70; --accent-ink: #211703; --accent-soft: rgba(246,185,59,.15); }
+[data-accent="gold"]   { --accent: #f6b93b; --accent-2: #ffd583; --accent-ink: #211703; --accent-soft: rgba(246,185,59,.16); }
+[data-accent="ember"]  { --accent: #ff9f5a; --accent-2: #ffc394; --accent-ink: #241003; --accent-soft: rgba(255,159,90,.16); }
 [data-accent="violet"] { --accent: #8b7cf6; --accent-2: #b1a5ff; --accent-ink: #0e0a26; --accent-soft: rgba(139,124,246,.16); }
 [data-accent="teal"]   { --accent: #2dd4bf; --accent-2: #6ee7d5; --accent-ink: #03211c; --accent-soft: rgba(45,212,191,.15); }
 [data-accent="rose"]   { --accent: #fb7185; --accent-2: #fda4af; --accent-ink: #26060c; --accent-soft: rgba(251,113,133,.15); }
+
+/* On white surfaces the bright accents lose contrast, so light mode uses a
+   deepened tone of the same hue for text, icons and focus rings. */
+[data-theme="light"][data-accent="gold"]   { --accent: #c0820d; --accent-2: #e9a526; --accent-ink: #241a05; --accent-soft: rgba(192,130,13,.13); }
+[data-theme="light"][data-accent="ember"]  { --accent: #d1641a; --accent-2: #f0913f; --accent-ink: #2a1204; --accent-soft: rgba(209,100,26,.13); }
+[data-theme="light"][data-accent="violet"] { --accent: #6555d8; --accent-2: #8b7cf6; --accent-ink: #100c2b; --accent-soft: rgba(101,85,216,.13); }
+[data-theme="light"][data-accent="teal"]   { --accent: #0d9488; --accent-2: #2dd4bf; --accent-ink: #03211c; --accent-soft: rgba(13,148,136,.13); }
+[data-theme="light"][data-accent="rose"]   { --accent: #dc4b62; --accent-2: #fb7185; --accent-ink: #2a070e; --accent-soft: rgba(220,75,98,.13); }
+
+/* ---------- Command palette icon tints (deliberately different per theme) ---------- */
+[data-theme="dark"] {
+  --pal-gold: #f6b93b;   --pal-gold-bg: rgba(246,185,59,.16);
+  --pal-violet: #a78bfa; --pal-violet-bg: rgba(167,139,250,.18);
+  --pal-blue: #6ea8fe;   --pal-blue-bg: rgba(110,168,254,.18);
+  --pal-teal: #2dd4bf;   --pal-teal-bg: rgba(45,212,191,.16);
+  --pal-rose: #fb7185;   --pal-rose-bg: rgba(251,113,133,.18);
+}
+[data-theme="light"] {
+  --pal-gold: #b07a0a;   --pal-gold-bg: rgba(176,122,10,.13);
+  --pal-violet: #6555d8; --pal-violet-bg: rgba(101,85,216,.13);
+  --pal-blue: #2f66d8;   --pal-blue-bg: rgba(47,102,216,.12);
+  --pal-teal: #0d8a7f;   --pal-teal-bg: rgba(13,138,127,.13);
+  --pal-rose: #d1455c;   --pal-rose-bg: rgba(209,69,92,.12);
+}
 
 /* ---------- Density ---------- */
 [data-density="compact"] {

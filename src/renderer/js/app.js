@@ -24,6 +24,8 @@ import { renderLogs } from './pages/logs.js';
 import { renderExtensions } from './pages/extensions.js';
 import { renderReader, renderSearch, renderNotFound } from './pages/tools.js';
 import { renderUpdates } from './pages/updates.js';
+import { bridge } from './app-bridge.js';
+import { openSettingsPanel, closeSettingsPanel, settingsPanelOpen } from './settings-panel.js';
 
 const PAGE_RENDERERS = {
   'vespera://newtab': renderNewtab, 'vespera://private': renderPrivate, 'vespera://welcome': renderWelcome,
@@ -38,6 +40,7 @@ const PAGE_RENDERERS = {
 let tabs, omnibox, saveTimer, previewRestricted = false, serviceVersion = '';
 let previousDark = false;
 let installPrompt = null;
+let storeDismissed = null;
 const contentEl = document.getElementById('content');
 const $ = (id) => document.getElementById(id);
 const diagnostics = [];
@@ -56,7 +59,11 @@ function navigate(input, opts = {}) {
     url = 'vespera://search?q=' + encodeURIComponent(target.value);
   }
   if (!safeTabUrl(url)) return toast('That address is not a safe web page. Use an http:// or https:// address.', 'error');
-  const sh = state.settings.shields;
+  // Settings is a floating panel, not a page you navigate away to.
+  if (isInternal(url) && internalPageKey(url) === 'vespera://settings') {
+    openSettingsPanel(url.includes('#') ? url.split('#')[1] : '');
+    return;
+  }  const sh = state.settings.shields;
   if (sh.enabled && sh.cleanLinks && !isInternal(url)) {
     const clean = cleanTrackingParams(url);
     if (clean.removed.length) { tab.shields.cleaned += clean.removed.length; state.recordBlock('link', hostOf(clean.url)); url = clean.url; }
@@ -67,6 +74,11 @@ function navigate(input, opts = {}) {
   openInTab(tab, url);
 }
 
+/** Settings is a panel: the buttons that open it also close it. */
+function toggleSettings(section = '') {
+  if (settingsPanelOpen() && !section) { closeSettingsPanel(); return; }
+  openSettingsPanel(section);
+}
 function disposeView(tab) {
   clearTimeout(tab.loadTimer);
   try { tab.pageCleanup?.(); } catch (err) { diagnostic(err.message); }
@@ -180,7 +192,59 @@ function updateChromeFor(tab) {
   $('zoom-status').textContent = Math.round(tab.zoom * 100) + '%';
   $('open-original').classList.toggle('hidden', tab._internal);
   if (!tab._internal) $('open-original').href = tab.url;
-  document.querySelectorAll('[data-nav]').forEach((el) => el.classList.toggle('active', tab._internal && el.dataset.nav === internalPageKey(tab.url)));
+  document.querySelectorAll('[data-nav]').forEach((el) => el.classList.toggle('active',
+    (tab._internal && el.dataset.nav === internalPageKey(tab.url)) || (el.dataset.nav === 'vespera://settings' && settingsPanelOpen())));
+  syncStoreBanner(tab);
+}
+/** Chrome Web Store detail URLs carry a 32-character extension id in the path. */
+function storeExtId(url) {
+  const value = String(url || '');
+  const match = value.match(/chromewebstore\.google\.com\/detail\/[^/?#]*\/([a-p]{32})/i)
+    || value.match(/chromewebstore\.google\.com\/([a-p]{32})/i)
+    || value.match(/chrome\.google\.com\/webstore\/detail\/[^/?#]*\/([a-p]{32})/i);
+  return match ? match[1].toLowerCase() : null;
+}
+/**
+ * Google's store refuses to install anything outside Chrome ("Download Chrome"
+ * is its only suggestion), so on a detail page Vespera offers the install itself.
+ */
+function syncStoreBanner(tab) {
+  const banner = document.getElementById('store-banner');
+  if (!banner) return;
+  const id = (platform.isElectron && !state.private) ? storeExtId(tab?.url) : null;
+  const show = Boolean(id) && storeDismissed !== id;
+  banner.classList.toggle('hidden', !show);
+  if (!show) return;
+  const title = tab?.title && !/^https?:/i.test(tab.title) ? tab.title : '';
+  document.getElementById('store-banner-copy').textContent = title
+    ? `“${title}” cannot be added from this page — Google only lets Chrome install extensions. Vespera can install it for you.`
+    : 'Google only lets Chrome install extensions — Vespera can install this one for you.';
+}
+async function installFromStorePage() {
+  const tab = tabs.active;
+  const id = storeExtId(tab?.url);
+  const banner = document.getElementById('store-banner');
+  const btn = document.getElementById('store-install');
+  if (!id || !btn || btn.disabled) return;
+  banner.classList.add('is-installing');
+  btn.disabled = true;
+  btn.textContent = 'Downloading…';
+  try {
+    const result = await window.vespera.extensions.installFromStore(tab.url);
+    if (result.ok) {
+      storeDismissed = id;
+      banner.classList.add('hidden');
+      toast(`${result.name || 'Extension'} installed. It survives restarts.`, 'ok', 5000);
+    } else {
+      toast(result.message || 'This extension could not be installed.', 'error', 7000);
+    }
+  } catch (err) {
+    toast(err.message || 'This extension could not be installed.', 'error', 7000);
+  } finally {
+    banner.classList.remove('is-installing');
+    btn.disabled = false;
+    btn.innerHTML = `${icon('download')} Install in Vespera`;
+  }
 }
 async function applyPageExtensions(tab) {
   if (!platform.isWebview(tab.view)) return;
@@ -192,9 +256,17 @@ async function applyPageExtensions(tab) {
 }
 function positionTabUI() {
   const vertical = state.settings.tabLayout === 'vertical';
+  const railHidden = Boolean(state.settings.railHidden) && !vertical;
   document.body.classList.toggle('vertical-tabs', vertical);
+  document.body.classList.toggle('rail-hidden', railHidden);
   $('vtabs').classList.toggle('hidden', !vertical);
-  $('rail').classList.toggle('hidden', vertical);
+  $('rail').classList.toggle('hidden', vertical || railHidden);
+  // The layout toggle lives in whichever panel is currently visible.
+  document.querySelector('[data-vtabs]')?.classList.toggle('active', vertical);
+  const hideBtn = $('btn-hide-vt');
+  if (hideBtn) { hideBtn.title = vertical ? 'Show tabs on top' : 'Hide tab sidebar'; hideBtn.setAttribute('aria-label', hideBtn.title); }
+  const reveal = $('btn-show-rail');
+  if (reveal) { reveal.hidden = !railHidden; reveal.setAttribute('aria-expanded', String(!railHidden)); }
   const toolbar = $('toolbar');
   if (vertical) $('toolbar-vt').appendChild(toolbar);
   else $('app').insertBefore(toolbar, $('main-row'));
@@ -207,12 +279,14 @@ function buildRail() {
     ['vespera://downloads', 'download', 'Downloads'], ['vespera://settings', 'gear', 'Settings'],
     ['vespera://account', 'user', 'Account'],
   ];
-  $('rail').innerHTML = items.map(([url, ic, title], i) => `${i === 4 || i === 7 ? '<div class="rail-sep"></div>' : ''}<button class="icon-btn" data-nav="${url}" title="${title}" aria-label="${title}">${icon(ic)}</button>`).join('');
+  $('rail').innerHTML = items.map(([url, ic, title], i) => `${i === 4 || i === 7 ? '<div class="rail-sep"></div>' : ''}<button class="icon-btn" data-nav="${url}" title="${title}" aria-label="${title}">${icon(ic)}</button>${i === 1 ? `<button class="icon-btn" data-vtabs title="Tab sidebar" aria-label="Toggle tab sidebar">${icon('panel')}</button>` : ''}`).join('')
+    + `<div class="rail-sep"></div><button class="icon-btn" data-rail-collapse title="Hide sidebar" aria-label="Hide sidebar">${icon('panel')}</button>`;
   $('vtabs-foot').innerHTML = items.filter(([url]) => !['vespera://newtab', 'vespera://community'].includes(url)).map(([url, ic, title]) => `<button class="vtab-nav" data-nav="${url}">${icon(ic)} ${title}</button>`).join('');
   document.querySelectorAll('[data-nav]').forEach((btn) => {
-    btn.addEventListener('click', () => navigate(btn.dataset.nav));
+    btn.addEventListener('click', () => (btn.dataset.nav === 'vespera://settings' ? toggleSettings() : navigate(btn.dataset.nav)));
     btn.addEventListener('auxclick', (e) => { if (e.button === 1) { e.preventDefault(); tabs.add(btn.dataset.nav); } });
   });
+  $('rail').querySelector('[data-rail-collapse]')?.addEventListener('click', () => state.set('railHidden', true));
 }
 function renderBookmarksBar() {
   const bar = $('bookmarks-bar');
@@ -371,7 +445,7 @@ function showContextMenu(tab, x, y, info = {}) {
       case 'customize': navigate('vespera://settings#appearance', { tab }); break;
       case 'copy-address': copyText(tab.url); break;
       case 'home': navigate(state.settings.homepage || 'vespera://newtab', { tab }); break;
-      case 'settings': navigate('vespera://settings', { tab }); break;
+      case 'settings': toggleSettings(); break;
     }
   });
 }
@@ -398,7 +472,7 @@ function openMenu(anchor) {
     ${item('find', 'search', 'Find in page', 'Ctrl+F')}${item('print', 'download', 'Print page', 'Ctrl+P')}
     <div class="menu-sep"></div>
     ${item('customize', 'palette', 'Customize Vespera')}${item('theme', s.theme === 'dark' ? 'sun' : 'moon', s.theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme')}
-    ${item('vertical', 'split', (s.tabLayout === 'vertical' ? '✓ ' : '') + 'Vertical tabs')}${item('bookbar', 'bookmark', (s.showBookmarksBar ? '✓ ' : '') + 'Bookmarks bar')}${item('focus', 'eye', (s.extensions.focusMode ? '✓ ' : '') + 'Focus mode')}
+    ${item('vertical', 'split', (s.tabLayout === 'vertical' ? '✓ ' : '') + 'Vertical tabs')}${item('railhide', 'panel', (s.railHidden && s.tabLayout !== 'vertical' ? '✓ ' : '') + 'Hide sidebar')}${item('bookbar', 'bookmark', (s.showBookmarksBar ? '✓ ' : '') + 'Bookmarks bar')}${item('focus', 'eye', (s.extensions.focusMode ? '✓ ' : '') + 'Focus mode')}
     <div class="menu-sep"></div>
     ${item('palette', 'keyboard', 'Command palette', 'Ctrl+K')}${item('privacy', 'shield', 'Privacy Hub')}${item('account', 'user', state.user ? 'Account · ' + escapeHtml(state.user.displayName) : 'Sign in / create account')}${item('settings', 'gear', 'Settings')}${item('updates', 'sparkle', 'What’s new')}${item('logs', 'flask', 'View logs')}${item('welcome', 'sparkle', 'Welcome & about')}
   `, { label: 'Vespera menu', className: 'menu browser-menu' });
@@ -412,10 +486,12 @@ function openMenu(anchor) {
       case 'newtab': tabs.add('vespera://newtab'); break;
       case 'install': if (installPrompt) { installPrompt.prompt(); const choice = await installPrompt.userChoice; if (choice.outcome === 'accepted') toast('Vespera is installing as an app.', 'ok'); installPrompt = null; } break;
       case 'private': if (platform.isElectron) window.vespera.window.incognito(); break;
-      case 'history': case 'bookmarks': case 'downloads': case 'extensions': case 'privacy': case 'account': case 'settings': case 'logs': case 'welcome': case 'updates': navigate('vespera://' + act); break;
+      case 'history': case 'bookmarks': case 'downloads': case 'extensions': case 'privacy': case 'account': case 'logs': case 'welcome': case 'updates': navigate('vespera://' + act); break;
+      case 'settings': toggleSettings(); break;
       case 'customize': navigate('vespera://settings#appearance'); break;
       case 'theme': state.set('theme', document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); break;
       case 'vertical': state.set('tabLayout', s.tabLayout === 'vertical' ? 'horizontal' : 'vertical'); break;
+      case 'railhide': state.set('railHidden', !s.railHidden); break;
       case 'bookbar': state.set('showBookmarksBar', !s.showBookmarksBar); break;
       case 'focus': state.set('extensions.focusMode', !s.extensions.focusMode); break;
       case 'palette': openPalette({ actions: paletteActions() }); break;
@@ -568,8 +644,14 @@ function wireKeyboard() {
   document.addEventListener('keydown', (e) => {
     const mod = e.ctrlKey || e.metaKey, key = e.key.toLowerCase();
     const field = /^(input|textarea|select)$/i.test(e.target.tagName) || e.target.isContentEditable;
-    if (e.key === 'Escape') { closePopover(); if (paletteOpen()) closePalette(); closeFind(); return; }
-    if (mod && e.shiftKey && key === 't') { e.preventDefault(); tabs.reopenClosed() || toast('No recently closed tabs.', 'info'); }
+    if (e.key === 'Escape') {
+      closePopover();
+      if (settingsPanelOpen()) closeSettingsPanel();
+      else { if (paletteOpen()) closePalette(); closeFind(); }
+      return;
+    }
+    else if (mod && !e.shiftKey && !e.altKey && key === ',') { e.preventDefault(); settingsPanelOpen() ? closeSettingsPanel() : openSettingsPanel(); }
+    else if (mod && e.shiftKey && key === 't') { e.preventDefault(); tabs.reopenClosed() || toast('No recently closed tabs.', 'info'); }
     else if (mod && e.shiftKey && key === 'n') { e.preventDefault(); if (platform.isElectron) window.vespera.window.incognito(); else toast('Private windows are available in the desktop app.', 'info'); }
     else if (mod && !e.shiftKey && !e.altKey && /^[1-9]$/.test(key)) { e.preventDefault(); tabShortcut('tab-' + key); }
     else if (mod && e.shiftKey && (e.key === 'PageUp' || e.key === 'PageDown')) { e.preventDefault(); tabShortcut(e.key === 'PageUp' ? 'tab-move-left' : 'tab-move-right'); }
@@ -604,6 +686,16 @@ function persistSession() {
 function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(persistSession, 150); }
 
 function boot() {
+  Object.assign(bridge, {
+    previewRestricted: () => previewRestricted,
+    version: () => serviceVersion,
+    navigate: (value, opts) => navigate(value, opts),
+    openTab: (value) => tabs.add(value),
+    refreshChrome: (rebuild) => { applyAppearance(); omnibox?.refreshEngine(); if (rebuild) { positionTabUI(); tabs.render(); } },
+    reader: () => openReader(),
+    download: downloadUrl,
+    settingsToggled: () => updateChromeFor(tabs.active),
+  });
   state.saveSettings(); applyAppearance();
   previousDark = state.settings.extensions.darkPages;
   wireWindowControls();
@@ -621,6 +713,11 @@ function boot() {
   $('btn-reload').onclick = () => { if (tabs.active?.loading) { platform.stop(tabs.active.view); tabs.update(tabs.active, { loading: false }); } else { reload(); focusPageSoon(); } };
   $('btn-home').onclick = () => navigate(state.settings.homepage || 'vespera://newtab');
   $('btn-newtab').onclick = $('btn-newtab-vt').onclick = () => tabs.add('vespera://newtab');
+  // Tab sidebar toggle: rail button when tabs are on top, header button when on the side.
+  const toggleTabLayout = () => state.set('tabLayout', state.settings.tabLayout === 'vertical' ? 'horizontal' : 'vertical');
+  $('rail').querySelector('[data-vtabs]')?.addEventListener('click', toggleTabLayout);
+  $('btn-hide-vt').onclick = toggleTabLayout;
+  $('btn-show-rail').onclick = () => { state.set('railHidden', false); $('rail').querySelector('[data-rail-collapse]')?.focus(); };
   $('btn-extensions').onclick = (e) => showExtensionsMenu(e.currentTarget);
   $('btn-bookmark').onclick = bookmarkActive;
   $('btn-palette').onclick = () => openPalette({ actions: paletteActions() });
@@ -634,6 +731,8 @@ function boot() {
   }, { passive: false });
   $('preview-details').onclick = (e) => openPopover(e.currentTarget, `<div class="menu-label">Vespera is running live</div><p class="popover-copy">Tabs, Home, search, settings, extensions, downloads and customization work right here — no setup needed. Some websites restrict embedded pages or are unreachable from this hosted environment; “Open original” visits them directly.</p><p class="popover-copy">Right-click pages, links and images for browser actions. Use the menu to install Vespera as a standalone app when your browser offers it.</p><button class="btn" data-dismiss>Got it</button>`, { className: 'popover info-popover', label: 'About this live browser' });
   $('dismiss-preview').onclick = () => $('preview-banner').classList.add('hidden');
+  $('store-install').onclick = () => installFromStorePage();
+  $('store-dismiss').onclick = () => { storeDismissed = storeExtId(tabs.active?.url); $('store-banner').classList.add('hidden'); };
   $('open-original').target = '_blank'; $('open-original').rel = 'noopener noreferrer';
   $('find-input').addEventListener('input', (e) => { $('find-count').textContent = ''; platform.find(tabs.active?.view, e.target.value); });
   $('find-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') platform.find(tabs.active?.view, e.target.value, { forward: !e.shiftKey, findNext: true }); });
