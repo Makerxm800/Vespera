@@ -58,7 +58,7 @@ Module.prototype.require = function (id) {
 };
 const { extractZip, findManifestDir } = require('../electron/extensions.js');
 
-test('extractZip unpacks a real zip (built in-test) and findManifestDir locates nested manifests', () => {
+test('extractZip unpacks a real zip (built in-test) and findManifestDir locates nested manifests', async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vespera-ext-test-'));
   try {
     const body = '// test content script '.repeat(2000);
@@ -70,14 +70,15 @@ test('extractZip unpacks a real zip (built in-test) and findManifestDir locates 
     ]));
 
     const dest = path.join(tmp, 'out');
-    return extractZip(zipPath, dest).then((dir) => {
-      assert.equal(dir, dest);
-      const manifestDir = findManifestDir(dest);
-      assert.ok(manifestDir, 'manifest dir found');
-      const manifest = JSON.parse(fs.readFileSync(path.join(manifestDir, 'manifest.json'), 'utf8'));
-      assert.equal(manifest.name, 'Test Ext');
-      assert.ok(fs.readFileSync(path.join(manifestDir, 'content.js'), 'utf8').includes('// test content script'));
-    });
+    // Await inside the try: returning the promise would let `finally` delete
+    // the zip before extractZip reads it (the file is read asynchronously).
+    const dir = await extractZip(zipPath, dest);
+    assert.equal(dir, dest);
+    const manifestDir = findManifestDir(dest);
+    assert.ok(manifestDir, 'manifest dir found');
+    const manifest = JSON.parse(fs.readFileSync(path.join(manifestDir, 'manifest.json'), 'utf8'));
+    assert.equal(manifest.name, 'Test Ext');
+    assert.ok(fs.readFileSync(path.join(manifestDir, 'content.js'), 'utf8').includes('// test content script'));
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
