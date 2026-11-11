@@ -97,6 +97,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.inputs.release_tag || github.ref_name }}
         run: |
-          gh release create "$RELEASE_TAG" release-files/* \
-            --title "$RELEASE_TAG" \
-            --generate-notes
+          mapfile -d '' all_files < <(find release-files -type f -print0 | sort -z)
+          installer_assets=()
+          for file in "${all_files[@]}"; do
+            case "${file##*/}" in
+              Vespera-Setup-*.exe|Vespera-Portable-*.exe|Vespera-*-mac-arm64.dmg|Vespera-*-mac-x64.dmg|Vespera-*-linux-x64.AppImage|Vespera-*-linux-x64.deb)
+                installer_assets+=("$file")
+                ;;
+            esac
+          done
+          if (( ${#installer_assets[@]} != 6 )); then
+            echo "Expected 6 installer files; found ${#installer_assets[@]}." >&2
+            printf 'Found: %s\n' "${installer_assets[@]}" >&2
+            exit 1
+          fi
+          printf 'Uploading installers:\n'
+          printf '  %s\n' "${installer_assets[@]}"
+          gh release create "$RELEASE_TAG" "${installer_assets[@]}" --title "$RELEASE_TAG" --generate-notes
