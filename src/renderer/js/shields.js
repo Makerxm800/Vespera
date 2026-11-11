@@ -14,7 +14,7 @@ export function toggleShields(anchor, tab, { onNavigate, onReload } = {}) {
     <div class="pop-stat"><span class="big">${s.blocked}</span><span class="small muted">requests blocked<br>on this page</span></div>
     <div class="pop-row"><span class="muted">Trackers / ads</span><b>${s.trackers} / ${s.ads}</b></div><div class="pop-row"><span class="muted">Tracking parameters removed</span><b>${s.cleaned}</b></div>
     <div class="pop-row"><span class="muted">HTTPS upgrades</span><b>${state.settings.shields.httpsOnly ? 'On' : 'Off'}</b></div>
-    <button class="btn" id="pop-open-privacy">${icon('shield')} Privacy Hub</button><button class="btn btn-ghost" id="pop-global">${icon('gear')} Global shield settings</button></div>`, { className: 'popover shields-popover', label: 'Vespera Shields' });
+    <button class="btn btn-sm" id="pop-open-privacy">${icon('shield')} Privacy Hub</button><button class="btn btn-ghost btn-sm" id="pop-global">${icon('gear')} Global shield settings</button></div>`, { className: 'popover shields-popover', label: 'Vespera Shields' });
   if (!pop) return;
   pop.el.querySelector('#pop-site-toggle').onchange = (e) => {
     if (host) { if (e.target.checked) delete state.settings.allowlist[host]; else state.settings.allowlist[host] = true; }

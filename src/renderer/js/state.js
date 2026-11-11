@@ -26,6 +26,7 @@ export const DEFAULT_SETTINGS = {
     memoryUsageOnHover: true,
     inactiveTabAppearance: 'balanced', // balanced | dimmed | minimal
   },
+  railHidden: false,             // hide the icon rail so pages get the full width
   homepage: 'vespera://newtab',
   showBookmarksBar: false,
   shields: {
@@ -41,6 +42,8 @@ export const DEFAULT_SETTINGS = {
   allowlist: {},                 // hostname -> true (shields off for that site)
   wallpaper: { type: 'builtin', id: 'twilight' },
   wallpaperDim: 40,
+  wallpaperAdjust: { zoom: 1, x: 50, y: 50, blur: 0, brightness: 100, saturation: 100 },
+  wallpaperDrift: true,
   showWallpaper: true,
   customAccent: '#f6b93b',
   clockSeconds: true,
@@ -68,7 +71,7 @@ function normalizedTabBehavior(value = {}) {
   if (!['click-to-mute', 'indicator', 'hidden'].includes(behavior.tabAudioMode)) behavior.tabAudioMode = DEFAULT_SETTINGS.tabBehavior.tabAudioMode;
   if (!['card', 'preview', 'tooltip'].includes(behavior.tabHoverMode)) behavior.tabHoverMode = DEFAULT_SETTINGS.tabBehavior.tabHoverMode;
   if (!['balanced', 'dimmed', 'minimal'].includes(behavior.inactiveTabAppearance)) behavior.inactiveTabAppearance = DEFAULT_SETTINGS.tabBehavior.inactiveTabAppearance;
-  behavior.memoryUsageOnHover = Boolean(behavior.memoryUsageOnHover);
+  for (const key of ['middleClickOpensTab', 'middleClickClosesTab', 'openTabsNextToCurrent', 'scrollableTabStrip', 'hideCloseButtons', 'tabGroupsEnabled', 'memoryUsageOnHover']) behavior[key] = Boolean(behavior[key]);
   return behavior;
 }
 
@@ -94,9 +97,12 @@ class Emitter {
 
 export const bus = new Emitter();
 
+const initialSettings = load(SETTINGS_KEY, DEFAULT_SETTINGS);
+initialSettings.tabBehavior = normalizedTabBehavior(initialSettings.tabBehavior);
+
 export const state = {
   private: Boolean(window.vespera?.window?.isPrivate),
-  settings: load(SETTINGS_KEY, DEFAULT_SETTINGS),
+  settings: initialSettings,
   bookmarks: load(BOOKMARKS_KEY, { items: [] }).items || [],
   history: load(HISTORY_KEY, { items: [] }).items || [],
   stats: load(STATS_KEY, { trackers: 0, ads: 0, linksCleaned: 0, httpsUpgrades: 0, bySite: {} }),
@@ -295,5 +301,6 @@ export function applyAppearance() {
   }
   document.body.classList.toggle('vertical-tabs', s.tabLayout === 'vertical');
   document.body.classList.toggle('focus-mode', Boolean(s.extensions?.focusMode));
+  document.documentElement.dataset.wpDrift = s.wallpaperDrift === false ? 'off' : 'on';
   void applyWallpaper(s);
 }

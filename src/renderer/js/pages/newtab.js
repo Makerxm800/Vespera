@@ -49,7 +49,13 @@ export function renderNewtab(container, ctx) {
     if (form.classList.contains('is-searching')) return;
     form.classList.add('is-searching'); form.setAttribute('aria-busy', 'true');
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    searchTimer = setTimeout(() => ctx.navigate(q, { kind: 'auto' }), reduced ? 0 : 220);
+    searchTimer = setTimeout(() => {
+      try { ctx.navigate(q, { kind: 'auto' }); }
+      catch { /* handled by the reset below */ }
+      // If navigation didn't leave this page (rejected address, no active tab…),
+      // clear the state — otherwise the box would stay "busy" and ignore new input.
+      if (form.isConnected) { form.classList.remove('is-searching'); form.removeAttribute('aria-busy'); }
+    }, reduced ? 0 : 220);
   };
   container.querySelector('#nt-customize').onclick = () => ctx.navigate('vespera://settings#appearance');
   container.querySelector('#nt-privacy').onclick = () => ctx.navigate('vespera://privacy');

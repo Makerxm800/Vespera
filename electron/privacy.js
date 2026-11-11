@@ -2,6 +2,7 @@
 'use strict';
 const { FilterEngine } = require('../src/shared/filter-engine');
 const { BASE_TRACKERS, AD_RULES } = require('../src/shared/blocklists');
+const { rewriteClientHints } = require('./client-hints');
 function toEngineType(details) {
   return ({ mainFrame: 'document', subFrame: 'subdocument', stylesheet: 'stylesheet', script: 'script', image: 'image', font: 'font', media: 'media', object: 'object', xhr: 'xmlhttprequest', fetch: 'xmlhttprequest', websocket: 'websocket', ping: 'ping' })[details.resourceType] || 'other';
 }
@@ -34,6 +35,9 @@ function installPrivacy(session, getPrefs, log, pu) {
       const ref = pu.strictReferrer(headers[refKey], details.url);
       if (ref) headers[refKey] = ref; else delete headers[refKey];
     }
+    // Google sign-in: keep UA-CH brands consistent with the Chrome user-agent
+    // (Electron only says "Chromium"; stock Chrome also names itself).
+    rewriteClientHints(headers);
     callback({ requestHeaders: headers });
   });
   return {

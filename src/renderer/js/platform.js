@@ -150,6 +150,8 @@ export const platform = {
     if (frame.tagName === 'WEBVIEW') frame.reload();
     else frame.src = frame.getAttribute('src'); // Actually reload; never synthesize a load event.
   },
+  /** Give the page keyboard focus so site shortcuts (YouTube's F, Space, arrows) work without an extra click. */
+  focus(view) { try { this.inner(view)?.focus(); } catch { /* view not attached yet */ } },
   stop(view) { const f = this.inner(view); if (f?.tagName === 'WEBVIEW') f.stop(); else f?.setAttribute('src', 'about:blank'); },
   async injectCss(view, css, key = '__vespera_cosmetic') {
     const f = this.inner(view);

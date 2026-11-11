@@ -1,21 +1,28 @@
-# Dependencies
+# Dependencies & build tooling
 node_modules/
 
-# Runtime data (user profiles, sync, community db)
-data/
-
-# Logs & OS noise
-*.log
-npm-debug.log*
-.DS_Store
-Thumbs.db
-
-# Build / release artifacts
-dist/
-out/
-release/
+# Generated icons (recreated by `npm run icons`)
 build/
 
-# Editor
-.vscode/
-.idea/
+# Local build / packaging output
+dist/
+dist-*/
+release/
+release-*/
+build-*/
+
+# Local service data — never commit accounts or the signing secret
+data/
+
+# Logs & scratch output
+*.log
+scripts/_qa/out/
+
+# Local one-off build/debug helpers (not part of the project)
+scripts/*.ps1
+electron-builder-win.yml
+.codegpt-game.json
+
+# OS noise
+.DS_Store
+Thumbs.db

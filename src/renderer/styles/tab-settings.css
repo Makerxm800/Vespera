@@ -57,6 +57,8 @@
 @media (prefers-reduced-motion: reduce) { .group-enter { animation: none; } }
 
 body.tabs-no-scroll .tabstrip { overflow-x: hidden; }
+body.tabs-no-scroll .tabstrip > .tab:not(.pinned) { flex: 1 1 0; min-width: 24px; max-width: none; }
+body.tabs-no-scroll .tabstrip > .tab.active:not(.pinned) { flex: 1 1 0; max-width: none; }
 body.tabs-hide-close .tab .close, body.tabs-hide-close .vtab .close { display: none !important; }
 body.tab-groups-disabled .tab-group-header, body.tab-groups-disabled .vtab-group-header { display: none !important; }
 body.tab-groups-disabled #btn-new-group { display: none; }

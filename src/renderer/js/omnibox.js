@@ -1,5 +1,5 @@
 /** Address/search input. Typed URLs navigate as URLs; arrows explicitly select a suggestion. */
-import { state } from './state.js';
+import { state, bus } from './state.js';
 import { escapeHtml } from './toasts.js';
 import { icon } from './icons.js';
 import { INTERNAL_PAGES, classifyInput } from '../../shared/privacy-utils.mjs';
@@ -8,7 +8,15 @@ export function initOmnibox({ onNavigate, isPreviewSearch = () => false }) {
   const input = document.getElementById('omni-input');
   const dropdown = document.getElementById('suggestions');
   const engineTag = document.getElementById('engine-tag');
-  let selectedIndex = -1, items = [], currentUrl = '', blurTimer;
+  let selectedIndex = -1, items = [], currentUrl = '', blurTimer, renderFrame = 0;
+  let bookmarkIndex = [], historyIndex = [];
+  const rebuildIndex = () => {
+    bookmarkIndex = state.bookmarks.map((item) => ({ ...item, searchKey: (String(item.title || '') + ' ' + String(item.url || '')).toLowerCase() }));
+    historyIndex = state.history.map((item) => ({ ...item, searchKey: (String(item.title || '') + ' ' + String(item.url || '')).toLowerCase() }));
+  };
+  rebuildIndex();
+  const offBookmarks = bus.on('bookmarks', rebuildIndex);
+  const offHistory = bus.on('history', rebuildIndex);
   input.setAttribute('role', 'combobox'); input.setAttribute('aria-autocomplete', 'list');
   input.setAttribute('aria-controls', 'suggestions'); input.setAttribute('aria-expanded', 'false');
   dropdown.setAttribute('role', 'listbox');
@@ -25,12 +33,12 @@ export function initOmnibox({ onNavigate, isPreviewSearch = () => false }) {
   function render(q) {
     const query = q.trim(), lower = query.toLowerCase();
     if (!query) {
-      items = state.history.slice(0, 5).map((h) => ({ kind: 'history', title: h.title || h.url, sub: h.url, url: h.url }));
+      items = historyIndex.slice(0, 5).map((h) => ({ kind: 'history', title: h.title || h.url, sub: h.url, url: h.url }));
       if (!items.length) items = Object.entries(INTERNAL_PAGES).filter(([url]) => ['vespera://welcome', 'vespera://settings', 'vespera://extensions'].includes(url)).map(([url, p]) => ({ kind: 'internal', title: p.title, sub: url, url }));
     } else {
       const internals = Object.entries(INTERNAL_PAGES).filter(([url, p]) => (url + ' ' + p.title).toLowerCase().includes(lower)).slice(0, 3).map(([url, p]) => ({ kind: 'internal', title: p.title, sub: url, url }));
-      const bms = state.bookmarks.filter((b) => (b.title + ' ' + b.url).toLowerCase().includes(lower)).slice(0, 3).map((b) => ({ kind: 'bookmark', title: b.title, sub: b.url, url: b.url }));
-      const hist = state.history.filter((h) => (h.title + ' ' + h.url).toLowerCase().includes(lower)).slice(0, 4).map((h) => ({ kind: 'history', title: h.title || h.url, sub: h.url, url: h.url }));
+      const bms = bookmarkIndex.filter((b) => b.searchKey.includes(lower)).slice(0, 3).map((b) => ({ kind: 'bookmark', title: b.title, sub: b.url, url: b.url }));
+      const hist = historyIndex.filter((h) => h.searchKey.includes(lower)).slice(0, 4).map((h) => ({ kind: 'history', title: h.title || h.url, sub: h.url, url: h.url }));
       const classified = classifyInput(query);
       items = [...internals, ...bms, ...hist];
       if (classified.kind === 'url' || classified.kind === 'internal') items.unshift({ kind: 'url', title: query, sub: 'Open website · Enter', url: query });
@@ -56,7 +64,10 @@ export function initOmnibox({ onNavigate, isPreviewSearch = () => false }) {
   }
   input.addEventListener('focus', () => { clearTimeout(blurTimer); input.select(); render(input.value); });
   input.addEventListener('blur', () => { blurTimer = setTimeout(close, 160); });
-  input.addEventListener('input', () => render(input.value));
+  input.addEventListener('input', () => {
+    cancelAnimationFrame(renderFrame);
+    renderFrame = requestAnimationFrame(() => render(input.value));
+  });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
@@ -80,5 +91,6 @@ export function initOmnibox({ onNavigate, isPreviewSearch = () => false }) {
       close();
     },
     focus() { input.focus(); input.select(); }, refreshEngine,
+    dispose() { cancelAnimationFrame(renderFrame); offBookmarks(); offHistory(); },
   };
 }
