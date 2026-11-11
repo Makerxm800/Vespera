@@ -34,7 +34,7 @@ export function renderSettings(container, ctx, opts = {}) {
   const embedded = Boolean(opts.embedded);
   container.innerHTML = `<div class="page settings-page">
     ${embedded ? '' : `<div class="settings-heading"><div><span class="eyebrow">YOUR BROWSER, YOUR WAY</span><h1 class="page-title">Settings</h1><p class="page-sub">A few thoughtful choices. A space that feels like you.</p></div><span class="chip chip-ok">${icon('check')} Saved on this device</span></div>
-    <nav class="settings-nav" aria-label="Settings sections"><a href="#appearance" data-section="appearance">Appearance</a><a href="#search" data-section="search">Search &amp; home</a><a href="#privacy" data-section="privacy">Privacy</a><a href="#extensions" data-section="extensions">Extensions</a><a href="#downloads" data-section="downloads">Downloads</a><a href="#account" data-section="account">Account</a><a href="#about" data-section="about">About</a></nav>`}
+    <nav class="settings-nav" aria-label="Settings sections"><a href="#appearance" data-section="appearance">Appearance</a><a href="#tabs" data-section="tabs">Tabs &amp; groups</a><a href="#search" data-section="search">Search &amp; home</a><a href="#privacy" data-section="privacy">Privacy</a><a href="#extensions" data-section="extensions">Extensions</a><a href="#downloads" data-section="downloads">Downloads</a><a href="#account" data-section="account">Account</a><a href="#about" data-section="about">About</a></nav>`}
     <section class="section" id="appearance"><h2>${icon('palette')} Appearance</h2>
       <div class="setting-row"><div><div class="s-label">Theme</div><div class="s-desc">Twilight dark, warm light, or follow your system.</div></div><div class="s-control">${segment('theme', [['dark', 'Dark'], ['light', 'Light'], ['system', 'System']], s.theme)}</div></div>
       <div class="setting-row"><div><div class="s-label">Accent color</div><div class="s-desc">A little color throughout your browser.</div></div><div class="s-control accent-controls"><div class="accent-dots">${['gold', 'violet', 'teal', 'rose'].map((c) => `<button class="accent-dot ${c} ${s.accent === c ? 'selected' : ''}" data-accent="${c}" aria-label="${c}" title="${c}"></button>`).join('')}</div><label class="custom-color" title="Choose a custom accent color"><input type="color" id="custom-accent" value="${escapeHtml(s.customAccent || '#f6b93b')}" aria-label="Custom accent color">${icon('plus')}</label></div></div>
@@ -45,11 +45,24 @@ export function renderSettings(container, ctx, opts = {}) {
         ${toggleRow('wallpaperDrift', 'Gentle wallpaper motion', 'The home wallpaper breathes very slowly. Turn off for a perfectly still image.', s.wallpaperDrift !== false)}
         <div id="wp-editor-slot"></div>
       </div>
-      <div class="setting-row"><div><div class="s-label">Tab layout</div><div class="s-desc">Classic tabs above, or a vertical sidebar. Drag tabs to reorder.</div></div><div class="s-control">${segment('tabLayout', [['horizontal', 'Horizontal'], ['vertical', 'Vertical']], s.tabLayout)}</div></div>
       <div class="setting-row"><div><div class="s-label">Density</div><div class="s-desc">Make a little more room for your pages.</div></div><div class="s-control">${segment('density', [['comfortable', 'Comfortable'], ['compact', 'Compact']], s.density)}</div></div>
       ${toggleRow('showBookmarksBar', 'Show bookmarks bar', 'Your saved pages, always one click away.', s.showBookmarksBar)}
       ${toggleRow('clockSeconds', 'Show seconds on the home clock', 'Updates live using your device’s local time.', s.clockSeconds)}
       ${toggleRow('clock24', 'Use 24-hour time', 'For example, 18:30 instead of 6:30 PM.', s.clock24)}
+    </section>
+    <section class="section" id="tabs"><h2>${icon('split')} Tabs &amp; groups</h2>
+      <p class="settings-section-sub">Choose how tabs open, behave and share space. These preferences apply immediately to both the horizontal strip and vertical sidebar.</p>
+      <div class="setting-row"><div><div class="s-label">Tab layout</div><div class="s-desc">Classic tabs above, or a vertical sidebar. Drag tabs to reorder.</div></div><div class="s-control">${segment('tabLayout', [['horizontal', 'Horizontal'], ['vertical', 'Vertical']], s.tabLayout)}</div></div>
+      ${toggleRow('tabBehavior.openTabsNextToCurrent', 'Open new tabs beside the current tab', 'Keep new tabs near the page that opened them instead of at the end of the strip.', s.tabBehavior.openTabsNextToCurrent)}
+      ${toggleRow('tabBehavior.scrollableTabStrip', 'Scrollable tab strip', 'When off, tabs compress into the available space rather than scrolling horizontally.', s.tabBehavior.scrollableTabStrip)}
+      ${toggleRow('tabBehavior.hideCloseButtons', 'Hide tab close buttons', 'Close tabs with the middle mouse button or the tab actions menu.', s.tabBehavior.hideCloseButtons)}
+      ${toggleRow('tabBehavior.middleClickOpensTab', 'Middle-click links to open a tab', 'Turn off to open middle-clicked links in the current tab.', s.tabBehavior.middleClickOpensTab)}
+      ${toggleRow('tabBehavior.middleClickClosesTab', 'Middle-click tabs to close them', 'Turn off if you do not use the mouse wheel button to close tabs.', s.tabBehavior.middleClickClosesTab)}
+      ${toggleRow('tabBehavior.tabGroupsEnabled', 'Enable tab groups', 'Show group labels and actions. Existing groups are kept if you turn this off.', s.tabBehavior.tabGroupsEnabled)}
+      ${selectRow('tabBehavior.tabAudioMode', 'Tab audio controls', 'Show a mute button, a status indicator, or no speaker icon on tabs.', s.tabBehavior.tabAudioMode, [['click-to-mute', 'Click to mute'], ['indicator', 'Indicator only'], ['hidden', 'Hide indicator']])}
+      ${selectRow('tabBehavior.tabHoverMode', 'Tab hover details', 'Choose a card, page preview, or simple tooltip.', s.tabBehavior.tabHoverMode, [['card', 'Card'], ['preview', 'Preview'], ['tooltip', 'Tooltip']])}
+      ${toggleRow('tabBehavior.memoryUsageOnHover', 'Estimate memory on hover', 'Shows an approximate renderer memory estimate when available in the desktop app.', s.tabBehavior.memoryUsageOnHover)}
+      <div class="setting-row"><div><div class="s-label">Inactive tab appearance</div><div class="s-desc">Choose how strongly background tabs recede behind the current page.</div></div><div class="s-control">${segment('tabBehavior.inactiveTabAppearance', [['balanced', 'Balanced'], ['dimmed', 'Dimmed'], ['minimal', 'Minimal']], s.tabBehavior.inactiveTabAppearance)}</div></div>
     </section>
     <section class="section" id="search"><h2>${icon('search')} Search & home</h2>
       <div class="setting-row"><div><div class="s-label">Default search engine</div><div class="s-desc">Used by the address bar and home search.${ctx.previewRestricted() ? ' This hosted preview searches public GitHub repositories.' : ''}</div></div><div class="s-control"><select class="select" id="sel-engine" aria-label="Default search engine">${Object.values(SEARCH_ENGINES).map((e) => `<option value="${e.id}" ${s.searchEngine === e.id ? 'selected' : ''}>${e.name}</option>`).join('')}</select></div></div>
@@ -92,6 +105,7 @@ export function renderSettings(container, ctx, opts = {}) {
     const row = input.closest('.setting-row, .appearance-card');
     if (row && ok) { row.classList.remove('row-pulse'); void row.offsetWidth; row.classList.add('row-pulse'); }
   });
+  container.querySelectorAll('[data-setting-select]').forEach((input) => input.onchange = () => state.set(input.dataset.settingSelect, input.value));
   container.querySelectorAll('[data-accent]').forEach((btn) => btn.onclick = () => {
     state.set('accent', btn.dataset.accent);
     container.querySelectorAll('[data-accent]').forEach((b) => b.classList.toggle('selected', b === btn));
@@ -266,6 +280,9 @@ export function renderSettings(container, ctx, opts = {}) {
   };
 }
 function segment(path, values, current) { return `<div class="segmented" data-segment="${path}">${values.map(([v, label]) => `<button data-v="${v}" class="${current === v ? 'active' : ''}" aria-pressed="${current === v}">${label}</button>`).join('')}</div>`; }
+function selectRow(path, label, desc, current, options) {
+  return `<div class="setting-row"><div><div class="s-label">${label}</div><div class="s-desc">${desc}</div></div><div class="s-control"><select class="select" data-setting-select="${path}" aria-label="${label}">${options.map(([value, text]) => `<option value="${escapeHtml(value)}" ${current === value ? 'selected' : ''}>${escapeHtml(text)}</option>`).join('')}</select></div></div>`;
+}
 function toggleRow(path, label, desc, checked, locked = false) {
   return `<div class="setting-row"><div><div class="s-label">${label}</div><div class="s-desc">${desc}</div></div><div class="s-control"><label class="switch"><input type="checkbox" ${locked ? 'data-locked' : `data-setting="${path}"`} aria-label="${label}" ${checked ? 'checked' : ''} ${locked ? 'disabled' : ''}><span class="track"></span><span class="thumb"></span></label></div></div>`;
 }

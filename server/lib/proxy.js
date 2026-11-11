@@ -159,7 +159,19 @@ function bridgeScript(pageUrl, error = '', extra = '', parentOrigin = '') {
       const url=original(a.getAttribute('href'));if(!url)return;
       e.preventDefault();e.stopImmediatePropagation();
       if(a.hasAttribute('download'))parent.postMessage({type:'vespera:download',url,name:a.getAttribute('download')||''},'*');
-      else parent.postMessage({type:'vespera:navigate',url,newTab:a.target==='_blank'||e.ctrlKey||e.metaKey},'*');
+      else {
+        const modified=e.ctrlKey||e.metaKey;
+        const newTab=a.target==='_blank'||modified;
+        parent.postMessage({type:'vespera:navigate',url,newTab,foreground:!modified||e.shiftKey,gesture:modified?'modifier':''},'*');
+      }
+    },true);
+    document.addEventListener('auxclick',e=>{
+      if(e.button!==1)return;
+      const a=e.target.closest?.('a[href]');if(!a)return;
+      const url=original(a.getAttribute('href'));if(!url)return;
+      e.preventDefault();e.stopImmediatePropagation();
+      if(a.hasAttribute('download'))parent.postMessage({type:'vespera:download',url,name:a.getAttribute('download')||''},'*');
+      else parent.postMessage({type:'vespera:navigate',url,newTab:true,foreground:false,gesture:'middle'},'*');
     },true);
     document.addEventListener('contextmenu',e=>{
       const editable=e.target.closest?.('input,textarea,select,[contenteditable="true"],[contenteditable=""]');
@@ -186,7 +198,16 @@ function bridgeScript(pageUrl, error = '', extra = '', parentOrigin = '') {
     };
     const openOriginal=XMLHttpRequest.prototype.open;
     XMLHttpRequest.prototype.open=function(method,url,...rest){return openOriginal.call(this,method,proxify(String(url)),...rest)};
-    window.open=(url)=>{const u=original(url);if(u)parent.postMessage({type:'vespera:navigate',url:u,newTab:true},'*');return null};
+    window.open=(url)=>{const u=original(url);if(u)parent.postMessage({type:'vespera:navigate',url:u,newTab:true,foreground:true},'*');return null};
+    let tabMuted=false,audioQueued=false;
+    const originalMuted=new WeakMap(),watchedMedia=new WeakSet();
+    const reportAudio=()=>{audioQueued=false;const audible=[...document.querySelectorAll('audio,video')].some(m=>!m.paused&&!m.ended&&!m.muted&&m.volume>0);parent.postMessage({type:'vespera:audio',audible},'*')};
+    const queueAudioReport=()=>{if(audioQueued)return;audioQueued=true;setTimeout(reportAudio,40)};
+    const watchMedia=(media)=>{if(!(media instanceof HTMLMediaElement))return;if(!originalMuted.has(media))originalMuted.set(media,Boolean(media.muted));if(tabMuted)media.muted=true;if(watchedMedia.has(media))return;watchedMedia.add(media);for(const name of ['play','playing','pause','ended','volumechange','emptied'])media.addEventListener(name,queueAudioReport)};
+    const scanMedia=(root=document)=>{if(root instanceof HTMLMediaElement)watchMedia(root);root.querySelectorAll?.('audio,video').forEach(watchMedia);queueAudioReport()};
+    window.addEventListener('message',e=>{if(e.source!==parent||!e.data||e.data.type!=='vespera:mute')return;tabMuted=Boolean(e.data.muted);for(const media of document.querySelectorAll('audio,video')){watchMedia(media);media.muted=tabMuted||originalMuted.get(media)}queueAudioReport()});
+    if(document.documentElement)new MutationObserver(records=>{for(const record of records)for(const node of record.addedNodes)if(node.nodeType===1)scanMedia(node)}).observe(document.documentElement,{childList:true,subtree:true});
+    document.addEventListener('DOMContentLoaded',()=>scanMedia(),{once:true});scanMedia();
   })();</script>`;
 }
 function rewriteHtml(html, pageUrl, { dark = false, error = '', mask = DEFAULT_PREFS, origin = '' } = {}) {

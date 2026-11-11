@@ -8,6 +8,7 @@ import { bridge } from './app-bridge.js';
 
 const SECTIONS = [
   ['appearance', 'Appearance'],
+  ['tabs', 'Tabs & groups'],
   ['search', 'Search & home'],
   ['privacy', 'Privacy'],
   ['extensions', 'Extensions'],

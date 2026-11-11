@@ -14,6 +14,18 @@ export const DEFAULT_SETTINGS = {
   density: 'comfortable',        // comfortable | compact
   searchEngine: 'startpage',
   tabLayout: 'horizontal',       // horizontal | vertical
+  tabBehavior: {
+    middleClickOpensTab: true,
+    middleClickClosesTab: true,
+    openTabsNextToCurrent: true,
+    scrollableTabStrip: true,
+    hideCloseButtons: false,
+    tabGroupsEnabled: true,
+    tabAudioMode: 'click-to-mute', // click-to-mute | indicator | hidden
+    tabHoverMode: 'card',          // card | preview | tooltip
+    memoryUsageOnHover: true,
+    inactiveTabAppearance: 'balanced', // balanced | dimmed | minimal
+  },
   railHidden: false,             // hide the icon rail so pages get the full width
   homepage: 'vespera://newtab',
   showBookmarksBar: false,
@@ -54,6 +66,15 @@ function load(key, fallback) {
   }
 }
 
+function normalizedTabBehavior(value = {}) {
+  const behavior = { ...DEFAULT_SETTINGS.tabBehavior, ...(value || {}) };
+  if (!['click-to-mute', 'indicator', 'hidden'].includes(behavior.tabAudioMode)) behavior.tabAudioMode = DEFAULT_SETTINGS.tabBehavior.tabAudioMode;
+  if (!['card', 'preview', 'tooltip'].includes(behavior.tabHoverMode)) behavior.tabHoverMode = DEFAULT_SETTINGS.tabBehavior.tabHoverMode;
+  if (!['balanced', 'dimmed', 'minimal'].includes(behavior.inactiveTabAppearance)) behavior.inactiveTabAppearance = DEFAULT_SETTINGS.tabBehavior.inactiveTabAppearance;
+  for (const key of ['middleClickOpensTab', 'middleClickClosesTab', 'openTabsNextToCurrent', 'scrollableTabStrip', 'hideCloseButtons', 'tabGroupsEnabled', 'memoryUsageOnHover']) behavior[key] = Boolean(behavior[key]);
+  return behavior;
+}
+
 function save(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); return true; }
   catch { queueMicrotask(() => bus.emit('storage-error', 'Device storage is full or unavailable. This change could not be saved.')); return false; }
@@ -76,9 +97,12 @@ class Emitter {
 
 export const bus = new Emitter();
 
+const initialSettings = load(SETTINGS_KEY, DEFAULT_SETTINGS);
+initialSettings.tabBehavior = normalizedTabBehavior(initialSettings.tabBehavior);
+
 export const state = {
   private: Boolean(window.vespera?.window?.isPrivate),
-  settings: load(SETTINGS_KEY, DEFAULT_SETTINGS),
+  settings: initialSettings,
   bookmarks: load(BOOKMARKS_KEY, { items: [] }).items || [],
   history: load(HISTORY_KEY, { items: [] }).items || [],
   stats: load(STATS_KEY, { trackers: 0, ads: 0, linksCleaned: 0, httpsUpgrades: 0, bySite: {} }),
@@ -90,6 +114,7 @@ export const state = {
     const merged = { ...DEFAULT_SETTINGS, ...this.settings,
       shields: { ...DEFAULT_SETTINGS.shields, ...(this.settings.shields || {}) },
       extensions: { ...DEFAULT_SETTINGS.extensions, ...(this.settings.extensions || {}) },
+      tabBehavior: normalizedTabBehavior(this.settings.tabBehavior),
       allowlist: { ...(this.settings.allowlist || {}) },
     };
     this.settings = merged;
@@ -198,6 +223,7 @@ export const state = {
         ...DEFAULT_SETTINGS, ...settings,
         shields: { ...DEFAULT_SETTINGS.shields, ...(settings.shields || {}) },
         extensions: { ...DEFAULT_SETTINGS.extensions, ...(settings.extensions || {}) },
+        tabBehavior: normalizedTabBehavior(settings.tabBehavior),
         allowlist: { ...(settings.allowlist || {}) },
       };
       save(SETTINGS_KEY, this.settings);

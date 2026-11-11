@@ -111,6 +111,17 @@ function registerIpc() {
     const ok = results.every(Boolean) && app.isDefaultProtocolClient('https');
     return { ok, message: ok ? 'Vespera is now your default web browser.' : 'Your operating system did not accept the change. Set Vespera as the default browser in system settings.' };
   });
+  handle('tabs:memory', async (event, contentsId) => {
+    const id = Number(contentsId);
+    if (!Number.isSafeInteger(id) || id < 1) return { ok: false };
+    const guest = webContents.fromId(id);
+    if (!guest || guest.getType() !== 'webview' || guest.hostWebContents !== event.sender || typeof guest.getProcessMemoryInfo !== 'function') return { ok: false };
+    try {
+      const memory = await guest.getProcessMemoryInfo();
+      const kilobytes = Number(memory.private ?? memory.residentSet);
+      return Number.isFinite(kilobytes) && kilobytes >= 0 ? { ok: true, bytes: Math.round(kilobytes * 1024) } : { ok: false };
+    } catch { return { ok: false }; }
+  });
   handle('permissions:list', (event) => isPrivateEvent(event) ? [] : permissions.summarize(prefs.sitePermissions));
   handle('permissions:reset', (event) => { if (!isPrivateEvent(event)) { permissions.reset(prefs.sitePermissions); persistPrefs(); } return { ok: true }; });
   handle('extensions:list', (event) => isPrivateEvent(event) ? [] : extensionManager.list());
@@ -179,8 +190,8 @@ function protectSessions(pu) {
 function wireWebContents() {
   app.on('web-contents-created', (_e, contents) => {
     if (contents.getType() === 'webview') {
-      contents.setWindowOpenHandler(({ url }) => {
-        if (/^https?:\/\//i.test(url)) contents.hostWebContents?.send('browser:new-tab', url);
+      contents.setWindowOpenHandler(({ url, disposition }) => {
+        if (/^https?:\/\//i.test(url)) contents.hostWebContents?.send('browser:new-tab', { url, foreground: disposition !== 'background-tab', gesture: disposition === 'background-tab' ? 'middle' : '' });
         return { action: 'deny' };
       });
       contents.on('before-input-event', (event, input) => {
@@ -237,14 +248,14 @@ function wireWebContents() {
         if (!win) return;
         const template = [];
         if (params.linkURL && /^https?:/.test(params.linkURL)) template.push(
-          { label: 'Open link in new tab', click: () => contents.hostWebContents?.send('browser:new-tab', params.linkURL) },
-          { label: 'Open link in background tab', click: () => contents.hostWebContents?.send('browser:new-tab-background', params.linkURL) },
+          { label: 'Open link in new tab', click: () => contents.hostWebContents?.send('browser:new-tab', { url: params.linkURL, foreground: true }) },
+          { label: 'Open link in background tab', click: () => contents.hostWebContents?.send('browser:new-tab', { url: params.linkURL, foreground: false }) },
           { label: 'Copy link address', click: () => require('electron').clipboard.writeText(params.linkURL) },
           { label: 'Save link as…', click: () => contents.downloadURL(params.linkURL) },
           { type: 'separator' },
         );
         if (params.mediaType === 'image' && params.srcURL) template.push(
-          { label: 'Open image in new tab', click: () => contents.hostWebContents?.send('browser:new-tab', params.srcURL) },
+          { label: 'Open image in new tab', click: () => contents.hostWebContents?.send('browser:new-tab', { url: params.srcURL, foreground: true }) },
           { label: 'Copy image address', click: () => require('electron').clipboard.writeText(params.srcURL) },
           { label: 'Save image as…', click: () => contents.downloadURL(params.srcURL) },
           { type: 'separator' },

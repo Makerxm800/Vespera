@@ -31,6 +31,8 @@ export const icons = {
   bolt: S('<path d="M13 2L4 14h6l-1 8 9-12h-6z"/>'),
   eye: S('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>'),
   eyeOff: S('<path d="M4 4l16 16"/><path d="M9.9 5.2A9.7 9.7 0 0112 5c6.5 0 10 7 10 7a17.5 17.5 0 01-3.2 4.2"/><path d="M6.3 6.5A16.9 16.9 0 002 12s3.5 7 10 7a9.8 9.8 0 004.2-.9"/><path d="M9.9 9.9a3 3 0 004.2 4.2"/>'),
+  volume: S('<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M19 5a10 10 0 010 14"/>'),
+  volumeOff: S('<path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 5 6m0-6-5 6"/>'),
   trash: S('<path d="M4 7h16"/><path d="M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v5M14 11v5"/>'),
   refresh: S('<path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/>'),
   external: S('<path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 13v6a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h6"/>'),

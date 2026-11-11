@@ -5,12 +5,16 @@ import { safeTabUrl } from '../../shared/privacy-utils.mjs';
 import { computeDrop, clampedInsertion, moveTabAfter, moveIntoGroup, pinnedFirst } from '../../shared/tab-order.mjs';
 
 let nextId = 1;
+export const TAB_GROUP_COLORS = Object.freeze(['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan']);
+const validGroupColor = (color) => TAB_GROUP_COLORS.includes(color) ? color : 'blue';
+const cleanGroupTitle = (title) => String(title || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40) || 'New group';
 /** Pinned tabs are ~60px wide: they trade title + close for this ⋮ menu button. */
 const tabMoreHtml = (id) => `<button class="tab-more" data-more="${id}" title="Tab actions" aria-label="Tab actions"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></button>`;
 export function createTabModel(url = 'vespera://newtab', opts = {}) {
   return {
     id: 'tab' + nextId++, url, title: opts.title || 'New Tab', favicon: null,
-    loading: false, pinned: Boolean(opts.pinned), groupId: opts.groupId || null, groupName: opts.groupName || '', groupColor: opts.groupColor || '', view: null, pageCleanup: null,
+    loading: false, pinned: Boolean(opts.pinned), groupId: opts.groupId || null, groupName: opts.groupName || '', groupColor: opts.groupColor || '',
+    muted: Boolean(opts.muted), audible: false, view: null, pageCleanup: null,
     disposeView: null, loadTimer: null, error: null, zoom: 1,
     entries: [{ url, title: opts.title || 'New Tab' }], entryIndex: 0,
     shields: { blocked: 0, ads: 0, trackers: 0, cleaned: 0 },
@@ -19,8 +23,9 @@ export function createTabModel(url = 'vespera://newtab', opts = {}) {
 }
 
 export class TabManager {
-  constructor({ onActiveChange, onClose, onMount, onChange, onContextMenu, onNewTab, onFocusPage } = {}) {
+  constructor({ onActiveChange, onClose, onMount, onChange, onContextMenu, onGroupContextMenu, onNewTab, onFocusPage, onToggleMute, getSettings } = {}) {
     this.tabs = [];
+    this.groups = [];
     this.activeId = null;
     this.closedStack = [];
     this.groupCounter = 0;
@@ -29,8 +34,11 @@ export class TabManager {
     this.onMount = onMount || (() => {});
     this.onChange = onChange || (() => {});
     this.onContextMenu = onContextMenu || (() => {});
+    this.onGroupContextMenu = onGroupContextMenu || (() => {});
     this.onNewTab = onNewTab || (() => {});
     this.onFocusPage = onFocusPage || (() => {});
+    this.onToggleMute = onToggleMute || (() => {});
+    this.getSettings = getSettings || (() => ({}));
     this.strip = document.getElementById('tabstrip');
     this.vlist = document.getElementById('vtabs-list');
     this._drag = null; // { fromId, list, mode, index, targetId }
@@ -46,7 +54,9 @@ export class TabManager {
       el?.addEventListener('auxclick', (e) => {
         if (e.button !== 1) return;
         const tab = e.target.closest('[data-id]');
-        if (tab) { e.preventDefault(); this.close(tab.dataset.id); }
+        if (!tab) return;
+        e.preventDefault();
+        if (this.getSettings()?.tabBehavior?.middleClickClosesTab !== false) this.close(tab.dataset.id);
       });
       el?.addEventListener('keydown', (e) => {
         const row = e.target.closest('[data-id]');
@@ -94,8 +104,9 @@ export class TabManager {
         e.preventDefault();
         this.updateDropTarget(el, e); // resolve the final slot under the pointer
         const drag = this._drag || {};
-        if (drag.mode === 'group' && drag.targetId && drag.targetId !== fromId) this.groupWith(fromId, drag.targetId);
-        else if (drag.mode === 'move' && drag.index >= 0) this.moveToIndex(fromId, drag.index);
+        if (drag.mode === 'group-header' && drag.targetId) this.moveToGroup(fromId, drag.targetId);
+        else if (drag.mode === 'group' && drag.targetId && drag.targetId !== fromId) this.groupWith(fromId, drag.targetId);
+        else if (drag.mode === 'move' && drag.index >= 0) this.moveToIndex(fromId, drag.index, drag.targetGroupId);
         this.endDrag();
       });
       el?.addEventListener('dragend', () => this.endDrag());
@@ -106,6 +117,8 @@ export class TabManager {
       }, { passive: false });
       el?.addEventListener('dblclick', (e) => { if (e.target === el) this.onNewTab(); });
       el?.addEventListener('contextmenu', (e) => {
+        const group = e.target.closest('[data-group-header]');
+        if (group) { e.preventDefault(); this.onGroupContextMenu(group.dataset.groupHeader, group); return; }
         const row = e.target.closest('[data-id]');
         e.preventDefault();
         // Right-clicking empty strip space offers strip-level actions.
@@ -133,6 +146,15 @@ export class TabManager {
     const rows = this.stripRows(list);
     const coord = vertical ? e.clientY : e.clientX;
     const drag = this._drag;
+    const groupHeader = e.target.closest('[data-group-header]');
+    if (groupHeader) {
+      for (const r of rows) r.el.classList.remove('drag-over');
+      list.querySelectorAll('[data-group-header]').forEach((node) => node.classList.toggle('drag-over', node === groupHeader));
+      if (drag) { drag.list = list; drag.mode = 'group-header'; drag.targetId = groupHeader.dataset.groupHeader; drag.targetGroupId = null; drag.index = -1; }
+      this.ensureIndicator(list).hidden = true;
+      return;
+    }
+    list.querySelectorAll('[data-group-header].drag-over').forEach((node) => node.classList.remove('drag-over'));
     // Dropping onto the middle of a tab groups it (Chrome behaviour); the
     // leading/trailing thirds reorder. Holding Alt makes the whole row a
     // group target so grouping never depends on a precise drop.
@@ -141,7 +163,15 @@ export class TabManager {
       const over = rows.find((r) => coord >= r.start && coord <= r.start + r.extent);
       if (over && over.id !== drag?.fromId) { drop.mode = 'group'; drop.id = over.id; }
     }
-    if (drag) { drag.list = list; drag.mode = drop.mode; drag.index = drop.mode === 'move' ? drop.index : -1; drag.targetId = drop.mode === 'group' ? drop.id : null; }
+    const beforeRow = drop.mode === 'move' ? rows[drop.index] : null;
+    const targetIndex = beforeRow ? this.tabs.findIndex((tab) => tab.id === beforeRow.id) : this.tabs.length;
+    const targetGroup = beforeRow ? (this.tabs.find((tab) => tab.id === beforeRow.id)?.groupId || null) : null;
+    if (drag) {
+      drag.list = list; drag.mode = drop.mode;
+      drag.index = drop.mode === 'move' ? Math.max(0, targetIndex) : -1;
+      drag.targetId = drop.mode === 'group' ? drop.id : null;
+      drag.targetGroupId = drop.mode === 'move' ? targetGroup : null;
+    }
     for (const r of rows) r.el.classList.toggle('drag-over', drop.mode === 'group' && r.id === drop.id && r.id !== drag?.fromId);
     const indicator = this.ensureIndicator(list);
     if (drop.mode === 'move' && rows.length) {
@@ -187,13 +217,19 @@ export class TabManager {
   endDrag() {
     this._drag = null;
     for (const list of [this.strip, this.vlist]) {
-      list?.querySelectorAll('.dragging').forEach((n) => n.classList.remove('dragging'));
+      list?.querySelectorAll('.dragging, [data-group-header].drag-over').forEach((n) => n.classList.remove('dragging', 'drag-over'));
       this.clearDropUi(list);
     }
   }
 
   /* ---- Model ---- */
   handleClick(e) {
+    const toggle = e.target.closest('[data-group-toggle]');
+    if (toggle) { e.preventDefault(); e.stopPropagation(); this.toggleGroup(toggle.dataset.groupToggle); return; }
+    const edit = e.target.closest('[data-group-menu]');
+    if (edit) { e.preventDefault(); e.stopPropagation(); this.onGroupContextMenu(edit.dataset.groupMenu, edit.closest('[data-group-header]')); return; }
+    const audio = e.target.closest('[data-audio-toggle]');
+    if (audio) { e.preventDefault(); e.stopPropagation(); this.onToggleMute(audio.dataset.audioToggle); return; }
     const close = e.target.closest('[data-close]');
     if (close) { e.stopPropagation(); this.close(close.dataset.close); return; }
     const more = e.target.closest('[data-more]');
@@ -211,19 +247,45 @@ export class TabManager {
     if (row.dataset.id !== this.activeId) this.activate(row.dataset.id);
     this.onFocusPage(this.active); // so page shortcuts (YouTube's F, Space…) work straight away
   }
-  add(url = 'vespera://newtab', { activate = true, title, pinned = false, groupId = null, groupName = '', groupColor = '', afterId = null, index = null } = {}) {
+  getGroup(id) { return this.groups.find((group) => group.id === id) || null; }
+  groupTabs(id) { return this.tabs.filter((tab) => tab.groupId === id); }
+  add(url = 'vespera://newtab', options = {}) {
     url = safeTabUrl(url);
     if (!url) throw new Error('This address cannot be opened in a tab.');
-    if (this.tabs.length >= 60) { this.close(this.tabs.find((t) => !t.pinned && t.id !== this.activeId)?.id); }
-    const tab = createTabModel(url, { title, pinned, groupId, groupName, groupColor });
-    // Pinned tabs live in their own leading section; other tabs honour an
-    // explicit slot (afterId / index) or append to the end like Chrome.
+    if (this.tabs.length >= 60) {
+      const candidate = this.tabs.find((t) => !t.pinned && t.id !== this.activeId);
+      if (candidate) this.close(candidate.id);
+      if (this.tabs.length >= 60) return null;
+    }
+    const { activate = true, title, pinned = false, afterId = null, index = null, muted = false } = options;
+    const behavior = this.getSettings()?.tabBehavior || {};
+    const group = !pinned ? this.getGroup(options.groupId) : null;
+    const groupId = group?.id || null;
+    const tab = createTabModel(url, {
+      title, pinned, groupId, groupName: group?.title || '', groupColor: group?.color || '', muted,
+    });
     const pinnedCount = this.tabs.filter((t) => t.pinned).length;
-    let at = this.tabs.length;
-    if (pinned) at = pinnedCount;
-    else if (afterId) { const i = this.tabs.findIndex((t) => t.id === afterId); if (i >= 0) at = i + 1; }
-    else if (Number.isInteger(index)) at = Math.max(pinnedCount, Math.min(index, this.tabs.length));
+    let at = pinned ? pinnedCount : this.tabs.length;
+    if (!pinned && Number.isInteger(index)) {
+      at = Math.max(pinnedCount, Math.min(index, this.tabs.length));
+    } else if (!pinned && afterId) {
+      const i = this.tabs.findIndex((t) => t.id === afterId);
+      if (i >= 0) at = Math.max(pinnedCount, i + 1);
+    } else {
+      const besideEnabled = behavior.openTabsNextToCurrent !== false;
+      const nearId = besideEnabled ? (options.besideId !== undefined ? options.besideId : this.activeId) : null;
+      const near = this.tabs.find((t) => t.id === nearId);
+      if (groupId) {
+        const members = this.tabs.map((t, i) => t.groupId === groupId ? i : -1).filter((i) => i >= 0);
+        if (near?.groupId === groupId) at = this.tabs.indexOf(near) + 1;
+        else at = members.length ? members.at(-1) + 1 : (near ? this.tabs.indexOf(near) + 1 : this.tabs.length);
+      } else if (near?.groupId && this.getGroup(near.groupId)) {
+        const members = this.tabs.map((t, i) => t.groupId === near.groupId ? i : -1).filter((i) => i >= 0);
+        at = members.length ? members.at(-1) + 1 : this.tabs.indexOf(near) + 1;
+      } else if (near) at = this.tabs.indexOf(near) + 1;
+    }
     this.tabs.splice(at, 0, tab);
+    this.normalizeGroupOrder();
     this.onMount(tab);
     this.render();
     if (activate || !this.activeId) this.activate(tab.id);
@@ -242,10 +304,11 @@ export class TabManager {
     const i = this.tabs.findIndex((t) => t.id === id);
     if (i === -1) return;
     const [tab] = this.tabs.splice(i, 1);
-    this.closedStack.push({ url: tab.url, title: tab.title, pinned: tab.pinned, index: i, groupId: tab.groupId, groupName: tab.groupName, groupColor: tab.groupColor });
+    this.closedStack.push({ url: tab.url, title: tab.title, pinned: tab.pinned, muted: tab.muted, index: i, groupId: tab.groupId, groupName: tab.groupName, groupColor: tab.groupColor, group: tab.groupId ? { ...this.getGroup(tab.groupId) } : null });
     if (this.closedStack.length > 20) this.closedStack.shift();
     this.dispose(tab);
     this.onClose(tab);
+    this.pruneGroups();
     if (!this.tabs.length) { this.add('vespera://newtab'); return; }
     if (this.activeId === id) this.activate(this.tabs[Math.min(i, this.tabs.length - 1)].id);
     else { this.render(); this.onChange(); }
@@ -257,66 +320,145 @@ export class TabManager {
     for (const t of this.tabs.slice(i + 1)) if (!t.pinned) this.close(t.id);
     if (this.activeId !== id && !this.tabs.some((t) => t.id === this.activeId)) this.activate(id);
   }
-  /** Existing groups as [{ id, name, color }] for "Add to group" menus. */
-  groups() {
-    const seen = new Map();
-    for (const t of this.tabs) if (t.groupId && !seen.has(t.groupId)) seen.set(t.groupId, { id: t.groupId, name: t.groupName || 'Group', color: t.groupColor || '#8b7cf6' });
-    return [...seen.values()];
+  duplicate(id) {
+    const tab = this.tabs.find((item) => item.id === id);
+    if (tab) this.add(tab.url, { title: tab.title, pinned: tab.pinned, afterId: id, groupId: tab.groupId, muted: tab.muted });
   }
-  addToGroup(id, groupId) {
-    const tab = this.tabs.find((t) => t.id === id), ref = this.tabs.find((t) => t.groupId === groupId);
-    if (!tab || !ref || tab.groupId === groupId) return;
-    tab.groupId = groupId; tab.groupName = ref.groupName; tab.groupColor = ref.groupColor;
-    this.tabs = moveIntoGroup(this.tabs, id, groupId);
-    this.render(); this.onChange();
-  }
-  /** Move the active (or given) tab by ±1 slot — Ctrl+Shift+PageUp/PageDown. */
-  moveActive(dir) { if (this.activeId) this.moveTabRelative(this.activeId, dir); }
-  duplicate(id) { const t = this.tabs.find((t) => t.id === id); if (t) this.add(t.url, { title: t.title, pinned: t.pinned, afterId: id, groupId: t.groupId, groupName: t.groupName, groupColor: t.groupColor }); }
   togglePin(id) {
-    const t = this.tabs.find((t) => t.id === id);
-    if (!t) return;
-    t.pinned = !t.pinned;
+    const tab = this.tabs.find((item) => item.id === id);
+    if (!tab) return;
+    tab.pinned = !tab.pinned;
+    if (tab.pinned) { tab.groupId = null; tab.groupName = ''; tab.groupColor = ''; }
     this.tabs = pinnedFirst(this.tabs);
+    this.normalizeGroupOrder(); this.pruneGroups();
     this.render(); this.onChange();
   }
-  createGroup(id, name = '') {
-    const tab = this.tabs.find((t) => t.id === id);
-    if (!tab) return null;
-    const number = ++this.groupCounter;
-    const groupId = 'group-' + Date.now().toString(36) + '-' + number;
-    const colors = ['#8b7cf6', '#42b6a8', '#e6a23c', '#e879a8', '#60a5fa', '#8cbd64'];
-    tab.groupId = groupId; tab.groupName = String(name || 'Group ' + number).trim().slice(0, 24) || 'Group ' + number;
-    tab.groupColor = colors[(number - 1) % colors.length];
+  moveActive(dir) { if (this.activeId) this.moveTabRelative(this.activeId, dir); }
+  createGroup(title = 'New group', tabId = this.activeId, color = 'blue') {
+    if (this.getSettings()?.tabBehavior?.tabGroupsEnabled === false) return null;
+    const tab = this.tabs.find((item) => item.id === tabId);
+    if (!tab || tab.pinned) return null;
+    const group = {
+      id: 'group-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6),
+      title: cleanGroupTitle(title), color: validGroupColor(color), collapsed: false,
+    };
+    this.groups.push(group);
+    tab.groupId = group.id;
+    this.syncGroupMembers(group.id);
+    this.pruneGroups(); this.normalizeGroupOrder();
+    this.render(); this.onChange();
+    return group;
+  }
+  updateGroup(id, patch = {}) {
+    const group = this.getGroup(id);
+    if (!group) return;
+    if (patch.title !== undefined) group.title = cleanGroupTitle(patch.title);
+    if (patch.color !== undefined) group.color = validGroupColor(patch.color);
+    if (patch.collapsed !== undefined) group.collapsed = Boolean(patch.collapsed);
+    this.syncGroupMembers(id);
+    this.render(); this.onChange();
+  }
+  toggleGroup(id) {
+    const group = this.getGroup(id);
+    if (!group) return;
+    group.collapsed = !group.collapsed;
+    this.render(); this.onChange();
+  }
+  moveToGroup(tabId, groupId) {
+    if (this.getSettings()?.tabBehavior?.tabGroupsEnabled === false) return;
+    const group = this.getGroup(groupId);
+    const tab = this.tabs.find((item) => item.id === tabId);
+    const from = this.tabs.findIndex((item) => item.id === tabId);
+    if (!group || !tab || from < 0 || tab.pinned) return;
+    tab.groupId = group.id;
+    this.syncGroupMembers(group.id);
+    const [moved] = this.tabs.splice(from, 1);
+    const members = this.tabs.map((item, index) => item.groupId === group.id ? index : -1).filter((index) => index >= 0);
+    this.tabs.splice(members.length ? members.at(-1) + 1 : this.tabs.length, 0, moved);
+    this.normalizeGroupOrder(); this.pruneGroups();
+    this.render(); this.onChange();
+  }
+  addToGroup(tabId, groupId) { this.moveToGroup(tabId, groupId); }
+  ungroupTab(tabId) {
+    const tab = this.tabs.find((item) => item.id === tabId);
+    if (!tab?.groupId) return;
+    const groupId = tab.groupId;
+    tab.groupId = null; tab.groupName = ''; tab.groupColor = '';
+    this.normalizeGroupOrder(); this.pruneGroups();
     this.render(); this.onChange();
     return groupId;
   }
+  ungroup(groupId) {
+    if (!this.getGroup(groupId)) return;
+    for (const tab of this.tabs) if (tab.groupId === groupId) { tab.groupId = null; tab.groupName = ''; tab.groupColor = ''; }
+    this.groups = this.groups.filter((group) => group.id !== groupId);
+    this.normalizeGroupOrder();
+    this.render(); this.onChange();
+  }
+  closeGroup(groupId) {
+    const group = this.getGroup(groupId);
+    if (!group) return;
+    const index = this.tabs.findIndex((tab) => tab.groupId === groupId);
+    const removed = this.groupTabs(groupId);
+    this.tabs = this.tabs.filter((tab) => tab.groupId !== groupId);
+    for (const tab of removed) {
+      this.closedStack.push({ url: tab.url, title: tab.title, muted: tab.muted, pinned: tab.pinned, index, groupId, groupName: group.title, groupColor: group.color, group: { ...group } });
+      this.dispose(tab); this.onClose(tab);
+    }
+    this.closedStack = this.closedStack.slice(-20);
+    this.groups = this.groups.filter((item) => item.id !== groupId);
+    if (!this.tabs.length) { this.activeId = null; this.add('vespera://newtab'); return; }
+    if (removed.some((tab) => tab.id === this.activeId)) this.activate(this.tabs[Math.min(Math.max(0, index), this.tabs.length - 1)].id);
+    else { this.render(); this.onChange(); }
+  }
   groupWith(fromId, toId) {
-    const from = this.tabs.find((t) => t.id === fromId), to = this.tabs.find((t) => t.id === toId);
-    if (!from || !to || from === to) return;
-    let groupId = to.groupId || from.groupId;
-    if (!groupId) groupId = this.createGroup(toId);
-    const reference = this.tabs.find((t) => t.groupId === groupId);
-    for (const tab of [from, to]) { tab.groupId = groupId; tab.groupName = reference?.groupName || 'Group'; tab.groupColor = reference?.groupColor || '#8b7cf6'; }
-    this.tabs = pinnedFirst(moveTabAfter(this.tabs, fromId, toId));
-    this.render(); this.onChange();
+    if (this.getSettings()?.tabBehavior?.tabGroupsEnabled === false) return;
+    const from = this.tabs.find((tab) => tab.id === fromId), to = this.tabs.find((tab) => tab.id === toId);
+    if (!from || !to || from === to || from.pinned || to.pinned) return;
+    let group = this.getGroup(to.groupId) || this.getGroup(from.groupId);
+    if (!group) group = this.createGroup('New group', toId);
+    if (!group) return;
+    from.groupId = group.id;
+    to.groupId = group.id;
+    this.syncGroupMembers(group.id);
+    this.moveToGroup(fromId, group.id);
   }
-  renameGroup(id, name) {
-    const tab = this.tabs.find((t) => t.id === id);
-    if (!tab?.groupId) return;
-    const label = String(name || '').trim().slice(0, 24);
-    if (!label) return;
-    for (const item of this.tabs) if (item.groupId === tab.groupId) item.groupName = label;
-    this.render(); this.onChange();
+  renameGroup(id, name) { this.updateGroup(id, { title: name }); }
+  syncGroupMembers(groupId) {
+    const group = this.getGroup(groupId);
+    for (const tab of this.tabs) if (tab.groupId === groupId) {
+      tab.groupName = group?.title || '';
+      tab.groupColor = group?.color || '';
+    }
   }
-  ungroup(id) {
-    const tab = this.tabs.find((t) => t.id === id);
-    if (!tab?.groupId) return;
-    delete tab.groupId; tab.groupName = ''; tab.groupColor = '';
-    this.render(); this.onChange();
+  pruneGroups() {
+    const used = new Set(this.tabs.map((tab) => tab.groupId).filter(Boolean));
+    this.groups = this.groups.filter((group) => used.has(group.id));
+    for (const tab of this.tabs) if (tab.groupId && !this.getGroup(tab.groupId)) {
+      tab.groupId = null; tab.groupName = ''; tab.groupColor = '';
+    }
+    for (const group of this.groups) this.syncGroupMembers(group.id);
+  }
+  normalizeGroupOrder() {
+    const pinned = this.tabs.filter((tab) => tab.pinned);
+    const unpinned = this.tabs.filter((tab) => !tab.pinned);
+    const ordered = [...pinned], seen = new Set();
+    for (const tab of unpinned) {
+      const group = this.getGroup(tab.groupId);
+      if (!group) { tab.groupId = null; tab.groupName = ''; tab.groupColor = ''; ordered.push(tab); continue; }
+      if (seen.has(group.id)) continue;
+      seen.add(group.id);
+      const members = unpinned.filter((candidate) => candidate.groupId === group.id);
+      ordered.push(...members);
+      this.syncGroupMembers(group.id);
+    }
+    this.tabs = ordered;
   }
   activate(id) {
-    if (!this.tabs.some((t) => t.id === id)) return;
+    const tab = this.tabs.find((item) => item.id === id);
+    if (!tab) return;
+    const group = this.getGroup(tab.groupId);
+    if (group?.collapsed) group.collapsed = false;
     this.activeId = id;
     for (const t of this.tabs) t.view?.classList.toggle('hidden', t.id !== id);
     this.render();
@@ -333,7 +475,7 @@ export class TabManager {
   }
   focusActiveStrip() {
     const list = document.body.classList.contains('vertical-tabs') ? this.vlist : this.strip;
-    list?.querySelector('.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    (list?.querySelector('.active[data-id]') || list?.querySelector('[data-group-header].active'))?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
   focusActive() {
     const list = document.body.classList.contains('vertical-tabs') ? this.vlist : this.strip;
@@ -347,19 +489,24 @@ export class TabManager {
     this.onChange();
   }
   /** Move a tab to a pre-removal insertion index (as produced by computeDrop). */
-  moveToIndex(fromId, index) {
+  moveToIndex(fromId, index, targetGroupId) {
     const from = this.tabs.findIndex((t) => t.id === fromId);
     if (from < 0) return;
+    const item = this.tabs[from];
     const ins = clampedInsertion(this.tabs, fromId, index);
-    const [item] = this.tabs.splice(from, 1);
-    this.tabs.splice(ins, 0, item);
+    if (!item.pinned && targetGroupId !== undefined) item.groupId = this.getGroup(targetGroupId)?.id || null;
+    const [moved] = this.tabs.splice(from, 1);
+    this.tabs.splice(ins, 0, moved);
+    this.normalizeGroupOrder(); this.pruneGroups();
     this.render(); this.onChange();
   }
   /** Move a tab one slot left/right (keyboard reordering), respecting pin sections. */
   moveTabRelative(id, dir) {
     const i = this.tabs.findIndex((t) => t.id === id);
     if (i < 0 || !dir) return;
-    this.moveToIndex(id, dir > 0 ? i + 2 : i - 1);
+    const targetIndex = dir > 0 ? i + 2 : i - 1;
+    const neighbor = this.tabs[dir > 0 ? i + 1 : i - 1];
+    this.moveToIndex(id, targetIndex, neighbor?.groupId || null);
   }
   /** @deprecated kept for external callers; prefer moveToIndex/moveTabAfter. */
   move(fromId, toId) {
@@ -373,29 +520,52 @@ export class TabManager {
   reopenClosed() {
     const t = this.closedStack.pop();
     if (!t) return null;
-    const sameGroup = t.groupId && this.tabs.some((x) => x.groupId === t.groupId);
-    return this.add(t.url, { title: t.title, pinned: t.pinned, index: t.index, ...(sameGroup ? { groupId: t.groupId, groupName: t.groupName, groupColor: t.groupColor } : {}) });
+    let group = t.groupId ? this.getGroup(t.groupId) : null;
+    if (!group && t.group) {
+      group = { ...t.group, id: t.groupId || t.group.id, title: cleanGroupTitle(t.group.title), color: validGroupColor(t.group.color), collapsed: Boolean(t.group.collapsed) };
+      this.groups.push(group);
+    }
+    const tab = this.add(t.url, { title: t.title, pinned: t.pinned, muted: t.muted, index: t.index, ...(group ? { groupId: group.id } : {}) });
+    return tab;
   }
   faviconHtml(tab) {
     if (tab.loading) return '<div class="spinner"></div>';
     if (tab.favicon && /^(https?:|data:image\/)/.test(tab.favicon)) return `<img src="${escapeHtml(tab.favicon)}" alt="" referrerpolicy="no-referrer">`;
     return icon(tab.url.startsWith('vespera://') ? 'sparkle' : 'globe');
   }
+  audioHtml(tab) {
+    const mode = this.getSettings()?.tabBehavior?.tabAudioMode || 'click-to-mute';
+    if (mode === 'hidden' || (!tab.audible && !tab.muted)) return '';
+    const label = tab.muted ? `Unmute ${tab.title}` : `Mute ${tab.title}`;
+    const speaker = icon(tab.muted ? 'volumeOff' : 'volume');
+    if (mode === 'indicator') return `<span class="tab-audio ${tab.muted ? 'is-muted' : ''}" role="img" aria-label="${escapeHtml(tab.muted ? `Muted: ${tab.title}` : `Playing audio: ${tab.title}`)}">${speaker}</span>`;
+    return `<button class="tab-audio ${tab.muted ? 'is-muted' : ''}" type="button" data-audio-toggle="${escapeHtml(tab.id)}" aria-label="${escapeHtml(label)}" aria-pressed="${tab.muted}" title="${escapeHtml(label)}">${speaker}</button>`;
+  }
   tabHtml(tab, vertical = false) {
     const cls = vertical ? 'vtab' : 'tab';
-    const grouped = Boolean(tab.groupId);
-    const color = /^#[0-9a-f]{6}$/i.test(tab.groupColor) ? tab.groupColor : '#8b7cf6';
-    // A pinned tab is only a few pixels wide, so it gets a ⋮ that opens its
-    // menu (pin, close, group) instead of a title + close button.
+    const behavior = this.getSettings()?.tabBehavior || {};
+    const group = behavior.tabGroupsEnabled === false ? null : this.getGroup(tab.groupId);
+    const tooltip = behavior.tabHoverMode === 'tooltip' && behavior.memoryUsageOnHover === false ? `${tab.title}\n${tab.url}` : '';
     const pinnedControl = tab.pinned
       ? (vertical ? '<span class="pin-marker" aria-label="Pinned">•</span>' : tabMoreHtml(tab.id))
       : '';
-    return `<div class="${cls} ${tab.id === this.activeId ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${grouped ? 'grouped' : ''}" data-id="${tab.id}" data-group-id="${escapeHtml(tab.groupId || '')}" draggable="true" role="tab" tabindex="${tab.id === this.activeId ? 0 : -1}" aria-selected="${tab.id === this.activeId}" title="${escapeHtml(tab.title)}">
+    return `<div class="${cls} ${tab.id === this.activeId ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${group ? 'grouped' : ''}" data-id="${escapeHtml(tab.id)}" data-group-id="${escapeHtml(tab.groupId || '')}" ${group ? `data-group-color="${group.color}" style="--tab-group-color:${group.color}"` : ''} draggable="true" role="tab" tabindex="${tab.id === this.activeId ? 0 : -1}" aria-selected="${tab.id === this.activeId}" aria-label="${escapeHtml(tab.title)}" title="${escapeHtml(tooltip)}">
       <div class="favicon">${this.faviconHtml(tab)}</div>
-      ${grouped ? `<span class="tab-group-label" style="--tab-group-color:${color}">${escapeHtml(tab.groupName || 'Group')}</span>` : ''}
+      ${group ? `<span class="tab-group-label">${escapeHtml(group.title)}</span>` : ''}
       <div class="title">${escapeHtml(tab.title)}</div>
       ${pinnedControl}
-      <button class="close" data-close="${tab.id}" title="Close tab" aria-label="Close ${escapeHtml(tab.title)}">${icon('x')}</button>
+      ${this.audioHtml(tab)}
+      <button class="close" data-close="${escapeHtml(tab.id)}" title="Close tab" aria-label="Close ${escapeHtml(tab.title)}">${icon('x')}</button>
+    </div>`;
+  }
+  groupHeaderHtml(group, vertical = false) {
+    const count = this.groupTabs(group.id).length;
+    const active = this.groupTabs(group.id).some((tab) => tab.id === this.activeId);
+    return `<div class="${vertical ? 'vtab-group-header' : 'tab-group-header'} ${active ? 'active' : ''}" data-group-header="${escapeHtml(group.id)}" data-group-color="${group.color}">
+      <button class="tab-group-toggle" data-group-toggle="${escapeHtml(group.id)}" type="button" aria-expanded="${!group.collapsed}" aria-label="${group.collapsed ? 'Expand' : 'Collapse'} ${escapeHtml(group.title)}, ${count} tabs" title="${escapeHtml(group.title)} · ${count} ${count === 1 ? 'tab' : 'tabs'}">
+        <span class="tab-group-dot"></span><span class="tab-group-title">${escapeHtml(group.title)}</span><span class="tab-group-count">${count}</span><span class="tab-group-chevron" aria-hidden="true">${group.collapsed ? '›' : '⌄'}</span>
+      </button>
+      <button class="tab-group-menu" data-group-menu="${escapeHtml(group.id)}" type="button" aria-label="Edit ${escapeHtml(group.title)}" title="Group options">···</button>
     </div>`;
   }
   render() {
@@ -407,22 +577,68 @@ export class TabManager {
   renderStrip(list, vertical) {
     if (!list) return;
     const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const existing = new Map(), before = new Map();
+    const behavior = this.getSettings()?.tabBehavior || {};
+    const showGroups = behavior.tabGroupsEnabled !== false;
+    const hoverMode = behavior.tabHoverMode || 'card';
+    const existingTabs = new Map(), existingGroups = new Map(), before = new Map();
+    const keyFor = (row) => row.dataset.id ? 'tab:' + row.dataset.id : row.dataset.groupHeader ? 'group:' + row.dataset.groupHeader : '';
     for (const row of [...list.children]) {
-      if (!row.dataset.id) continue;
-      existing.set(row.dataset.id, row);
-      before.set(row.dataset.id, row.getBoundingClientRect());
+      const key = keyFor(row);
+      if (!key) continue;
+      if (row.dataset.id) existingTabs.set(row.dataset.id, row);
+      else existingGroups.set(row.dataset.groupHeader, row);
+      before.set(key, row.getBoundingClientRect());
     }
-    const alive = new Set(this.tabs.map((t) => t.id));
-    for (const [id, row] of existing) {
-      if (alive.has(id)) continue;
-      const rect = before.get(id);
-      row.remove();
-      if (!reduce && list.offsetParent !== null) this.animateTabExit(list, row, rect, vertical);
-    }
-    const ordered = [];
+
+    const desired = [], visibleTabs = new Set(), visibleGroups = new Set(), seenGroups = new Set();
     for (const tab of this.tabs) {
-      let row = existing.get(tab.id);
+      const group = showGroups ? this.getGroup(tab.groupId) : null;
+      if (!group) { desired.push({ type: 'tab', tab }); visibleTabs.add(tab.id); continue; }
+      if (seenGroups.has(group.id)) continue;
+      seenGroups.add(group.id); visibleGroups.add(group.id);
+      desired.push({ type: 'group', group });
+      if (!group.collapsed) for (const member of this.groupTabs(group.id)) { desired.push({ type: 'tab', tab: member }); visibleTabs.add(member.id); }
+    }
+
+    const alive = new Set(this.tabs.map((tab) => tab.id));
+    for (const [id, row] of existingTabs) {
+      if (visibleTabs.has(id)) continue;
+      const rect = before.get('tab:' + id);
+      row.remove();
+      if (!alive.has(id) && !reduce && list.offsetParent !== null) this.animateTabExit(list, row, rect, vertical);
+    }
+    for (const [id, row] of existingGroups) if (!visibleGroups.has(id)) row.remove();
+
+    const ordered = [];
+    for (const entry of desired) {
+      if (entry.type === 'group') {
+        const group = entry.group;
+        let row = existingGroups.get(group.id);
+        if (!row) {
+          const template = document.createElement('template');
+          template.innerHTML = this.groupHeaderHtml(group, vertical).trim();
+          row = template.content.firstElementChild;
+          if (!reduce && list.offsetParent !== null) {
+            row.classList.add('group-enter');
+            row.addEventListener('animationend', () => row.classList.remove('group-enter'), { once: true });
+          }
+        }
+        row.classList.toggle('active', this.groupTabs(group.id).some((tab) => tab.id === this.activeId));
+        row.dataset.groupColor = group.color;
+        const toggle = row.querySelector('[data-group-toggle]');
+        if (toggle) {
+          toggle.setAttribute('aria-expanded', String(!group.collapsed));
+          toggle.setAttribute('aria-label', `${group.collapsed ? 'Expand' : 'Collapse'} ${group.title}, ${this.groupTabs(group.id).length} tabs`);
+          toggle.title = `${group.title} · ${this.groupTabs(group.id).length} ${this.groupTabs(group.id).length === 1 ? 'tab' : 'tabs'}`;
+          const title = toggle.querySelector('.tab-group-title'); if (title) title.textContent = group.title;
+          const count = toggle.querySelector('.tab-group-count'); if (count) count.textContent = this.groupTabs(group.id).length;
+          const chevron = toggle.querySelector('.tab-group-chevron'); if (chevron) chevron.textContent = group.collapsed ? '›' : '⌄';
+        }
+        ordered.push(row);
+        continue;
+      }
+      const tab = entry.tab;
+      let row = existingTabs.get(tab.id);
       if (!row) {
         const template = document.createElement('template');
         template.innerHTML = this.tabHtml(tab, vertical).trim();
@@ -433,18 +649,23 @@ export class TabManager {
         }
       }
       const active = tab.id === this.activeId;
+      const group = showGroups ? this.getGroup(tab.groupId) : null;
       row.classList.toggle('active', active);
       row.classList.toggle('pinned', tab.pinned);
-      row.classList.toggle('grouped', Boolean(tab.groupId));
+      row.classList.toggle('grouped', Boolean(group));
       row.dataset.groupId = tab.groupId || '';
-      const groupLabel = row.querySelector('.tab-group-label');
-      if (tab.groupId && !groupLabel) { const marker = document.createElement('span'); marker.className = 'tab-group-label'; marker.textContent = tab.groupName || 'Group'; row.querySelector('.favicon')?.after(marker); }
-      else if (!tab.groupId && groupLabel) groupLabel.remove();
-      else if (groupLabel) groupLabel.textContent = tab.groupName || 'Group';
-      row.style.setProperty('--tab-group-color', /^#[0-9a-f]{6}$/i.test(tab.groupColor) ? tab.groupColor : '#8b7cf6');
+      if (group) row.dataset.groupColor = group.color;
+      else delete row.dataset.groupColor;
+      if (group) row.style.setProperty('--tab-group-color', group.color);
+      else row.style.removeProperty('--tab-group-color');
       row.tabIndex = active ? 0 : -1;
       row.setAttribute('aria-selected', String(active));
-      row.title = tab.title;
+      row.setAttribute('aria-label', tab.title);
+      row.title = hoverMode === 'tooltip' && behavior.memoryUsageOnHover === false ? `${tab.title}\n${tab.url}` : '';
+      const groupLabel = row.querySelector('.tab-group-label');
+      if (group && !groupLabel) { const label = document.createElement('span'); label.className = 'tab-group-label'; row.querySelector('.favicon')?.after(label); }
+      else if (!group && groupLabel) groupLabel.remove();
+      if (groupLabel && group) groupLabel.textContent = group.title;
       const title = row.querySelector('.title');
       if (title && title.textContent !== tab.title) title.textContent = tab.title;
       const faviconKey = `${tab.loading ? 'loading' : 'idle'}|${tab.favicon || ''}|${tab._internal ? 'internal' : 'web'}`;
@@ -455,6 +676,12 @@ export class TabManager {
       }
       const close = row.querySelector('.close');
       if (close) { close.title = 'Close tab'; close.setAttribute('aria-label', `Close ${tab.title}`); }
+      const audio = row.querySelector('.tab-audio');
+      const desiredAudio = this.audioHtml(tab);
+      if ((audio?.outerHTML || '') !== desiredAudio) {
+        audio?.remove();
+        if (desiredAudio) close?.insertAdjacentHTML('beforebegin', desiredAudio);
+      }
       // Pinned horizontal tabs swap their title/close for a ⋮ menu button.
       const more = row.querySelector('.tab-more');
       if (tab.pinned && !vertical && !more) close?.insertAdjacentHTML('beforebegin', tabMoreHtml(tab.id));
@@ -464,12 +691,10 @@ export class TabManager {
       else if ((!tab.pinned || !vertical) && pin) pin.remove();
       ordered.push(row);
     }
-    ordered.forEach((row, index) => {
-      if (list.children[index] !== row) list.insertBefore(row, list.children[index] || null);
-    });
+    ordered.forEach((row, index) => { if (list.children[index] !== row) list.insertBefore(row, list.children[index] || null); });
     if (reduce) return;
     for (const row of ordered) {
-      const first = before.get(row.dataset.id);
+      const first = before.get(keyFor(row));
       if (!first) continue;
       const last = row.getBoundingClientRect();
       const x = first.left - last.left, y = first.top - last.top;
