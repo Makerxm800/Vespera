@@ -17,7 +17,7 @@ const fixture = http.createServer((req, res) => {
   if (req.url.startsWith('/second')) { res.writeHead(200, { 'content-type': 'text/html' }); return res.end('<title>Second page</title><h1>Second page</h1><a href="/">Back to fixture</a>'); }
   if (req.url.startsWith('/headers')) { res.writeHead(200, { 'content-type': 'text/plain' }); return res.end(JSON.stringify({ gpc: req.headers['sec-gpc'], cookie: req.headers.cookie || null })); }
   res.writeHead(200, { 'content-type': 'text/html' });
-  res.end(`<title>Fixture Home</title><article><h1>A readable article</h1><p>${article}</p></article><a id="next" href="/second">Second page</a><a id="file" href="/file.txt" download="hello.txt">Download a file</a><script src="https://google-analytics.com/analytics.js"></script>`);
+  res.end(`<title>Fixture Home</title><article><h1>A readable article</h1><p>${article}</p></article><audio id="fixture-audio"></audio><a id="next" href="/second">Second page</a><a id="file" href="/file.txt" download="hello.txt">Download a file</a><script src="https://google-analytics.com/analytics.js"></script>`);
 });
 await new Promise((resolve) => fixture.listen(0, '127.0.0.1', resolve));
 const fixtureUrl = 'http://127.0.0.1:' + fixture.address().port;
@@ -37,6 +37,10 @@ try {
   await page.goto(base);
   await step('startup renders one real tab, live clock, visible window controls and wallpaper', async () => {
     assert.equal(await page.locator('#tabstrip .tab').count(), 1);
+    assert.equal(await page.locator('#titlebar .brand').count(), 0, 'the tab row should not waste space on a brand label');
+    assert.equal(await page.locator('#btn-new-group').count(), 1);
+    const scrollbar = await page.locator('.page-scroll').evaluate((el) => ({ width: getComputedStyle(el).scrollbarWidth, webkitWidth: getComputedStyle(el, '::-webkit-scrollbar').width, radius: getComputedStyle(el, '::-webkit-scrollbar-thumb').borderRadius }));
+    assert.equal(scrollbar.width, 'thin'); assert.equal(scrollbar.webkitWidth, '9px'); assert.match(scrollbar.radius, /999px/);
     assert.match(await page.locator('.nt-hero h1').textContent(), /Welcome to Vespera/);
     const before = await page.locator('#nt-time').textContent(); await page.waitForTimeout(1200); assert.notEqual(await page.locator('#nt-time').textContent(), before);
     for (const id of ['wc-min', 'wc-max', 'wc-close']) assert.equal(await page.locator('#' + id).isVisible(), true);
@@ -52,10 +56,42 @@ try {
     await page.locator('.nt-hero h1').click({ button: 'right' }); assert.equal(await page.locator('.context-menu').count(), 1);
     assert.match(await page.locator('.context-menu').textContent(), /Customize home/); await page.keyboard.press('Escape');
   });
-  await step('menu toggles closed on the same anchor and opens Settings', async () => {
+  await step('menu toggles closed on the same anchor and its live tab switches work', async () => {
     await page.locator('#btn-menu').click(); assert.equal(await page.locator('.browser-menu').count(), 1);
+    const beside = page.locator('[data-pref="tabBehavior.openTabsNextToCurrent"]');
+    assert.equal(await beside.getAttribute('aria-checked'), 'true');
+    await beside.click(); assert.equal(await beside.getAttribute('aria-checked'), 'false');
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('vespera.settings')).tabBehavior.openTabsNextToCurrent), false);
+    await beside.click(); assert.equal(await beside.getAttribute('aria-checked'), 'true');
     await page.locator('#btn-menu').click(); assert.equal(await page.locator('.browser-menu').count(), 0);
-    await menu('settings'); assert.match(await page.locator('#omni-input').inputValue(), /settings/);
+    await menu('tab-settings'); assert.match(await page.locator('#omni-input').inputValue(), /settings#tabs/);
+    assert.equal(await page.locator('.settings-layout').count(), 1);
+    await page.locator('[data-section="tabs"]').click();
+    assert.equal(await page.locator('[data-setting="tabBehavior.middleClickOpensTab"]').isVisible(), true);
+    assert.equal(await page.locator('[data-setting="tabBehavior.openTabsNextToCurrent"]').isChecked(), true);
+    await page.locator('[data-setting="tabBehavior.hideCloseButtons"]').check();
+    assert.equal(await page.locator('body').evaluate((el) => el.classList.contains('tabs-hide-close')), true);
+    assert.equal(await page.locator('#tabstrip .tab.active .close').isVisible(), false);
+    await page.locator('[data-setting="tabBehavior.hideCloseButtons"]').uncheck();
+    await page.locator('[data-setting="tabBehavior.scrollableTabStrip"]').uncheck();
+    assert.equal(await page.locator('body').evaluate((el) => el.classList.contains('tabs-no-scroll')), true);
+    await page.locator('[data-setting="tabBehavior.scrollableTabStrip"]').check();
+    await page.locator('[data-setting="tabBehavior.tabGroupsEnabled"]').uncheck();
+    assert.equal(await page.locator('body').evaluate((el) => el.classList.contains('tab-groups-disabled')), true);
+    await page.locator('[data-setting="tabBehavior.tabGroupsEnabled"]').check();
+    const audioMode = page.locator('[data-setting-select="tabBehavior.tabAudioMode"]');
+    await audioMode.selectOption('indicator'); assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('vespera.settings')).tabBehavior.tabAudioMode), 'indicator');
+    await audioMode.selectOption('hidden'); await audioMode.selectOption('click-to-mute');
+    const hoverMode = page.locator('[data-setting-select="tabBehavior.tabHoverMode"]');
+    await hoverMode.selectOption('preview'); assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('vespera.settings')).tabBehavior.tabHoverMode), 'preview');
+    await hoverMode.selectOption('tooltip'); await hoverMode.selectOption('card');
+    await page.locator('[data-setting="tabBehavior.memoryUsageOnHover"]').uncheck();
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('vespera.settings')).tabBehavior.memoryUsageOnHover), false);
+    await page.locator('[data-setting="tabBehavior.memoryUsageOnHover"]').check();
+    const inactive = page.locator('[data-segment="tabBehavior.inactiveTabAppearance"]');
+    await inactive.locator('[data-v="dimmed"]').click(); assert.equal(await page.locator('body').evaluate((el) => el.classList.contains('tabs-inactive-dimmed')), true);
+    await inactive.locator('[data-v="minimal"]').click(); assert.equal(await page.locator('body').evaluate((el) => el.classList.contains('tabs-inactive-minimal')), true);
+    await inactive.locator('[data-v="balanced"]').click();
   });
   await step('theme, accent, wallpaper, homepage and clock toggles persist', async () => {
     await page.locator('[data-segment="theme"] [data-v="light"]').click(); assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
@@ -96,11 +132,68 @@ try {
     const windowClose = await page.locator('#wc-close').boundingBox(); assert.ok(windowClose.width <= 32 && windowClose.height <= 32);
     await page.keyboard.press('Control+w'); assert.equal(await page.locator('#tabstrip .tab').count(), 1);
   });
-  await step('proxy browsing, title updates, link navigation, back and reload', async () => {
+  await step('tab groups rename, color, collapse, expand and persist', async () => {
+    await page.locator('#tabstrip .tab.active').click({ button: 'right' });
+    await page.waitForSelector('.tab-actions-menu');
+    await page.locator('.tab-actions-menu [data-action="new-group"]').click();
+    await page.waitForSelector('.group-editor-menu');
+    await page.locator('[data-group-name]').fill('Weekend plans');
+    await page.locator('[data-group-color-choice="pink"]').click();
+    await page.locator('[data-group-save]').click();
+    const header = page.locator('.tab-group-header');
+    await page.waitForFunction(() => document.querySelector('.tab-group-header')?.textContent.includes('Weekend plans'));
+    const groupId = await header.getAttribute('data-group-header');
+    assert.equal(await header.getAttribute('data-group-color'), 'pink');
+    await header.locator('[data-group-menu]').click();
+    await page.locator('[data-group-action="newtab"]').click();
+    await page.waitForFunction((id) => document.querySelectorAll(`#tabstrip [data-id][data-group-id="${id}"]`).length === 2, groupId);
+    await page.locator(`#tabstrip [data-group-toggle="${groupId}"]`).click();
+    assert.equal(await page.locator(`#tabstrip [data-group-toggle="${groupId}"]`).getAttribute('aria-expanded'), 'false');
+    assert.equal(await page.locator(`#tabstrip [data-id][data-group-id="${groupId}"]`).count(), 0);
+    await page.locator(`#tabstrip [data-group-toggle="${groupId}"]`).click();
+    assert.equal(await page.locator(`#tabstrip [data-id][data-group-id="${groupId}"]`).count(), 2);
+    await go('vespera://settings#tabs');
+    await page.locator('#content > .page-scroll:not(.hidden) #tabs [data-segment="tabLayout"] [data-v="vertical"]').click();
+    await page.waitForSelector(`#vtabs-list [data-group-header="${groupId}"]`);
+    assert.equal(await page.locator(`#vtabs-list [data-id][data-group-id="${groupId}"]`).count(), 2);
+    await page.locator(`#vtabs-list [data-group-toggle="${groupId}"]`).click();
+    assert.equal(await page.locator(`#vtabs-list [data-id][data-group-id="${groupId}"]`).count(), 0);
+    await page.locator(`#vtabs-list [data-group-toggle="${groupId}"]`).click();
+    await page.locator('#content > .page-scroll:not(.hidden) #tabs [data-segment="tabLayout"] [data-v="horizontal"]').click();
+    await page.waitForTimeout(220); await page.reload(); await page.waitForSelector('#tabstrip .tab.active');
+    assert.equal(await page.locator('.tab-group-header').textContent().then((text) => text.includes('Weekend plans')), true);
+    assert.equal(await page.locator('.tab-group-header').getAttribute('data-group-color'), 'pink');
+    await page.locator('.tab-group-header [data-group-menu]').click();
+    await page.locator('[data-group-action="ungroup"]').click();
+    assert.equal(await page.locator('.tab-group-header').count(), 0);
+    assert.equal(await page.locator('#tabstrip .tab').count(), 2);
+  });
+  await step('proxy browsing, middle-click tabs, title updates, link navigation, back and reload', async () => {
     await go(fixtureUrl + '/?utm_source=test');
     await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'Fixture Home');
     assert.equal(await page.locator('#omni-input').inputValue(), fixtureUrl + '/');
     const frame = page.frames().find((f) => f.url().includes('/proxy?'));
+    await page.locator('#tabstrip .tab.active').hover();
+    await page.waitForSelector('.tab-hovercard');
+    assert.match(await page.locator('.tab-hovercard').textContent(), /Fixture Home/);
+    await page.mouse.move(700, 400);
+    await page.locator('#tabstrip .tab.active').click({ button: 'right' });
+    await page.locator('.tab-actions-menu [data-action="mute"]').click();
+    await frame.waitForFunction(() => document.querySelector('#fixture-audio')?.muted === true);
+    assert.equal(await page.locator('#tabstrip .tab.active [data-audio-toggle]').getAttribute('aria-label'), 'Unmute Fixture Home');
+    await page.locator('#tabstrip .tab.active [data-audio-toggle]').click();
+    await frame.waitForFunction(() => document.querySelector('#fixture-audio')?.muted === false);
+    const before = await page.locator('#tabstrip .tab').evaluateAll((rows) => rows.map((row) => row.dataset.id));
+    const activeId = await page.locator('#tabstrip .tab.active').getAttribute('data-id');
+    await frame.locator('#next').click({ button: 'middle' });
+    await page.waitForFunction((count) => document.querySelectorAll('#tabstrip .tab').length === count, before.length + 1);
+    const afterMiddle = await page.locator('#tabstrip .tab').evaluateAll((rows) => rows.map((row) => row.dataset.id));
+    const openedId = afterMiddle.find((id) => !before.includes(id));
+    assert.equal(await page.locator('#tabstrip .tab.active').getAttribute('data-id'), activeId);
+    assert.equal(afterMiddle.indexOf(openedId), afterMiddle.indexOf(activeId) + 1, 'middle-clicked links open immediately to the right');
+    await page.waitForFunction((id) => document.querySelector(`#tabstrip [data-id="${id}"] .title`)?.textContent === 'Second page', openedId);
+    await page.locator(`#tabstrip .tab[data-id="${openedId}"]`).click({ button: 'middle' });
+    assert.equal(await page.locator('#tabstrip .tab').count(), before.length, 'middle-click on a tab closes it');
     await frame.locator('#next').click({ button: 'right' });
     await page.waitForSelector('.context-menu'); assert.match(await page.locator('.context-menu').textContent(), /Open link in new tab/); await page.keyboard.press('Escape');
     await frame.locator('#next').click();
@@ -109,6 +202,33 @@ try {
     await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'Fixture Home');
     await page.locator('#btn-reload').click();
     await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'Fixture Home');
+  });
+  await step('tab hover previews, tooltip mode, memory hint and inactive appearance work', async () => {
+    const activeSetting = (selector) => page.locator('#content > .page-scroll:not(.hidden) ' + selector);
+    await page.keyboard.press('Control+t'); await go('vespera://settings#tabs');
+    await activeSetting('[data-setting-select="tabBehavior.tabHoverMode"]').selectOption('preview');
+    await page.locator('#omni-input').blur(); await page.keyboard.press('Control+w');
+    await page.locator('#tabstrip .tab.active').hover(); await page.waitForSelector('.tab-hovercard.has-preview');
+    assert.match(await page.locator('.tab-hovercard').textContent(), /Page snapshots are available in the desktop app/);
+    assert.match(await page.locator('.tab-hovercard').textContent(), /Memory estimate unavailable in web preview/);
+    await page.mouse.move(700, 400);
+    await page.keyboard.press('Control+t'); await go('vespera://settings#tabs');
+    await activeSetting('[data-setting-select="tabBehavior.tabHoverMode"]').selectOption('tooltip');
+    await activeSetting('[data-setting="tabBehavior.memoryUsageOnHover"]').uncheck();
+    const inactive = activeSetting('[data-segment="tabBehavior.inactiveTabAppearance"]');
+    await inactive.locator('[data-v="dimmed"]').click(); assert.equal(await page.locator('body').evaluate((el) => el.classList.contains('tabs-inactive-dimmed')), true);
+    await inactive.locator('[data-v="minimal"]').click(); assert.equal(await page.locator('body').evaluate((el) => el.classList.contains('tabs-inactive-minimal')), true);
+    await page.locator('#omni-input').blur(); await page.keyboard.press('Control+w');
+    await page.locator('#tabstrip .tab.active').hover(); await page.waitForTimeout(450);
+    assert.equal(await page.locator('.tab-hovercard').count(), 0, 'tooltip-only mode should use the native tab tooltip when memory is off');
+    assert.match(await page.locator('#tabstrip .tab.active').getAttribute('title'), /Fixture Home/);
+    await page.mouse.move(700, 400);
+    await page.keyboard.press('Control+t'); await go('vespera://settings#tabs');
+    await activeSetting('[data-setting-select="tabBehavior.tabHoverMode"]').selectOption('card');
+    await activeSetting('[data-setting="tabBehavior.memoryUsageOnHover"]').check();
+    await activeSetting('[data-setting-select="tabBehavior.tabAudioMode"]').selectOption('click-to-mute');
+    await activeSetting('[data-segment="tabBehavior.inactiveTabAppearance"] [data-v="balanced"]').click();
+    await page.locator('#omni-input').blur(); await page.keyboard.press('Control+w');
   });
   await step('Shields block a real tracker resource and update the badge', async () => {
     await page.waitForFunction(() => Number(document.querySelector('#shield-count')?.textContent) > 0);
@@ -140,7 +260,7 @@ try {
     const frame = page.frames().find((f) => f.url().includes('/proxy?'));
     const pending = page.waitForEvent('download'); await frame.locator('#file').click(); const download = await pending;
     assert.equal(download.suggestedFilename(), 'hello.txt');
-    await go('vespera://downloads'); await page.waitForFunction(() => document.querySelector('#d-list')?.textContent.includes('Sent to browser downloads'));
+    await go('vespera://downloads'); await page.waitForFunction(() => document.querySelector('#content > .page-scroll:not(.hidden) #d-list')?.textContent.includes('Sent to browser downloads'), null, { timeout: 20000 });
   });
   await step('Reader View extracts the last article and returns to the extensions page', async () => {
     await go(fixtureUrl); await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'Fixture Home');
@@ -197,7 +317,7 @@ try {
     await page.setViewportSize({ width: 390, height: 844 }); await go('vespera://newtab');
     const size = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, width: innerWidth })); assert.ok(size.scroll <= size.width + 1);
     assert.equal(await page.locator('#wc-min').isVisible(), true); assert.equal(await page.locator('#btn-menu').isVisible(), true);
-    for (const route of ['vespera://privacy', 'vespera://account']) {
+    for (const route of ['vespera://privacy', 'vespera://account', 'vespera://settings#tabs']) {
       await go(route); await page.waitForTimeout(120);
       const fit = await page.evaluate(() => { const el = document.querySelector('.page-scroll:not(.hidden)'); return el.scrollWidth <= el.clientWidth + 1; });
       assert.ok(fit, route + ' fits a small viewport');

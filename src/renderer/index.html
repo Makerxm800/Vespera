@@ -15,17 +15,17 @@
   <link rel="stylesheet" href="styles/base.css">
   <link rel="stylesheet" href="styles/chrome.css">
   <link rel="stylesheet" href="styles/pages.css">
+  <link rel="stylesheet" href="styles/tab-settings.css">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23f6b93b' d='M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z'/%3E%3C/svg%3E">
 </head>
 <body>
   <div id="app">
     <!-- Titlebar + tab strip (horizontal mode) -->
     <header class="titlebar" id="titlebar">
-      <div class="brand no-drag">
-        <svg class="logo-star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z"/></svg>
-        <span>Vespera</span>
-      </div>
       <div class="tabstrip no-drag" id="tabstrip" role="tablist" aria-label="Browser tabs"></div>
+      <button class="newtab-btn group-create-btn no-drag" id="btn-new-group" title="Create a group for this tab" aria-label="Create tab group">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5h7l2 2H20a1.5 1.5 0 011.5 1.5v7a2 2 0 01-2 2h-14a2 2 0 01-2-2z"/><path d="M15 13v5m-2.5-2.5h5"/></svg>
+      </button>
       <button class="newtab-btn no-drag" id="btn-newtab" title="New tab (Ctrl+T)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
       </button>

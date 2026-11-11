@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('vespera', {
     version: () => invoke('app:version'), readLog: () => invoke('app:read-log'),
     logPath: () => invoke('app:log-path'), openLogs: () => invoke('app:open-logs'),
     setDefaultBrowser: () => invoke('app:default-browser'),
+    tabMemory: (contentsId) => invoke('tabs:memory', contentsId),
     downloads: () => invoke('downloads:list'), download: (url) => invoke('downloads:start', url),
     downloadAction: (action, id) => invoke('downloads:action', action, id),
     clearDownloads: () => invoke('downloads:clear'),

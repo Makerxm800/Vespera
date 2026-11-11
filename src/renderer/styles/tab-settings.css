@@ -1,0 +1,179 @@
+/* Tab behavior, first-class groups and a clearer settings workspace. */
+.tab-group-header,
+.vtab-group-header {
+  --tab-group-color: #78909c;
+  --tab-group-surface: color-mix(in srgb, var(--tab-group-color) 17%, var(--surface));
+  --tab-group-border: color-mix(in srgb, var(--tab-group-color) 44%, var(--border));
+  --tab-group-ink: color-mix(in srgb, var(--tab-group-color) 84%, var(--text));
+  display: flex;
+  align-items: center;
+  flex: none;
+  min-width: 0;
+  gap: 2px;
+  color: var(--tab-group-ink);
+}
+.tab-group-header[data-group-color="grey"], .vtab-group-header[data-group-color="grey"] { --tab-group-color: #9aa6b2; }
+.tab-group-header[data-group-color="blue"], .vtab-group-header[data-group-color="blue"] { --tab-group-color: #6ca9ff; }
+.tab-group-header[data-group-color="red"], .vtab-group-header[data-group-color="red"] { --tab-group-color: #ff7f87; }
+.tab-group-header[data-group-color="yellow"], .vtab-group-header[data-group-color="yellow"] { --tab-group-color: #efbf54; }
+.tab-group-header[data-group-color="green"], .vtab-group-header[data-group-color="green"] { --tab-group-color: #57cf9a; }
+.tab-group-header[data-group-color="pink"], .vtab-group-header[data-group-color="pink"] { --tab-group-color: #ec78c0; }
+.tab-group-header[data-group-color="purple"], .vtab-group-header[data-group-color="purple"] { --tab-group-color: #ad8aff; }
+.tab-group-header[data-group-color="cyan"], .vtab-group-header[data-group-color="cyan"] { --tab-group-color: #55cbd4; }
+.tab-group-header { height: 28px; align-self: center; margin: 0 2px 4px; max-width: 190px; border-radius: 8px; }
+.tab-group-header.active { filter: brightness(1.08); }
+.tab-group-toggle {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 162px; height: 27px;
+  padding: 0 8px; border: 1px solid var(--tab-group-border); border-radius: 8px;
+  background: var(--tab-group-surface); color: var(--tab-group-ink); cursor: pointer;
+  font: inherit; font-size: 11px; font-weight: 680; transition: background var(--fast), border-color var(--fast), transform var(--fast);
+}
+.tab-group-toggle:hover { background: color-mix(in srgb, var(--tab-group-color) 25%, var(--surface)); }
+.tab-group-toggle:active { transform: scale(.97); }
+.tab-group-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--tab-group-color, #6ca9ff); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tab-group-color, #6ca9ff) 16%, transparent); flex: none; }
+.tab-group-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab-group-count { color: color-mix(in srgb, var(--tab-group-ink) 78%, transparent); font-size: 10px; font-variant-numeric: tabular-nums; }
+.tab-group-chevron { font-size: 15px; line-height: 1; opacity: .78; }
+.tab-group-menu { display: grid; place-items: center; flex: none; width: 21px; height: 23px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--tab-group-ink); cursor: pointer; font-size: 14px; line-height: 1; opacity: 0; transition: opacity var(--fast), background var(--fast); }
+.tab-group-header:hover .tab-group-menu, .tab-group-menu:focus-visible { opacity: 1; }
+.tab-group-menu:hover { background: var(--tab-group-surface); }
+.vtab-group-header { width: 100%; min-height: 32px; margin: 4px 0 1px; padding: 0 2px; border-radius: 8px; }
+.vtab-group-header .tab-group-toggle { flex: 1; max-width: none; height: 30px; }
+.vtab-group-header .tab-group-menu { opacity: .5; }
+.vtab-group-header:hover .tab-group-menu { opacity: 1; }
+.tab-group-header.drag-over, .vtab-group-header.drag-over { outline: 2px dashed var(--tab-group-color); outline-offset: -2px; }
+.tab[data-group-color="grey"] { --tab-member-color: #9aa6b2; }
+.tab[data-group-color="blue"] { --tab-member-color: #6ca9ff; }
+.tab[data-group-color="red"] { --tab-member-color: #ff7f87; }
+.tab[data-group-color="yellow"] { --tab-member-color: #efbf54; }
+.tab[data-group-color="green"] { --tab-member-color: #57cf9a; }
+.tab[data-group-color="pink"] { --tab-member-color: #ec78c0; }
+.tab[data-group-color="purple"] { --tab-member-color: #ad8aff; }
+.tab[data-group-color="cyan"] { --tab-member-color: #55cbd4; }
+.tab[data-group-color] { border-top-color: color-mix(in srgb, var(--tab-member-color) 35%, transparent); }
+.vtab[data-group-color] { border-left-color: color-mix(in srgb, var(--tab-member-color) 42%, transparent); }
+.group-enter { animation: group-enter .2s ease both; }
+@keyframes group-enter { from { opacity: 0; transform: translateY(4px) scale(.97); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .group-enter { animation: none; } }
+
+body.tabs-no-scroll .tabstrip { overflow-x: hidden; }
+body.tabs-hide-close .tab .close, body.tabs-hide-close .vtab .close { display: none !important; }
+body.tab-groups-disabled .tab-group-header, body.tab-groups-disabled .vtab-group-header { display: none !important; }
+body.tab-groups-disabled #btn-new-group { display: none; }
+
+/* A tiny, legible switch group in the Vespera menu. */
+.menu-toggle {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 37px; padding: 6px 10px; border: 0; border-radius: var(--r-md); background: transparent;
+  color: var(--text); font: inherit; font-size: 12px; text-align: left; cursor: pointer;
+}
+.menu-toggle:hover { background: var(--surface-2); }
+.menu-toggle-label { min-width: 0; }
+.menu-switch { width: 30px; height: 17px; flex: none; display: flex; align-items: center; padding: 2px; border-radius: 99px; background: var(--surface-3); transition: background var(--fast); }
+.menu-switch i { width: 13px; height: 13px; border-radius: 50%; background: var(--text-faint); transition: transform var(--fast), background var(--fast); }
+.menu-toggle[aria-checked="true"] .menu-switch { background: var(--accent); }
+.menu-toggle[aria-checked="true"] .menu-switch i { transform: translateX(13px); background: var(--accent-ink, #101522); }
+
+/* Settings use a real section navigator; the content stays scannable. */
+.settings-layout { max-width: 1160px; }
+.settings-workspace { display: grid; grid-template-columns: 184px minmax(0, 1fr); align-items: start; gap: 30px; }
+.settings-nav { position: sticky; top: 14px; display: flex; flex-direction: column; gap: 3px; padding: 7px; border: 1px solid var(--border); border-radius: 14px; background: color-mix(in srgb, var(--surface) 90%, transparent); }
+.settings-nav-label { padding: 5px 9px 8px; color: var(--text-faint); font-size: 10px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+.settings-nav a { display: flex; align-items: center; gap: 10px; min-height: 37px; padding: 8px 10px; border: 1px solid transparent; border-radius: 9px; color: var(--text-dim); font-size: 12px; font-weight: 560; transition: background var(--fast), color var(--fast), border-color var(--fast); }
+.settings-nav a svg { width: 15px; height: 15px; flex: none; opacity: .78; }
+.settings-nav a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+.settings-nav a.active { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 22%, transparent); text-decoration: none; }
+.settings-content { min-width: 0; }
+.settings-page .section { margin-top: 0; margin-bottom: 38px; scroll-margin-top: 18px; }
+.settings-page .section h2 { margin-bottom: 6px; font-size: 17px; }
+.settings-section-sub { margin: 0 0 16px; color: var(--text-dim); font-size: 12.5px; line-height: 1.6; }
+.settings-page .setting-row { background: color-mix(in srgb, var(--surface) 90%, transparent); }
+.settings-page .appearance-card { background: color-mix(in srgb, var(--surface) 90%, transparent); }
+.group-colors { display: flex; gap: 8px; flex-wrap: wrap; padding: 6px 0 12px; }
+.group-color-choice { width: 25px; height: 25px; display: grid; place-items: center; border: 2px solid transparent; border-radius: 50%; background: transparent; cursor: pointer; }
+.group-color-choice i { width: 13px; height: 13px; border-radius: 50%; background: var(--choice-color); }
+.group-color-choice[aria-pressed="true"] { border-color: var(--text); }
+.group-color-choice[data-color="grey"] { --choice-color: #9aa6b2; }.group-color-choice[data-color="blue"] { --choice-color: #6ca9ff; }.group-color-choice[data-color="red"] { --choice-color: #ff7f87; }.group-color-choice[data-color="yellow"] { --choice-color: #efbf54; }.group-color-choice[data-color="green"] { --choice-color: #57cf9a; }.group-color-choice[data-color="pink"] { --choice-color: #ec78c0; }.group-color-choice[data-color="purple"] { --choice-color: #ad8aff; }.group-color-choice[data-color="cyan"] { --choice-color: #55cbd4; }
+.group-editor-menu { width: 288px; max-width: calc(100vw - 16px); }
+.group-editor { width: 264px; padding: 6px; }
+.group-editor > label { display: block; padding: 4px 6px; font-size: 11px; font-weight: 650; color: var(--text-dim); }
+.group-editor .input { margin-top: 5px; font-size: 12px; }
+.group-editor .menu-item { font-size: 12px; }
+.group-editor .danger { color: #f87171; }
+.tab-actions-menu { width: 250px; max-width: calc(100vw - 16px); }
+.menu-item .tab-group-dot[data-group-color="grey"] { --tab-group-color: #9aa6b2; }
+.menu-item .tab-group-dot[data-group-color="blue"] { --tab-group-color: #6ca9ff; }
+.menu-item .tab-group-dot[data-group-color="red"] { --tab-group-color: #ff7f87; }
+.menu-item .tab-group-dot[data-group-color="yellow"] { --tab-group-color: #efbf54; }
+.menu-item .tab-group-dot[data-group-color="green"] { --tab-group-color: #57cf9a; }
+.menu-item .tab-group-dot[data-group-color="pink"] { --tab-group-color: #ec78c0; }
+.menu-item .tab-group-dot[data-group-color="purple"] { --tab-group-color: #ad8aff; }
+.menu-item .tab-group-dot[data-group-color="cyan"] { --tab-group-color: #55cbd4; }
+
+@media (max-width: 820px) {
+  .settings-workspace { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .settings-nav { position: sticky; z-index: 4; top: 0; flex-direction: row; gap: 4px; overflow-x: auto; white-space: nowrap; padding: 6px; backdrop-filter: blur(18px); }
+  .settings-nav-label { display: none; }
+  .settings-nav a { flex: none; min-height: 32px; padding: 7px 10px; }
+  .settings-nav a svg { display: none; }
+}
+@media (max-width: 560px) {
+  .tab-group-header { max-width: 142px; }
+  .tab-group-toggle { max-width: 118px; padding: 0 6px; gap: 5px; }
+  .tab-group-title { max-width: 72px; }
+  .tab-group-menu { opacity: .85; }
+  .settings-nav { margin: 0 -3px; }
+  .settings-nav a { font-size: 10.5px; padding: 6px 8px; }
+}
+
+/* Speaker buttons sit inside the tab without stealing the title's space. */
+.tab .tab-audio, .vtab .tab-audio {
+  display: grid; place-items: center; flex: none; width: 20px; height: 20px; padding: 0;
+  border: 0; border-radius: 6px; background: transparent; color: var(--accent-2, var(--accent));
+}
+button.tab-audio { cursor: pointer; transition: background var(--fast), color var(--fast), transform var(--fast); }
+button.tab-audio:hover { background: var(--surface-3); color: var(--text); }
+button.tab-audio:active { transform: scale(.9); }
+.tab-audio svg { width: 13px; height: 13px; }
+.tab-audio.is-muted { color: var(--text-faint); }
+
+/* Optional background-tab contrasts; active tabs keep the normal treatment. */
+body.tabs-inactive-dimmed .tab:not(.active),
+body.tabs-inactive-dimmed .vtab:not(.active) { color: var(--text-faint); filter: saturate(.72); }
+body.tabs-inactive-dimmed .tab:not(.active):hover,
+body.tabs-inactive-dimmed .vtab:not(.active):hover { color: var(--text); filter: none; }
+body.tabs-inactive-minimal .tab:not(.active),
+body.tabs-inactive-minimal .vtab:not(.active) { opacity: .68; border-color: transparent; box-shadow: none; }
+body.tabs-inactive-minimal .tab:not(.active):hover,
+body.tabs-inactive-minimal .vtab:not(.active):hover { opacity: 1; background: var(--surface-2); color: var(--text); }
+
+/* Lightweight hover cards, anchored to the tab row and safe in both layouts. */
+.tab-hovercard {
+  position: fixed; z-index: 140; width: 276px; max-width: calc(100vw - 20px); max-height: calc(100dvh - 20px);
+  overflow: hidden; padding: 12px; border: 1px solid var(--border-strong); border-radius: 14px;
+  color: var(--text); background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: var(--shadow); backdrop-filter: blur(22px) saturate(1.16); pointer-events: none;
+  animation: tab-hover-in .15s var(--ease) both;
+}
+.tab-hovercard.is-tooltip { width: 248px; padding: 9px 11px; border-radius: 11px; box-shadow: var(--shadow-soft); }
+.tab-hovercard-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.tab-hovercard-favicon { display: grid; place-items: center; flex: none; width: 30px; height: 30px; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; color: var(--accent); background: var(--surface-2); }
+.tab-hovercard-favicon img { width: 18px; height: 18px; object-fit: contain; }
+.tab-hovercard-favicon svg { width: 17px; height: 17px; }
+.tab-hovercard-copy { display: grid; gap: 1px; min-width: 0; }
+.tab-hovercard-copy strong, .tab-hovercard-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab-hovercard-copy strong { font-size: 12px; font-weight: 680; }
+.tab-hovercard-copy span { color: var(--text-dim); font-size: 10.5px; }
+.tab-hovercard-preview { height: 142px; margin-top: 10px; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-2); }
+.tab-hovercard-preview > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.tab-hovercard-placeholder { display: grid; place-items: center; align-content: center; gap: 7px; width: 100%; height: 100%; padding: 12px; color: var(--text-faint); text-align: center; font-size: 10px; line-height: 1.45; }
+.tab-hovercard-placeholder svg { width: 19px; height: 19px; color: var(--accent); }
+.tab-hovercard-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; margin-top: 10px; color: var(--text-dim); font-size: 10px; }
+.tab-hovercard-state { flex: none; padding: 2px 7px; border-radius: 99px; background: var(--surface-2); }
+.tab-hovercard-memory { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+.tab-hovercard-url { margin-top: 7px; overflow-wrap: anywhere; color: var(--text-faint); font-family: var(--font-mono); font-size: 9px; line-height: 1.45; }
+.tab-hovercard.is-tooltip .tab-hovercard-favicon { width: 24px; height: 24px; }
+.tab-hovercard.is-tooltip .tab-hovercard-meta { margin-top: 6px; }
+.tab-hovercard.is-tooltip .tab-hovercard-url { margin-top: 4px; }
+@keyframes tab-hover-in { from { opacity: 0; transform: translateY(-3px) scale(.985); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .tab-hovercard { animation: none; } }

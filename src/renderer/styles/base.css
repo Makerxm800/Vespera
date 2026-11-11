@@ -27,16 +27,25 @@ code { font-family: var(--font-mono); font-size: .92em; }
 
 ::selection { background: var(--accent-soft); }
 
-/* Scrollbars — slim & themed */
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 8px;
-  border: 3px solid transparent;
-  background-clip: content-box;
+/* Modern overlay-style scrollbars: slim, rounded, quiet until interaction. */
+:where(*) {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-dim) 42%, transparent) transparent;
 }
-::-webkit-scrollbar-thumb:hover { background-clip: content-box; background-color: var(--text-faint); }
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; border-radius: 999px; }
+::-webkit-scrollbar-thumb {
+  min-height: 28px;
+  background-color: color-mix(in srgb, var(--text-dim) 42%, transparent);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  transition: background-color var(--fast);
+}
+::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--accent) 62%, var(--text-dim)); }
+::-webkit-scrollbar-thumb:active { background-color: var(--accent); }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
 
 /* ---------- Buttons ---------- */
 .btn {

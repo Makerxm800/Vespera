@@ -27,23 +27,6 @@
 }
 .titlebar .no-drag { -webkit-app-region: no-drag; }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  color: var(--text-dim);
-  font-weight: 700;
-  font-size: 13px;
-  letter-spacing: .02em;
-}
-.brand .logo-star {
-  width: 17px;
-  height: 17px;
-  color: var(--accent);
-  filter: drop-shadow(0 0 6px var(--accent-soft));
-}
-
 /* Tab strip */
 .tabstrip {
   display: flex;
@@ -662,7 +645,6 @@ body:not(.electron) .preview-banner { display: flex; }
 .window-controls { margin-left: auto; align-self: stretch; flex: none; }
 .window-controls button { width: 40px; }
 .window-controls .is-maximized svg { transform: scale(.85); }
-.brand { flex: none; }
 .sidebar { flex: none; }
 .rail { overflow-y: auto; scrollbar-width: none; }
 .rail .icon-btn { width: 36px; height: 36px; }
@@ -728,7 +710,6 @@ body.focus-mode .sidebar, body.focus-mode .bookmarks-bar { display: none !import
 .switch input:disabled + .track { opacity: .45; cursor: not-allowed; }
 @media (max-width: 800px) {
   :root { --sidebar-w: 195px; --rail-w: 46px; }
-  .brand { padding: 0 5px; }
   .toolbar { gap: 2px; padding: 0 6px; }
   .toolbar .icon-btn { width: 30px; }
   .engine-tag { display: none; }
@@ -737,7 +718,6 @@ body.focus-mode .sidebar, body.focus-mode .bookmarks-bar { display: none !import
   .status-bar { gap: 9px; }
 }
 @media (max-width: 560px) {
-  .brand span { display: none; }
   .toolbar #btn-forward, .toolbar #btn-palette { display: none; }
   .toolbar .icon-btn { width: 28px; }
   .omnibox { gap: 5px; padding-left: 8px; }
