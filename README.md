@@ -5,20 +5,16 @@
 
 Im very sorry, i don't like using AI on my serious projects — i built Vespera by hand to see where the whole vibe-code experiment is actually going. It turned into a browser i use every day, so here it is. :P
 
-**Current release: [v0.1.6](https://github.com/Makerxm800/Vespera/releases)** — Windows, macOS and Linux installers are published automatically from every `v*` tag.
+**Current release: [v0.1.7](https://github.com/Makerxm800/Vespera/releases)** — Windows, macOS and Linux installers are published automatically from every `v*` tag.
 
 ---
 
-## ✨ What's new in 0.1.6
+## ✨ What's new in 0.1.7
 
-* **Settings is a floating panel** — press `Ctrl+,` (or click Settings in the sidebar) and it slides in over whatever you are doing. Escape closes it, the section pills jump you around, and you never navigate away from your page.
-* **Wallpapers that stick** — uploading, switching presets and coming back to your custom image all work again, the **Custom** tile stays in the grid, and the editor unlocks whenever you have an image stored.
-* **Tab groups by dragging** — drop a tab on the *middle* of another one to group it (hold `Alt` to make the whole row a target). Drop zones highlight, grouped tabs pick up their group colour.
-* **Pinned tabs got a ⋮** — a pinned tab is only 62px wide, so it shows a menu button instead of a title and close button: pin, unpin, group, rename, close.
-* **Collapsible sidebar** — hide the icon rail so the home screen and pages go full width; a tab on the left edge (or the browser menu) brings it back.
-* **Extensions, sorted** — General / Built-in / Installed / Catalog sections, with buttons that open the Chrome Web Store, GitHub and each extension's download page in a new tab.
-* **A calmer home** — tighter spacing, staggered shortcut entrance, full width once the sidebar is hidden.
-* **Google sign-in fixed** — client hints are rewritten on every request and the webview identity is patched, so Google no longer refuses the sign-in page.
+* **Tabs & groups settings** — choose layout, tab placement, scroll-or-compress behavior, close buttons, middle-click actions, group visibility, audio controls, hover details and inactive-tab styling.
+* **Tabs where you expect them** — new tabs can open beside the current tab or at the end of the strip; existing groups stay intact when their headers are hidden.
+* **Richer tab controls** — mute tabs, pick hover cards or tooltips, and see previews or memory estimates where the desktop runtime supports them.
+* **Sessions that remember more** — tab order, active tab, group collapse state, pinning and mute state are restored together.
 
 Full details in [CHANGELOG.md](CHANGELOG.md) and in-app at **`vespera://updates`**.
 
@@ -137,7 +133,7 @@ npm run dist
 ```
 
 **Requirements:** Node.js 20+ and npm. That's it.
-**Current release: 0.1.6** — desktop installers are published by CI whenever a `v*` tag is pushed (see [RELEASING.md](RELEASING.md)).
+**Current release: 0.1.7** — desktop installers are published by CI whenever a `v*` tag is pushed (see [RELEASING.md](RELEASING.md)).
 
 ### Live web preview / installable app
 

@@ -7,6 +7,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { chromium } from 'playwright';
 const require = createRequire(import.meta.url);
+const appVersion = require('../package.json').version;
 process.env.VESPERA_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'vespera-ui-'));
 process.env.VESPERA_PROXY_ALLOW_PRIVATE = '1';
 process.env.VESPERA_PROXY_ALLOWED_HOSTS = '127.0.0.1,api.github.com';
@@ -386,7 +387,7 @@ try {
   });
   await step('release notes identify the running build and link to published installers', async () => {
     await menu('updates'); await page.waitForSelector('.updates-page');
-    assert.match(await page.locator('.updates-page').textContent(), /0\.1\.6/);
+    assert.ok((await page.locator('.updates-page').textContent()).includes(appVersion), 'release notes identify the current package version');
     assert.match(await page.locator('.updates-page a[href*="releases"]').first().getAttribute('href'), /github\.com\/Makerxm800\/Vespera\/releases/);
   });
   await step('session restores the active tab after a real reload', async () => {

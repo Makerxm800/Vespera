@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.7
+
+### Tabs, organized your way
+- Added a dedicated **Tabs & groups** settings section for tab layout, where new tabs open, strip scrolling or compression, close buttons, middle-click behavior, group visibility, audio controls, hover details, memory estimates, and inactive-tab styling.
+- New tabs can open beside the current tab or at the end. The strip can compress tabs instead of scrolling, and close buttons can be hidden.
+- Groups can be renamed, recolored and collapsed; hiding group headers keeps existing membership. Session restore preserves tab order, active tab, group state, pinned tabs and mute state.
+- Added per-tab mute controls and configurable hover cards, with page previews and memory estimates where the desktop runtime supports them.
+
+Release: https://github.com/Makerxm800/Vespera/releases/tag/v0.1.7
+
 ## 0.1.6
 
 ### Settings is a panel now
