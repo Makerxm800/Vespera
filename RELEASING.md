@@ -24,10 +24,13 @@ Cutting a release builds real desktop installers for **Windows**, **macOS** and
 
 Watch progress at **Actions → Build & Release** on the repo.
 
-## Testing a build without publishing
+## Testing or retrying a build manually
 
-Run **Actions → Build & Release → Run workflow** manually — it builds all
-installers and uploads them as run artifacts (no release is created).
+Run **Actions → Build & publish Vespera → Run workflow** manually from `main`.
+Leave `release_tag` blank to build installers and upload them as run artifacts
+without publishing a release. To rebuild and publish an existing `v*` tag,
+enter it in `release_tag` (for example, `v0.2.0`); the workflow checks out that
+tag's source and attaches the installers to its GitHub Release.
 
 ## Code signing (optional, later)
 

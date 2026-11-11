@@ -5,6 +5,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing v* tag to build and publish; leave blank for build-only.
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -25,6 +30,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.release_tag || github.ref }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -64,10 +71,20 @@ jobs:
     name: Publish GitHub Release
     needs: build
     runs-on: ubuntu-latest
-    # Publish a release for pushed v* tags, not manual branch runs.
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Publish pushed v* tags or an explicitly selected tag in a manual run.
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' &&
+       startsWith(github.event.inputs.release_tag, 'v'))
 
     steps:
+      - name: Check out repository for release metadata
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.release_tag || github.ref }}
+          # gh release --generate-notes needs Git history and repository context.
+          fetch-depth: 0
+
       - name: Download installers from all platforms
         uses: actions/download-artifact@v8
         with:
@@ -78,7 +95,8 @@ jobs:
       - name: Create GitHub Release and attach installers
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.inputs.release_tag || github.ref_name }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release-files/* \
-            --title "$GITHUB_REF_NAME" \
+          gh release create "$RELEASE_TAG" release-files/* \
+            --title "$RELEASE_TAG" \
             --generate-notes
