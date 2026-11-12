@@ -104,14 +104,15 @@ jobs:
           installer_assets=()
           for file in "${all_files[@]}"; do
             case "${file##*/}" in
-              Vespera-Setup-*.exe|Vespera-Portable-*.exe|Vespera-*-mac-arm64.dmg|Vespera-*-mac-x64.dmg|Vespera-*-linux-x64.AppImage|Vespera-*-linux-x64.deb)
+              Vespera-Setup-*.exe|Vespera-Portable-*.exe|Vespera-*.dmg|Vespera-*.AppImage|Vespera-*.deb)
                 installer_assets+=("$file")
                 ;;
             esac
           done
           if (( ${#installer_assets[@]} != 6 )); then
             echo "Expected 6 installer files; found ${#installer_assets[@]}." >&2
-            printf 'Found: %s\n' "${installer_assets[@]}" >&2
+            printf 'Found installer: %s\n' "${installer_assets[@]}" >&2
+            printf 'All artifact files: %s\n' "${all_files[@]}" >&2
             exit 1
           fi
           printf 'Uploading installers:\n'
