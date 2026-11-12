@@ -1,0 +1,95 @@
+/* Shared interaction polish: consistent, restrained motion across Vespera UI. */
+
+:where(button, [role="button"], [role="menuitem"], .btn) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+[role="menuitem"],
+.btn {
+  transition:
+    transform var(--med),
+    box-shadow var(--med),
+    background var(--med),
+    color var(--fast),
+    border-color var(--fast),
+    opacity var(--fast),
+    filter var(--med);
+}
+
+:where(button:not(:disabled), [role="button"]:not([aria-disabled="true"]), [role="menuitem"], .btn):hover {
+  transform: translateY(-1px) scale(1.015);
+}
+
+:where(button:not(:disabled), [role="button"]:not([aria-disabled="true"]), [role="menuitem"], .btn):active {
+  transform: translateY(0) scale(.965);
+}
+
+button:not(:disabled):active,
+[role="button"]:not([aria-disabled="true"]):active,
+[role="menuitem"]:active,
+.btn:active {
+  transition-duration: 90ms;
+}
+
+/* Every inline icon gets the same quick lift; toolbar-specific keyframes remain
+   in charge where an icon already has a distinct action animation. */
+button:not(:disabled) svg,
+[role="button"]:not([aria-disabled="true"]) svg,
+[role="menuitem"] svg,
+.btn svg {
+  transform-origin: center;
+  transition: transform var(--med), color var(--fast), filter var(--med), opacity var(--fast);
+}
+
+:where(button:not(:disabled), [role="button"]:not([aria-disabled="true"]), [role="menuitem"], .btn):hover svg {
+  transform: translateY(-1px) scale(1.07);
+}
+
+:where(button:not(:disabled), [role="button"]:not([aria-disabled="true"]), [role="menuitem"], .btn):active svg {
+  transform: scale(.9);
+}
+
+/* The Vespera mark gets a soft sparkle when its brand area is hovered. */
+.brand .logo-star {
+  transition: transform var(--slow), filter var(--slow);
+}
+.brand:hover .logo-star {
+  transform: rotate(24deg) scale(1.14);
+  filter: drop-shadow(0 0 10px var(--accent-soft));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="menuitem"],
+  .btn,
+  button:not(:disabled) svg,
+  [role="button"]:not([aria-disabled="true"]) svg,
+  [role="menuitem"] svg,
+  .btn svg,
+  .brand .logo-star {
+    transition-duration: .01ms !important;
+  }
+
+  button:not(:disabled) svg,
+  [role="button"]:not([aria-disabled="true"]) svg,
+  [role="menuitem"] svg,
+  .btn svg {
+    animation: none !important;
+  }
+
+  :where(button:not(:disabled), [role="button"]:not([aria-disabled="true"]), [role="menuitem"], .btn):hover,
+  :where(button:not(:disabled), [role="button"]:not([aria-disabled="true"]), [role="menuitem"], .btn):active {
+    transform: none;
+    box-shadow: none;
+  }
+
+  :where(button:not(:disabled), [role="button"]:not([aria-disabled="true"]), [role="menuitem"], .btn):hover svg,
+  :where(button:not(:disabled), [role="button"]:not([aria-disabled="true"]), [role="menuitem"], .btn):active svg,
+  .brand:hover .logo-star {
+    transform: none;
+    filter: none;
+  }
+}

@@ -32,14 +32,19 @@ without publishing a release. To rebuild and publish an existing `v*` tag,
 enter it in `release_tag` (for example, `v0.2.0`); the workflow checks out that
 tag's source and attaches the installers to its GitHub Release.
 
-## Code signing (optional, later)
+## Code signing (optional)
 
-The builds are currently **unsigned**, so first launches show a one-time
-warning (Windows SmartScreen → "More info → Run anyway"; macOS Gatekeeper →
-right-click → Open). To remove those warnings:
+The builds are currently **unsigned**. Windows SmartScreen checks the
+Authenticode signature and publisher reputation; macOS Gatekeeper checks
+signing and notarization. Neither warning is caused by Electron's `app.asar`,
+so removing the archive will not fix them. A new Windows signature can still
+need time to build reputation, so signing helps but cannot guarantee that
+SmartScreen stops warning immediately.
 
-- **Windows**: buy a code-signing certificate and set `WIN_CSC_LINK` /
-  `WIN_CSC_KEY_PASSWORD` repo secrets.
+- **Windows**: use a trusted code-signing certificate and add the
+  `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` repository secrets. The release
+  workflow passes those secrets to electron-builder when present. Never put
+  the certificate or its password in source control or chat.
 - **macOS**: enroll in Apple Developer and set `CSC_LINK` / `CSC_KEY_PASSWORD`
   (plus notarization via `notarize` config in `electron-builder.yml`).
 
