@@ -1198,3 +1198,25 @@ body.rail-hidden .main-row .sidebar { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .settings-panel, .settings-scrim, .settings-pills button { transition: none; }
 }
+
+/* Pinned extension actions use the extension's declared icon where available. */
+.extension-actions { display: none; align-items: center; gap: 2px; flex: none; }
+.extension-actions:has(.extension-toolbar-action) { display: flex; }
+.extension-toolbar-action {
+  display: grid; place-items: center; flex: none; width: 30px; height: 30px; padding: 4px;
+  border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--text-dim);
+  cursor: pointer; transition: transform var(--fast), background var(--fast), border-color var(--fast), color var(--fast);
+}
+.extension-toolbar-action:hover { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 26%, transparent); transform: translateY(-1px); }
+.extension-toolbar-action:active { transform: scale(.92); }
+.extension-toolbar-action img { display: block; width: 19px; height: 19px; object-fit: contain; border-radius: 4px; }
+.extension-toolbar-action svg { width: 18px; height: 18px; }
+.extension-action-popover { width: 366px; max-width: calc(100vw - 16px); padding: 8px; overflow: hidden; }
+.extension-action-popup-head { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 2px 7px; color: var(--text-dim); font-size: 11px; }
+.extension-action-popup-head .grow { flex: 1; }
+.extension-action-popup-head .icon-btn { width: 24px; height: 24px; }
+.extension-action-frame { display: flex; width: 100%; height: min(500px, calc(100dvh - 110px)); border: 0; border-radius: 8px; background: var(--surface); }
+.extension-menu-mark img { width: 20px; height: 20px; object-fit: contain; border-radius: 4px; }
+@media (max-width: 800px) { .extension-toolbar-action { width: 27px; height: 27px; padding: 3px; } }
+@media (max-width: 560px) { .extension-actions { gap: 0; } .extension-toolbar-action { width: 25px; } }
+@media (prefers-reduced-motion: reduce) { .extension-toolbar-action { transition: none; } }

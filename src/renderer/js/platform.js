@@ -1,5 +1,6 @@
 /** Platform bridge. Website frames are isolated from the privileged browser UI. */
 import { state } from './state.js';
+import { safeTabUrl } from '../../shared/privacy-utils.mjs';
 
 export function previewPrefsMask(docUrl) {
   const s = state.settings.shields;
@@ -102,6 +103,17 @@ export const platform = {
       frame.addEventListener('page-favicon-updated', (e) => { if (e.favicons?.[0]) handlers.onFavicon(e.favicons[0]); }, options);
       frame.addEventListener('did-fail-load', (e) => {
         if (e.errorCode !== -3 && e.isMainFrame) handlers.onError(e.errorDescription || 'Failed to load page', e.errorCode);
+      }, options);
+      frame.addEventListener('ipc-message', (event) => {
+        if (event.channel !== 'vespera:open-link') return;
+        const request = event.args?.[0];
+        if (!request || request.newTab !== true) return;
+        const url = safeTabUrl(request.url, { allowFile: true });
+        if (!url) return;
+        const parsed = new URL(url);
+        if (!['http:', 'https:', 'file:'].includes(parsed.protocol) || parsed.username || parsed.password) return;
+        const gesture = request.gesture === 'middle' || request.gesture === 'modifier' ? request.gesture : '';
+        handlers.onLink?.(url, true, request.foreground !== false, gesture);
       }, options);
       frame.addEventListener('found-in-page', (e) => handlers.onFound?.(e.result), options);
     } else {

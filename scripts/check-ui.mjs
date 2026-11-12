@@ -18,7 +18,7 @@ const fixture = http.createServer((req, res) => {
   if (req.url.startsWith('/second')) { res.writeHead(200, { 'content-type': 'text/html' }); return res.end('<title>Second page</title><h1>Second page</h1><a href="/">Back to fixture</a>'); }
   if (req.url.startsWith('/headers')) { res.writeHead(200, { 'content-type': 'text/plain' }); return res.end(JSON.stringify({ gpc: req.headers['sec-gpc'], cookie: req.headers.cookie || null })); }
   res.writeHead(200, { 'content-type': 'text/html' });
-  res.end(`<title>Fixture Home</title><article><h1>A readable article</h1><p>${article}</p></article><audio id="fixture-audio"></audio><a id="next" href="/second">Second page</a><a id="file" href="/file.txt" download="hello.txt">Download a file</a><script src="https://google-analytics.com/analytics.js"></script>`);
+  res.end(`<title>Fixture Home</title><article><h1>A readable article</h1><p>${article}</p></article><audio id="fixture-audio"></audio><a id="next" href="/second">Second page</a><a id="blank" href="/second" target="_BLANK">Second page in a new tab</a><a id="file" href="/file.txt" download="hello.txt">Download a file</a><script src="https://google-analytics.com/analytics.js"></script>`);
 });
 await new Promise((resolve) => fixture.listen(0, '127.0.0.1', resolve));
 const fixtureUrl = 'http://127.0.0.1:' + fixture.address().port;
@@ -156,11 +156,36 @@ try {
     await page.keyboard.press('Control+w');
     await go('vespera://newtab');
   });
-  await step('menu toggles closed on the same anchor and opens Settings', async () => {
-    await page.locator('#btn-menu').click(); assert.equal(await page.locator('.browser-menu').count(), 1);
+  await step('menu toggles closed on the same anchor, is labeled clearly, and opens honest browser settings', async () => {
+    assert.equal(await page.locator('#btn-menu').getAttribute('aria-label'), 'Toggle Menu');
+    assert.equal(await page.locator('#btn-menu').getAttribute('title'), 'Toggle Menu');
+    await page.locator('#btn-menu').click(); assert.equal(await page.locator('.browser-menu').getAttribute('aria-label'), 'Toggle Menu');
     await page.locator('#btn-menu').click(); assert.equal(await page.locator('.browser-menu').count(), 0);
     await menu('settings'); assert.equal(await page.locator('.settings-layer').count(), 1);
     assert.match(await page.locator('.settings-pills button.active').textContent(), /Appearance/);
+    await page.locator('.settings-pills [data-section="browser"]').click();
+    assert.equal(await page.locator('#set-default-browser').isDisabled(), true);
+    assert.equal(await page.locator('#open-default-browser-settings').isDisabled(), true);
+    assert.match(await page.locator('#default-browser-status').textContent(), /desktop app/i);
+    assert.doesNotMatch(await page.locator('#default-browser-status').textContent(), /now your default/i);
+    await page.locator('.settings-pills [data-section="appearance"]').click();
+  });
+  await step('command-palette searches and utility pages open in new tabs without replacing current work', async () => {
+    await page.waitForFunction(() => document.querySelector('#preview-label')?.textContent.includes('GitHub search'));
+    const originalId = await page.locator('#tabstrip .tab.active').getAttribute('data-id');
+    await page.keyboard.press('Control+k');
+    await page.locator('#palette-q').fill('a private search that should stay in its own tab');
+    await page.locator('#palette-q').press('Enter');
+    await page.waitForFunction((id) => document.querySelectorAll('#tabstrip .tab').length === 2 && document.querySelector('#tabstrip .tab.active')?.dataset.id !== id, originalId);
+    assert.match(await page.locator('#omni-input').inputValue(), /^vespera:\/\/search\?q=/);
+    const searchId = await page.locator('#tabstrip .tab.active').getAttribute('data-id');
+    assert.ok(await page.locator(`#tabstrip [data-id="${originalId}"]`).count());
+    await page.keyboard.press('Control+k'); await page.locator('#palette-q').fill('History'); await page.locator('#palette-q').press('Enter');
+    await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'History');
+    assert.equal(await page.locator('#tabstrip .tab').count(), 3);
+    assert.ok(await page.locator(`#tabstrip [data-id="${searchId}"]`).count(), 'the search result remains open in its own tab');
+    await page.keyboard.press('Control+w'); await page.keyboard.press('Control+w');
+    await page.waitForFunction((id) => document.querySelectorAll('#tabstrip .tab').length === 1 && document.querySelector('#tabstrip .tab.active')?.dataset.id === id, originalId);
   });
   await step('theme, accent, wallpaper, homepage and clock toggles persist', async () => {
     await page.locator('[data-segment="theme"] [data-v="light"]').click(); assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
@@ -184,6 +209,10 @@ try {
     assert.equal(await page.locator('#ext-grid .extension-card').count(), 4);
     assert.ok(await page.locator('#catalog-grid .extension-card').count() > 0);
     assert.ok(await page.locator('.settings-nav [data-section="catalog"]').count() === 1);
+    assert.ok(await page.locator('.extension-dev-row').count() === 1, 'Developer mode controls are present');
+    assert.equal(await page.locator('#ext-developer-mode').isDisabled(), true, 'web previews do not pretend to load extensions');
+    assert.equal(await page.locator('#ext-load').isDisabled(), true);
+    assert.equal(await page.locator('#ext-load-unpacked').isHidden(), true, 'unpacked loading stays behind Developer mode');
     await page.locator('[data-ext-toggle="focusMode"]').check(); assert.equal(await page.locator('#sidebar').isVisible(), false);
     await page.locator('[data-ext-toggle="focusMode"]').uncheck(); assert.equal(await page.locator('#sidebar').isVisible(), true);
     await go('vespera://settings'); await page.locator('[data-segment="tabLayout"] [data-v="horizontal"]').click();
@@ -219,6 +248,17 @@ try {
     const frame = page.frames().find((f) => f.url().includes('/proxy?'));
     await frame.locator('#next').click({ button: 'right' });
     await page.waitForSelector('.context-menu'); assert.match(await page.locator('.context-menu').textContent(), /Open link in new tab/); await page.keyboard.press('Escape');
+    const homeTabId = await page.locator('#tabstrip .tab.active').getAttribute('data-id');
+    const startCount = await page.locator('#tabstrip .tab').count();
+    await frame.locator('#next').click({ modifiers: ['Control'] });
+    await page.waitForFunction((count) => document.querySelectorAll('#tabstrip .tab').length === count + 1, startCount);
+    assert.equal(await page.locator('#tabstrip .tab.active').getAttribute('data-id'), homeTabId, 'Control-click opens in a background tab');
+    const ctrlTab = page.locator('#tabstrip .tab').filter({ hasText: 'Second page' }).last();
+    await ctrlTab.locator('.close').click(); await page.waitForFunction((count) => document.querySelectorAll('#tabstrip .tab').length === count, startCount);
+    await frame.locator('#blank').click();
+    await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'Second page');
+    assert.equal(await page.locator('#tabstrip .tab').count(), startCount + 1, 'target=_blank opens a managed browser tab');
+    await page.locator('#tabstrip .tab.active .close').click(); await page.waitForFunction((count) => document.querySelectorAll('#tabstrip .tab').length === count, startCount);
     await frame.locator('#next').click();
     await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'Second page');
     await page.locator('#btn-back').click();
@@ -231,6 +271,8 @@ try {
     let frame = page.frames().find((f) => f.url().includes('/proxy?'));
     await page.locator('#tabstrip .tab.active').hover(); await page.waitForSelector('.tab-hovercard');
     assert.match(await page.locator('.tab-hovercard').textContent(), /Fixture Home/);
+    assert.ok(await page.locator('.tab-hovercard [data-hover-preview]').count(), 'thumbnail previews are enabled by default');
+    assert.match(await page.locator('.tab-hovercard').textContent(), /Page snapshots are available in the desktop app/);
     await page.mouse.move(700, 400);
     await page.locator('#tabstrip .tab.active').click({ button: 'right' });
     await page.locator('.tab-actions-menu [data-action="mute"]').click();
@@ -343,9 +385,18 @@ try {
     await page.locator('#hub-return-site').click();
     await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'Fixture Home');
   });
-  await step('bookmarks and history contain the visited page', async () => {
+  await step('history shows useful visit details and opens a result without replacing the library tab', async () => {
     await page.locator('#btn-bookmark').click(); await go('vespera://bookmarks'); assert.equal(await page.locator('.bm-card').count(), 1);
     await go('vespera://history'); assert.ok(await page.locator('.hist-row').count() >= 1);
+    assert.ok(await page.locator('.hist-row .h-site').count() >= 1);
+    assert.ok(await page.locator('.hist-row time[datetime]').count() >= 1);
+    const before = await page.locator('#tabstrip .tab').count();
+    await page.locator('.hist-row [data-visit]').first().click();
+    await page.waitForFunction((count) => document.querySelectorAll('#tabstrip .tab').length === count + 1, before);
+    await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'Fixture Home');
+    await page.locator('#tabstrip .tab.active .close').click();
+    await page.waitForFunction((count) => document.querySelectorAll('#tabstrip .tab').length === count, before);
+    assert.equal(await page.locator('#tabstrip .tab.active .title').textContent(), 'History');
   });
   await step('downloads retrieve a real file and report browser handoff', async () => {
     await go(fixtureUrl); await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'Fixture Home');

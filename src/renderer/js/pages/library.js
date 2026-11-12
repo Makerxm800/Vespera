@@ -13,9 +13,28 @@ export function renderHistory(container, ctx) {
     const list = container.querySelector('#h-list');
     if (!items.length) { list.innerHTML = `<div class="empty">${icon('clock')}<div>${filter ? 'No pages match your search.' : 'A fresh start. Pages you visit will appear here.'}</div></div>`; return; }
     const groups = new Map();
-    for (const h of items) { const day = new Date(h.visitedAt).toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }); if (!groups.has(day)) groups.set(day, []); groups.get(day).push(h); }
-    list.innerHTML = [...groups].map(([day, rows]) => `<div class="hist-day"><h3>${escapeHtml(day)}</h3>${rows.map((h) => `<div class="hist-row" data-url="${escapeHtml(h.url)}"><span class="h-time">${new Date(h.visitedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>${icon('globe')}<button class="text-btn h-title ellipsis" data-visit>${escapeHtml(h.title || h.url)}</button><span class="h-url ellipsis">${escapeHtml(h.url)}</span><button class="icon-btn" data-del="${escapeHtml(h.url)}" title="Remove from history" aria-label="Remove ${escapeHtml(h.title)}">${icon('x')}</button></div>`).join('')}</div>`).join('');
-    list.querySelectorAll('[data-visit]').forEach((btn) => btn.onclick = () => ctx.navigate(btn.closest('[data-url]').dataset.url));
+    for (const h of items) {
+      const date = new Date(Number(h.visitedAt) || 0);
+      const day = Number.isFinite(date.getTime())
+        ? date.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })
+        : 'Earlier';
+      if (!groups.has(day)) groups.set(day, []);
+      groups.get(day).push(h);
+    }
+    list.innerHTML = [...groups].map(([day, rows]) => `<div class="hist-day"><h3>${escapeHtml(day)}</h3>${rows.map((h) => {
+      const date = new Date(Number(h.visitedAt) || 0);
+      const validDate = Number.isFinite(date.getTime());
+      let site = h.url;
+      try { site = new URL(h.url).hostname || h.url; } catch {}
+      const title = h.title || h.url;
+      return `<div class="hist-row" data-url="${escapeHtml(h.url)}">
+        <time class="h-time" ${validDate ? `datetime="${date.toISOString()}" title="${date.toLocaleString()}"` : ''}>${validDate ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</time>
+        <span class="h-site-icon" aria-hidden="true">${icon('globe')}</span>
+        <div class="h-details"><button class="text-btn h-title ellipsis" data-visit title="Open in a new tab">${escapeHtml(title)}</button><span class="h-site">${escapeHtml(site)}</span><span class="h-url ellipsis" title="${escapeHtml(h.url)}">${escapeHtml(h.url)}</span></div>
+        <button class="icon-btn" data-del="${escapeHtml(h.url)}" title="Remove from history" aria-label="Remove ${escapeHtml(title)}">${icon('x')}</button>
+      </div>`;
+    }).join('')}</div>`).join('');
+    list.querySelectorAll('[data-visit]').forEach((btn) => btn.onclick = () => ctx.openTab(btn.closest('[data-url]').dataset.url));
     list.querySelectorAll('[data-del]').forEach((btn) => btn.onclick = () => { state.removeHistory(btn.dataset.del); });
   };
   renderList(); const off = bus.on('history', renderList);

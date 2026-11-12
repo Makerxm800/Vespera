@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import {
-  cleanTrackingParams, classifyInput, isThirdParty, buildSearchUrl, isInternal,
+  cleanTrackingParams, classifyInput, isThirdParty, buildSearchUrl, isInternal, safeTabUrl,
 } from '../src/shared/privacy-utils.mjs';
 
 test('tracking params are stripped, normal params kept', () => {
@@ -42,4 +42,14 @@ test('search url builder defaults to startpage', () => {
 test('isInternal recognizes vespera pages', () => {
   assert.equal(isInternal('vespera://welcome'), true);
   assert.equal(isInternal('https://example.com'), false);
+});
+
+test('safeTabUrl allows only opted-in local file URLs', () => {
+  assert.equal(safeTabUrl('file:///tmp/notes.html'), null);
+  assert.equal(safeTabUrl('file:///tmp/notes.html', { allowFile: true }), 'file:///tmp/notes.html');
+  assert.equal(safeTabUrl('file://server/share/notes.html', { allowFile: true }), null);
+  assert.equal(safeTabUrl('file:////server/share/notes.html', { allowFile: true }), null);
+  assert.equal(safeTabUrl('file:///%2fetc/passwd', { allowFile: true }), null);
+  assert.equal(safeTabUrl('file:///%5c%5cserver/share/notes.html', { allowFile: true }), null);
+  assert.equal(safeTabUrl('javascript:alert(1)', { allowFile: true }), null);
 });

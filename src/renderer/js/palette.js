@@ -74,7 +74,7 @@ export function openPalette({ actions }) {
     const r = results[i];
     if (!r) return;
     closePalette();
-    r.run({ search: () => window.__vesperaNavigate?.({ kind: 'search', value: q.value.trim() }) });
+    r.run({ search: (query) => window.__vesperaPaletteSearch?.(query) });
   }
 
   q.addEventListener('input', render);

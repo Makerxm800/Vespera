@@ -34,7 +34,7 @@ export function renderSettings(container, ctx, opts = {}) {
   const embedded = Boolean(opts.embedded);
   container.innerHTML = `<div class="page settings-page">
     ${embedded ? '' : `<div class="settings-heading"><div><span class="eyebrow">YOUR BROWSER, YOUR WAY</span><h1 class="page-title">Settings</h1><p class="page-sub">A few thoughtful choices. A space that feels like you.</p></div><span class="chip chip-ok">${icon('check')} Saved on this device</span></div>
-    <nav class="settings-nav" aria-label="Settings sections"><a href="#appearance" data-section="appearance">Appearance</a><a href="#tabs" data-section="tabs">Tabs &amp; groups</a><a href="#search" data-section="search">Search &amp; home</a><a href="#privacy" data-section="privacy">Privacy</a><a href="#extensions" data-section="extensions">Extensions</a><a href="#downloads" data-section="downloads">Downloads</a><a href="#account" data-section="account">Account</a><a href="#about" data-section="about">About</a></nav>`}
+    <nav class="settings-nav" aria-label="Settings sections"><a href="#appearance" data-section="appearance">Appearance</a><a href="#tabs" data-section="tabs">Tabs &amp; groups</a><a href="#search" data-section="search">Search &amp; home</a><a href="#browser" data-section="browser">Browser</a><a href="#privacy" data-section="privacy">Privacy</a><a href="#extensions" data-section="extensions">Extensions</a><a href="#downloads" data-section="downloads">Downloads</a><a href="#account" data-section="account">Account</a><a href="#about" data-section="about">About</a></nav>`}
     <section class="section" id="appearance"><h2>${icon('palette')} Appearance</h2>
       <div class="setting-row"><div><div class="s-label">Theme</div><div class="s-desc">Twilight dark, warm light, or follow your system.</div></div><div class="s-control">${segment('theme', [['dark', 'Dark'], ['light', 'Light'], ['system', 'System']], s.theme)}</div></div>
       <div class="setting-row"><div><div class="s-label">Accent color</div><div class="s-desc">A little color throughout your browser.</div></div><div class="s-control accent-controls"><div class="accent-dots">${['gold', 'violet', 'teal', 'rose'].map((c) => `<button class="accent-dot ${c} ${s.accent === c ? 'selected' : ''}" data-accent="${c}" aria-label="${c}" title="${c}"></button>`).join('')}</div><label class="custom-color" title="Choose a custom accent color"><input type="color" id="custom-accent" value="${escapeHtml(s.customAccent || '#f6b93b')}" aria-label="Custom accent color">${icon('plus')}</label></div></div>
@@ -68,6 +68,9 @@ export function renderSettings(container, ctx, opts = {}) {
       <div class="setting-row"><div><div class="s-label">Default search engine</div><div class="s-desc">Used by the address bar and home search.${ctx.previewRestricted() ? ' This hosted preview searches public GitHub repositories.' : ''}</div></div><div class="s-control"><select class="select" id="sel-engine" aria-label="Default search engine">${Object.values(SEARCH_ENGINES).map((e) => `<option value="${e.id}" ${s.searchEngine === e.id ? 'selected' : ''}>${e.name}</option>`).join('')}</select></div></div>
       <div class="setting-row"><div><div class="s-label">Homepage</div><div class="s-desc">Where the Home button takes you.</div></div><div class="s-control"><select class="select" id="sel-homepage" aria-label="Homepage">${[['vespera://newtab', 'Vespera home'], ['vespera://welcome', 'Welcome to Vespera'], ['vespera://privacy', 'Privacy Hub']].map(([v, label]) => `<option value="${v}" ${s.homepage === v ? 'selected' : ''}>${label}</option>`).join('')}${!['vespera://newtab', 'vespera://welcome', 'vespera://privacy'].includes(s.homepage) ? `<option value="${escapeHtml(s.homepage)}" selected>Custom website</option>` : ''}<option value="custom">Custom website…</option></select></div></div>
       <form class="setting-row hidden" id="custom-home-row"><label class="s-label" for="custom-home">Custom homepage URL</label><div class="s-control grow"><input class="input" id="custom-home" placeholder="https://example.com" value="${escapeHtml(s.homepage)}"><button class="btn btn-primary" type="submit">Save</button></div></form>
+    </section>
+    <section class="section" id="browser"><h2>${icon('globe')} Browser & system</h2>
+      <div class="setting-row default-browser-row"><div><div class="s-label">Set Vespera as default browser</div><div class="s-desc">Register Vespera for HTTP and HTTPS links, then confirm it in your operating system. Windows and some Linux desktops require a separate choice; Vespera will not claim to be the default until the OS confirms it.</div><div class="s-desc default-browser-status" id="default-browser-status" role="status" aria-live="polite">${window.vespera ? 'Checking desktop registration…' : 'Available in the installed desktop app.'}</div></div><div class="s-control default-browser-actions"><button class="btn btn-primary" id="set-default-browser" ${!window.vespera ? 'disabled title="Available in the desktop app"' : ''}>Set Vespera as default browser</button><button class="btn" id="open-default-browser-settings" ${!window.vespera ? 'disabled title="Available in the desktop app"' : ''}>Open system settings</button></div></div>
     </section>
     <section class="section" id="privacy"><h2>${icon('shield')} Privacy & Shields</h2>
       ${toggleRow('shields.enabled', 'Shields master switch', 'Enable your configured protections. Turn off to troubleshoot a website.', s.shields.enabled)}
@@ -269,7 +272,42 @@ export function renderSettings(container, ctx, opts = {}) {
     const date = new Date().toISOString().slice(0, 10);
     downloadText(JSON.stringify(backup, null, 2), `Vespera-Backup-${date}.json`, 'application/json;charset=utf-8');
   };
-  container.querySelector('#settings-extensions').onclick = () => ctx.navigate('vespera://extensions');
+  container.querySelector('#settings-extensions').onclick = () => ctx.openTab('vespera://extensions');
+  const defaultStatus = container.querySelector('#default-browser-status');
+  const defaultButton = container.querySelector('#set-default-browser');
+  const settingsButton = container.querySelector('#open-default-browser-settings');
+  const refreshDefaultBrowserStatus = async () => {
+    if (!window.vespera?.app?.defaultBrowserStatus) return;
+    try {
+      const result = await window.vespera.app.defaultBrowserStatus();
+      if (!defaultStatus?.isConnected) return;
+      defaultStatus.textContent = result?.registered
+        ? 'Vespera is registered for HTTP and HTTPS. The operating system may still have another browser selected; verify the choice in system settings.'
+        : (result?.message || 'Vespera is not confirmed as the HTTP/HTTPS handler.');
+    } catch (err) { if (defaultStatus?.isConnected) defaultStatus.textContent = err.message || 'Could not check browser registration.'; }
+  };
+  refreshDefaultBrowserStatus();
+  defaultButton.onclick = async () => {
+    if (!window.vespera?.app?.setDefaultBrowser) return;
+    defaultButton.disabled = true;
+    try {
+      const result = await window.vespera.app.setDefaultBrowser();
+      if (defaultStatus?.isConnected) defaultStatus.textContent = result?.message || 'Check your system settings to finish choosing a default browser.';
+      ctx.toast(result?.ok ? 'HTTP and HTTPS handlers registered. Confirm Vespera in system settings.' : (result?.message || 'Could not register Vespera with the operating system.'), result?.ok ? 'info' : 'error', 6500);
+      await refreshDefaultBrowserStatus();
+    } catch (err) {
+      if (defaultStatus?.isConnected) defaultStatus.textContent = err.message || 'Could not register Vespera with the operating system.';
+      ctx.toast(err.message || 'Could not register Vespera with the operating system.', 'error', 6000);
+    } finally { if (defaultButton.isConnected) defaultButton.disabled = false; }
+  };
+  settingsButton.onclick = async () => {
+    if (!window.vespera?.app?.openDefaultBrowserSettings) return;
+    try {
+      const result = await window.vespera.app.openDefaultBrowserSettings();
+      if (defaultStatus?.isConnected && result?.message) defaultStatus.textContent = result.message;
+      if (result?.message) ctx.toast(result.message, result.ok ? 'info' : 'info', 7000);
+    } catch (err) { ctx.toast(err.message || 'Could not open system settings.', 'error', 6000); }
+  };
   container.querySelector('#settings-downloads').onclick = () => ctx.navigate('vespera://downloads');
   container.querySelector('#settings-welcome').onclick = () => ctx.navigate('vespera://welcome');
   container.querySelector('#settings-updates').onclick = () => ctx.navigate('vespera://updates');

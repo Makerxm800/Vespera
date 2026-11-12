@@ -1,6 +1,6 @@
 /** App-shell cache only. Never cache website proxy responses, accounts, or sync APIs. */
-const CACHE = 'vespera-shell-v5';
-const CORE = ['/', '/index.html', '/manifest.webmanifest', '/styles/tab-settings.css', '/assets/icon-256.png', '/assets/icon-512.png'];
+const CACHE = 'vespera-shell-v6';
+const CORE = ['/', '/index.html', '/manifest.webmanifest', '/styles/tab-settings.css', '/styles/default-browser.css', '/assets/icon-256.png', '/assets/icon-512.png'];
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(CORE)).then(() => self.skipWaiting()));
 });

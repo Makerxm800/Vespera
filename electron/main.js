@@ -23,7 +23,7 @@ app.on('second-instance', () => { const win = mainWindow && !mainWindow.isDestro
 const windows = new Set();
 let mainWindow = null, serverHandle = null, downloadManager, extensionManager, normalSession, privateSession;
 const prefsFile = path.join(app.getPath('userData'), 'preferences.json');
-let prefs = { shields: { enabled: true, blockTrackers: true, blockAds: true, blockAnnoyances: false, cleanLinks: true, httpsOnly: true, gpc: true }, allowlist: {}, askDownloadLocation: true, downloadPath: '', extensionPaths: [], sitePermissions: {} };
+let prefs = { shields: { enabled: true, blockTrackers: true, blockAds: true, blockAnnoyances: false, cleanLinks: true, httpsOnly: true, gpc: true }, allowlist: {}, askDownloadLocation: true, downloadPath: '', extensionPaths: [], disabledExtensionIds: [], extensionMetadata: [], sitePermissions: {} };
 try { const saved = JSON.parse(fs.readFileSync(prefsFile, 'utf8')); if (saved && typeof saved === 'object') prefs = { ...prefs, ...saved, shields: { ...prefs.shields, ...(saved.shields || {}) } }; } catch { /* First launch. */ }
 prefs.sitePermissions = permissions.normalizeStore(prefs.sitePermissions);
 function persistPrefs() { try { fs.writeFileSync(prefsFile, JSON.stringify(prefs, null, 2), { mode: 0o600 }); } catch (err) { log.error('Could not save preferences', err); } }
@@ -105,11 +105,41 @@ function registerIpc() {
   handle('app:read-log', () => log.readTail(400));
   handle('app:log-path', () => log.getLogFile());
   handle('app:open-logs', async () => { const error = await shell.openPath(log.getLogDir()); return { ok: !error, path: log.getLogDir(), message: error }; });
+  handle('app:default-browser-status', () => {
+    if (!app.isPackaged) return { supported: false, registered: false, platform: process.platform, message: 'Install a Vespera release build to register it with your operating system.' };
+    let http = false, https = false;
+    try { http = app.isDefaultProtocolClient('http'); https = app.isDefaultProtocolClient('https'); } catch { /* OS registration APIs vary. */ }
+    return { supported: true, registered: Boolean(http && https), http: Boolean(http), https: Boolean(https), platform: process.platform };
+  });
   handle('app:default-browser', () => {
-    if (!app.isPackaged) return { ok: false, message: 'Install a Vespera release build first. A source checkout cannot safely register itself as your default browser.' };
-    const results = ['http', 'https'].map((protocol) => app.setAsDefaultProtocolClient(protocol));
-    const ok = results.every(Boolean) && app.isDefaultProtocolClient('https');
-    return { ok, message: ok ? 'Vespera is now your default web browser.' : 'Your operating system did not accept the change. Set Vespera as the default browser in system settings.' };
+    if (!app.isPackaged) return { ok: false, registered: false, message: 'Install a Vespera release build first. A source checkout cannot safely register itself as a system browser.' };
+    const results = ['http', 'https'].map((protocol) => {
+      try { return app.setAsDefaultProtocolClient(protocol); } catch { return false; }
+    });
+    let http = false, https = false;
+    try { http = app.isDefaultProtocolClient('http'); https = app.isDefaultProtocolClient('https'); } catch { /* OS registration APIs vary. */ }
+    const registered = results.every(Boolean) && http && https;
+    return {
+      ok: Boolean(registered), registered: Boolean(registered), http: Boolean(http), https: Boolean(https), platform: process.platform,
+      message: registered
+        ? 'Vespera registered to handle HTTP and HTTPS links. Your operating system may still require you to select Vespera as the default browser.'
+        : 'The operating system did not confirm HTTP and HTTPS registration. Choose Vespera in your system default-app settings if it is listed.',
+    };
+  });
+  handle('app:default-browser-settings', async () => {
+    if (!app.isPackaged) return { ok: false, message: 'Install a Vespera release build before changing system browser settings.' };
+    const settingsUrl = process.platform === 'win32'
+      ? 'ms-settings:defaultapps'
+      : process.platform === 'darwin'
+        ? 'x-apple.systempreferences:com.apple.preference.general'
+        : null;
+    if (!settingsUrl) return { ok: false, message: 'Open your desktop System Settings, choose Default Applications, then set Web/HTTP and HTTPS to Vespera. The exact steps depend on your Linux desktop.' };
+    try {
+      await shell.openExternal(settingsUrl);
+      return { ok: true, message: process.platform === 'win32'
+        ? 'In Default apps, choose Vespera for HTTP and HTTPS (and Web browser if shown).'
+        : 'In System Settings, choose Vespera under Default web browser.' };
+    } catch (err) { return { ok: false, message: err.message || 'Could not open system settings. Open the default-app settings manually.' }; }
   });
   handle('tabs:memory', async (event, contentsId) => {
     const id = Number(contentsId);
@@ -126,7 +156,14 @@ function registerIpc() {
   handle('permissions:reset', (event) => { if (!isPrivateEvent(event)) { permissions.reset(prefs.sitePermissions); persistPrefs(); } return { ok: true }; });
   handle('extensions:list', (event) => isPrivateEvent(event) ? [] : extensionManager.list());
   handle('extensions:install', (event) => isPrivateEvent(event) ? { ok: false, message: 'Extensions are disabled in private windows.' } : extensionManager.install());
+  handle('extensions:load-unpacked', (event) => {
+    if (isPrivateEvent(event)) return { ok: false, message: 'Extensions are disabled in private windows.' };
+    if (prefs.extensions?.developerMode !== true) return { ok: false, message: 'Turn on Developer mode before loading an unpacked extension.' };
+    return extensionManager.installUnpacked();
+  });
   handle('extensions:install-store', (event, url) => isPrivateEvent(event) ? { ok: false, message: 'Extensions are disabled in private windows.' } : extensionManager.installFromStoreUrl(url));
+  handle('extensions:enable', (event, id) => isPrivateEvent(event) ? { ok: false, message: 'Extensions are disabled in private windows.' } : extensionManager.enable(String(id)));
+  handle('extensions:disable', (event, id) => isPrivateEvent(event) ? { ok: false, message: 'Extensions are disabled in private windows.' } : extensionManager.disable(String(id)));
   handle('extensions:remove', (event, id) => isPrivateEvent(event) ? { ok: false, message: 'Extensions are disabled in private windows.' } : extensionManager.remove(String(id)));
 }
 function buildMenu() {
@@ -191,10 +228,33 @@ function wireWebContents() {
   app.on('web-contents-created', (_e, contents) => {
     if (contents.getType() === 'webview') {
       contents.setWindowOpenHandler(({ url, disposition }) => {
-        if (/^https?:\/\//i.test(url)) contents.hostWebContents?.send('browser:new-tab', { url, foreground: disposition !== 'background-tab', gesture: disposition === 'background-tab' ? 'middle' : '' });
+        // Web contents never create an unmanaged BrowserWindow. Only regular
+        // web URLs may be opened programmatically; local files are accepted
+        // through the preload's explicit, trusted anchor-click bridge instead.
+        if (/^https?:\/\//i.test(url)) {
+          const middleClick = Date.now() - (contents.__vesperaMiddleClickAt || 0) < 1200;
+          contents.__vesperaMiddleClickAt = 0;
+          contents.hostWebContents?.send('browser:new-tab', {
+            url,
+            foreground: disposition !== 'background-tab',
+            gesture: middleClick ? 'middle' : '',
+            sourceWebContentsId: contents.id,
+          });
+        }
         return { action: 'deny' };
       });
+      const blockRemoteFileNavigation = (event, targetUrl) => {
+        const destination = typeof targetUrl === 'string' ? targetUrl : event.url;
+        if (/^file:/i.test(destination || '') && /^https?:\/\//i.test(contents.getURL())) event.preventDefault();
+      };
+      contents.on('will-navigate', blockRemoteFileNavigation);
+      contents.on('will-redirect', blockRemoteFileNavigation);
+      contents.on('will-frame-navigate', (event) => blockRemoteFileNavigation(event, event.url));
       contents.on('before-input-event', (event, input) => {
+        if (input.type === 'mouseDown' && String(input.button).toLowerCase() === 'middle') {
+          contents.__vesperaMiddleClickAt = Date.now();
+          return;
+        }
         if (input.type !== 'keyDown') return;
         const key = String(input.key || '').toLowerCase();
         const mod = Boolean(input.control || input.meta), shift = Boolean(input.shift), alt = Boolean(input.alt);
@@ -247,15 +307,16 @@ function wireWebContents() {
         const win = BrowserWindow.fromWebContents(contents.hostWebContents || contents);
         if (!win) return;
         const template = [];
-        if (params.linkURL && /^https?:/.test(params.linkURL)) template.push(
-          { label: 'Open link in new tab', click: () => contents.hostWebContents?.send('browser:new-tab', { url: params.linkURL, foreground: true }) },
-          { label: 'Open link in background tab', click: () => contents.hostWebContents?.send('browser:new-tab', { url: params.linkURL, foreground: false }) },
+        const safeLink = (value) => /^https?:\/\//i.test(value || '') || /^file:\/\/\//i.test(value || '');
+        if (safeLink(params.linkURL)) template.push(
+          { label: 'Open link in new tab', click: () => contents.hostWebContents?.send('browser:new-tab', { url: params.linkURL, foreground: true, sourceWebContentsId: contents.id }) },
+          { label: 'Open link in background tab', click: () => contents.hostWebContents?.send('browser:new-tab', { url: params.linkURL, foreground: false, sourceWebContentsId: contents.id }) },
           { label: 'Copy link address', click: () => require('electron').clipboard.writeText(params.linkURL) },
-          { label: 'Save link as…', click: () => contents.downloadURL(params.linkURL) },
+          ...(/^https?:\/\//i.test(params.linkURL) ? [{ label: 'Save link as…', click: () => contents.downloadURL(params.linkURL) }] : []),
           { type: 'separator' },
         );
-        if (params.mediaType === 'image' && params.srcURL) template.push(
-          { label: 'Open image in new tab', click: () => contents.hostWebContents?.send('browser:new-tab', { url: params.srcURL, foreground: true }) },
+        if (params.mediaType === 'image' && safeLink(params.srcURL)) template.push(
+          { label: 'Open image in new tab', click: () => contents.hostWebContents?.send('browser:new-tab', { url: params.srcURL, foreground: true, sourceWebContentsId: contents.id }) },
           { label: 'Copy image address', click: () => require('electron').clipboard.writeText(params.srcURL) },
           { label: 'Save image as…', click: () => contents.downloadURL(params.srcURL) },
           { type: 'separator' },
@@ -294,6 +355,8 @@ app.whenReady().then(async () => {
   await puPromise;
   protectSessions(pu);
   await extensionManager.restore();
+  const restoredExtensions = extensionManager.list();
+  for (const win of windows) if (!win.isDestroyed() && !win.__vesperaPrivate) win.webContents.send('browser:extensions-changed', restoredExtensions);
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 }).catch((err) => { log.error('Startup failed', err); dialog.showErrorBox('Vespera startup failed', `${err.stack || err}\n\nLog: ${log.getLogFile()}`); app.quit(); });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

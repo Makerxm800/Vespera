@@ -22,7 +22,7 @@ export const DEFAULT_SETTINGS = {
     hideCloseButtons: false,
     tabGroupsEnabled: true,
     tabAudioMode: 'click-to-mute', // click-to-mute | indicator | hidden
-    tabHoverMode: 'card',          // card | preview | tooltip
+    tabHoverMode: 'preview',       // preview | card | tooltip
     memoryUsageOnHover: true,
     inactiveTabAppearance: 'balanced', // balanced | dimmed | minimal
   },
@@ -48,7 +48,7 @@ export const DEFAULT_SETTINGS = {
   customAccent: '#f6b93b',
   clockSeconds: true,
   clock24: false,
-  extensions: { darkPages: false, focusMode: false },
+  extensions: { darkPages: false, focusMode: false, developerMode: false, pinnedIds: [] },
   downloadPath: '',
   askDownloadLocation: true,
   onboarded: false,
@@ -111,9 +111,11 @@ export const state = {
   saveSettings() {
     // Deep-merge shields so partial objects don't drop keys.
     if (!SEARCH_ENGINES[this.settings.searchEngine]) this.settings.searchEngine = 'startpage';
+    const extensions = { ...DEFAULT_SETTINGS.extensions, ...(this.settings.extensions || {}) };
+    extensions.pinnedIds = [...new Set((Array.isArray(extensions.pinnedIds) ? extensions.pinnedIds : []).filter((id) => typeof id === 'string' && id.length <= 128))];
     const merged = { ...DEFAULT_SETTINGS, ...this.settings,
       shields: { ...DEFAULT_SETTINGS.shields, ...(this.settings.shields || {}) },
-      extensions: { ...DEFAULT_SETTINGS.extensions, ...(this.settings.extensions || {}) },
+      extensions,
       tabBehavior: normalizedTabBehavior(this.settings.tabBehavior),
       allowlist: { ...(this.settings.allowlist || {}) },
     };
@@ -121,7 +123,10 @@ export const state = {
     const saved = save(SETTINGS_KEY, merged);
     window.vespera?.prefs?.save(merged);
     bus.emit('settings', merged);
-    this.pushSync('settings', merged);
+    // Developer mode is a local security control; never enable it on another
+    // device just because that account syncs ordinary appearance preferences.
+    const syncSettings = { ...merged, extensions: { ...merged.extensions, developerMode: false } };
+    this.pushSync('settings', syncSettings);
     return saved;
   },
 
@@ -219,10 +224,11 @@ export const state = {
     if (!r.ok || !r.collections) return { ok: false, message: r.message || 'Could not reach your sync store.' };
     const { settings, bookmarks, history } = r.collections;
     if (settings && typeof settings === 'object' && Object.keys(settings).length) {
+      const localDeveloperMode = this.settings.extensions?.developerMode === true;
       this.settings = {
         ...DEFAULT_SETTINGS, ...settings,
         shields: { ...DEFAULT_SETTINGS.shields, ...(settings.shields || {}) },
-        extensions: { ...DEFAULT_SETTINGS.extensions, ...(settings.extensions || {}) },
+        extensions: { ...DEFAULT_SETTINGS.extensions, ...(settings.extensions || {}), developerMode: localDeveloperMode },
         tabBehavior: normalizedTabBehavior(settings.tabBehavior),
         allowlist: { ...(settings.allowlist || {}) },
       };

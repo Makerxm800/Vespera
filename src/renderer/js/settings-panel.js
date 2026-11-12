@@ -10,6 +10,7 @@ const SECTIONS = [
   ['appearance', 'Appearance'],
   ['tabs', 'Tabs & groups'],
   ['search', 'Search & home'],
+  ['browser', 'Browser'],
   ['privacy', 'Privacy'],
   ['extensions', 'Extensions'],
   ['downloads', 'Downloads'],

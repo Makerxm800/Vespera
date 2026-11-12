@@ -11,7 +11,46 @@
  * contextIsolation stays on, so the patch is pushed into the page's main
  * world through webFrame.executeJavaScript. It must never break the page.
  */
-const { webFrame } = require('electron');
+const { webFrame, ipcRenderer } = require('electron');
+
+// Chromium guest views have no parent DOM access. Capture the actual user
+// gesture in this isolated preload and send only a validated URL to the host.
+function safeLinkTarget(anchor) {
+  try {
+    const url = new URL(anchor.href || anchor.getAttribute('href'), location.href);
+    if (url.username || url.password) return null;
+    if (url.protocol === 'http:' || url.protocol === 'https:') return url.href;
+    if (url.protocol === 'file:' && !url.host && url.pathname.startsWith('/') && !url.pathname.startsWith('//')) {
+      if (/%(?:2f|5c)/i.test(url.pathname)) return null;
+      const decodedPath = decodeURIComponent(url.pathname);
+      if (!decodedPath.startsWith('/') || /^[/\\]{2}/.test(decodedPath) || decodedPath.includes('\0')) return null;
+      return url.href;
+    }
+  } catch { /* Bad or relative-to-an-unsupported-scheme link. */ }
+  return null;
+}
+function routeNewTab(event, middle = false) {
+  if (!event.isTrusted || location.protocol === 'chrome-extension:') return;
+  const anchor = event.target?.closest?.('a[href]');
+  if (!anchor || anchor.hasAttribute('download')) return;
+  const url = safeLinkTarget(anchor);
+  if (!url) return;
+  const modified = Boolean(event.ctrlKey || event.metaKey);
+  const targetBlank = String(anchor.getAttribute('target') || '').toLowerCase() === '_blank';
+  const localFile = url.startsWith('file:');
+  if (!middle && !modified && !targetBlank && !localFile) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  try {
+    ipcRenderer.sendToHost('vespera:open-link', {
+      url, newTab: true,
+      foreground: localFile ? (!middle && (!modified || Boolean(event.shiftKey))) : (middle ? false : (!modified || Boolean(event.shiftKey))),
+      gesture: middle ? 'middle' : (modified ? 'modifier' : ''),
+    });
+  } catch { /* The embedder may be closing during navigation. */ }
+}
+window.addEventListener('click', (event) => { if (event.button === 0) routeNewTab(event); }, true);
+window.addEventListener('auxclick', (event) => { if (event.button === 1) routeNewTab(event, true); }, true);
 
 const PATCH = `(() => {
   try {

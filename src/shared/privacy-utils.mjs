@@ -204,10 +204,27 @@ export function internalPageKey(url) {
   return String(url || '').split(/[?#]/)[0].replace(/\/$/, '').toLowerCase();
 }
 
-/** Only web URLs and our own pages may become browser tabs. */
-export function safeTabUrl(value) {
+/**
+ * Only web URLs, our own pages, and (when explicitly allowed by the desktop
+ * browser) local file URLs may become tabs. File navigation is opt-in so a
+ * hosted preview or an address-bar input can never turn into local-file access.
+ */
+export function safeTabUrl(value, { allowFile = false } = {}) {
   const text = String(value || '').trim();
   if (/^vespera:\/\//i.test(text)) return text;
-  try { const u = new URL(text); return ['https:', 'http:'].includes(u.protocol) ? u.href : null; }
-  catch { return null; }
+  try {
+    const u = new URL(text);
+    if (['https:', 'http:'].includes(u.protocol)) return u.href;
+    // Reject UNC/network shares and ambiguous encoded separators as well as
+    // non-canonical forms. A local file must be explicitly requested by a
+    // trusted desktop navigation path.
+    if (allowFile && /^file:\/\/\//i.test(text) && u.protocol === 'file:' && !u.host && !u.username && !u.password && !u.pathname.startsWith('//')) {
+      if (/%(?:2f|5c)/i.test(u.pathname)) return null;
+      let decodedPath;
+      try { decodedPath = decodeURIComponent(u.pathname); } catch { return null; }
+      if (!decodedPath.startsWith('/') || /^[/\\]{2}/.test(decodedPath) || decodedPath.includes('\0')) return null;
+      return u.href;
+    }
+  } catch { /* Not an absolute URL. */ }
+  return null;
 }
