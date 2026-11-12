@@ -58,11 +58,14 @@ double-click it — exactly like any other browser:
 | 🐧 Debian/Ubuntu | `Vespera-<v>-linux-amd64.deb` | Double-click the package |
 
 <details>
-<summary><b>First-run notes</b> (one-time, unsigned builds)</summary>
+<summary><b>First-run notes</b> (unsigned builds)</summary>
 
-- **Windows SmartScreen** may show "Windows protected your PC" → click
-  **More info → Run anyway**. This appears for every app without a paid
-  code-signing certificate.
+- **Windows SmartScreen** can show "Windows protected your PC" for an
+  unsigned or unfamiliar publisher. This is not caused by Electron's
+  `app.asar` archive; removing that file will not remove the warning. A trusted
+  Authenticode signature and publisher reputation are needed to reduce it.
+  Only install builds downloaded from the official Releases page. If Windows
+  reports a specific malware/threat name instead, do not run the installer.
 - **macOS Gatekeeper** may say the app is from an unidentified developer →
   **right-click the app → Open → Open**. (Signing + notarization is planned —
   see [RELEASING.md](RELEASING.md).)

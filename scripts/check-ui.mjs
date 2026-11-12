@@ -44,6 +44,22 @@ try {
     const image = await page.locator('.nt-wallpaper').evaluate((el) => getComputedStyle(el).backgroundImage.match(/url\("?([^"\)]+)/)?.[1]);
     assert.ok(image); assert.equal((await page.request.get(image)).status(), 200);
   });
+  await step('buttons and their icons share smooth hover, press and reduced-motion behavior', async () => {
+    const control = page.locator('#btn-home');
+    const transitions = await control.evaluate((el) => ({
+      button: getComputedStyle(el).transitionProperty,
+      icon: getComputedStyle(el.querySelector('svg')).transitionProperty,
+    }));
+    assert.match(transitions.button, /transform/);
+    assert.match(transitions.icon, /transform/);
+    await control.hover(); await page.waitForTimeout(280);
+    assert.notEqual(await control.evaluate((el) => getComputedStyle(el).transform), 'none');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    assert.equal(await control.evaluate((el) => getComputedStyle(el).transform), 'none');
+    assert.equal(await control.locator('svg').evaluate((el) => getComputedStyle(el).animationName), 'none');
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.mouse.move(0, 0);
+  });
   await step('home search animates on focus/submit and Settings opens as a panel', async () => {
     await page.locator('#nt-input').focus(); assert.match(await page.locator('#nt-search').getAttribute('class'), /is-focused/);
     await page.locator('#nt-go').click(); assert.match(await page.locator('#nt-search').getAttribute('class'), /is-empty/);
