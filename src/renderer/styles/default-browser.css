@@ -1,0 +1,10 @@
+/* Clear, low-drama status for OS-owned browser defaults. */
+.default-browser-row { align-items: flex-start; }
+.default-browser-row > div:first-child { min-width: 0; }
+.default-browser-status { display: block; margin-top: 8px; color: var(--accent-2, var(--accent)) !important; }
+.default-browser-actions { align-items: flex-start !important; flex-wrap: wrap; justify-content: flex-end; max-width: 310px; }
+.default-browser-actions .btn { justify-content: center; }
+@media (max-width: 760px) {
+  .default-browser-row { flex-direction: column; align-items: stretch; }
+  .default-browser-actions { max-width: none; justify-content: flex-start; }
+}

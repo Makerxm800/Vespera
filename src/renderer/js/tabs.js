@@ -23,8 +23,9 @@ export function createTabModel(url = 'vespera://newtab', opts = {}) {
 }
 
 export class TabManager {
-  constructor({ onActiveChange, onClose, onMount, onChange, onContextMenu, onGroupContextMenu, onNewTab, onFocusPage, onToggleMute, getSettings } = {}) {
+  constructor({ onActiveChange, onClose, onMount, onChange, onContextMenu, onGroupContextMenu, onNewTab, onFocusPage, onToggleMute, getSettings, allowFileUrls = false } = {}) {
     this.tabs = [];
+    this.allowFileUrls = Boolean(allowFileUrls);
     this.groups = [];
     this.activeId = null;
     this.closedStack = [];
@@ -250,7 +251,7 @@ export class TabManager {
   getGroup(id) { return this.groups.find((group) => group.id === id) || null; }
   groupTabs(id) { return this.tabs.filter((tab) => tab.groupId === id); }
   add(url = 'vespera://newtab', options = {}) {
-    url = safeTabUrl(url);
+    url = safeTabUrl(url, { allowFile: this.allowFileUrls });
     if (!url) throw new Error('This address cannot be opened in a tab.');
     if (this.tabs.length >= 60) {
       const candidate = this.tabs.find((t) => !t.pinned && t.id !== this.activeId);

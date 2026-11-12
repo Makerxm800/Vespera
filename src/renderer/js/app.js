@@ -41,6 +41,7 @@ const PAGE_RENDERERS = {
 let tabs, omnibox, saveTimer, previewRestricted = false, serviceVersion = '';
 let tabHover;
 let previousDark = false;
+let extensionActionRequest = 0;
 let installPrompt = null;
 let storeDismissed = null;
 const contentEl = document.getElementById('content');
@@ -90,7 +91,9 @@ function disposeView(tab) {
   tab.view?.remove(); tab.view = null;
 }
 function openInTab(tab, url, { push = true } = {}) {
-  url = safeTabUrl(url);
+  // Local files are accepted only by the Electron desktop browser. The public
+  // omnibox/search path deliberately keeps file: disabled.
+  url = safeTabUrl(url, { allowFile: platform.isElectron });
   if (!url) return;
   closePopover(); closeFind();
   disposeView(tab);
@@ -122,7 +125,7 @@ function openInTab(tab, url, { push = true } = {}) {
       },
       onTitle: (title) => { if (title) { tabs.update(tab, { title }); state.addHistory({ title, url: tab.url }); } },
       onUrl: (next) => {
-        if (!safeTabUrl(next) || isInternal(next)) return;
+        if (!safeTabUrl(next, { allowFile: platform.isElectron }) || isInternal(next)) return;
         tab.url = next; tab.entries[tab.entryIndex] = { url: next, title: tab.title };
         tabs.update(tab);
       },
@@ -131,7 +134,9 @@ function openInTab(tab, url, { push = true } = {}) {
       onError: (message) => showLoadError(tab, message),
       onLink: (link, newTab, foreground = true, gesture = '') => {
         if (!newTab) return navigate(link, { tab, kind: 'url' });
-        if (gesture === 'middle' && state.settings.tabBehavior.middleClickOpensTab === false) return navigate(link, { tab, kind: 'url' });
+        if (gesture === 'middle' && state.settings.tabBehavior.middleClickOpensTab === false) {
+          return link.startsWith('file:') ? openInTab(tab, link) : navigate(link, { tab, kind: 'url' });
+        }
         tabs.add(link, { activate: foreground, besideId: tab.id, groupId: tab.groupId || null });
       },
       onDownload: (link, name) => downloadUrl(link, name),
@@ -242,6 +247,7 @@ async function installFromStorePage() {
     if (result.ok) {
       storeDismissed = id;
       banner.classList.add('hidden');
+      if (result.extensions) bus.emit('extensions', result.extensions);
       toast(`${result.name || 'Extension'} installed. It survives restarts.`, 'ok', 5000);
     } else {
       toast(result.message || 'This extension could not be installed.', 'error', 7000);
@@ -521,7 +527,7 @@ function openMenu(anchor) {
     ${item('vertical', 'split', (s.tabLayout === 'vertical' ? '✓ ' : '') + 'Vertical tabs')}${item('railhide', 'panel', (s.railHidden && s.tabLayout !== 'vertical' ? '✓ ' : '') + 'Hide sidebar')}${item('bookbar', 'bookmark', (s.showBookmarksBar ? '✓ ' : '') + 'Bookmarks bar')}${item('focus', 'eye', (s.extensions.focusMode ? '✓ ' : '') + 'Focus mode')}
     <div class="menu-sep"></div>
     ${item('palette', 'keyboard', 'Command palette', 'Ctrl+K')}${item('privacy', 'shield', 'Privacy Hub')}${item('account', 'user', state.user ? 'Account · ' + escapeHtml(state.user.displayName) : 'Sign in / create account')}${item('settings', 'gear', 'Settings')}${item('updates', 'sparkle', 'What’s new')}${item('logs', 'flask', 'View logs')}${item('welcome', 'sparkle', 'Welcome & about')}
-  `, { label: 'Vespera menu', className: 'menu browser-menu' });
+  `, { label: 'Toggle Menu', className: 'menu browser-menu' });
   if (!pop) return;
   if (!platform.isElectron) pop.el.querySelector('[data-act="private"]').disabled = true;
   pop.el.addEventListener('click', async (e) => {
@@ -546,7 +552,7 @@ function openMenu(anchor) {
       case 'tab-settings': navigate('vespera://settings#tabs'); break;
       case 'install': if (installPrompt) { installPrompt.prompt(); const choice = await installPrompt.userChoice; if (choice.outcome === 'accepted') toast('Vespera is installing as an app.', 'ok'); installPrompt = null; } break;
       case 'private': if (platform.isElectron) window.vespera.window.incognito(); break;
-      case 'history': case 'bookmarks': case 'downloads': case 'extensions': case 'privacy': case 'account': case 'logs': case 'welcome': case 'updates': navigate('vespera://' + act); break;
+      case 'history': case 'bookmarks': case 'downloads': case 'extensions': case 'privacy': case 'account': case 'logs': case 'welcome': case 'updates': tabs.add('vespera://' + act); break;
       case 'settings': toggleSettings(); break;
       case 'customize': navigate('vespera://settings#appearance'); break;
       case 'theme': state.set('theme', document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); break;
@@ -586,7 +592,9 @@ function wireWindowControls() {
   $('web-restore').onclick = () => { $('app').classList.remove('hidden'); $('web-window-dock').classList.add('hidden'); tabs.active?.view && updateChromeFor(tabs.active); };
 }
 function paletteActions() {
-  const go = (url) => () => navigate(url);
+  // Utility destinations opened from the palette live in a new tab so running
+  // a command never discards the page the user was working in.
+  const go = (url) => () => tabs.add(url);
   return [
     { title: 'New Tab', icon: 'plus', kbd: 'Ctrl+T', run: () => tabs.add('vespera://newtab') },
     { title: 'Close Tab', icon: 'x', kbd: 'Ctrl+W', run: () => tabs.close(tabs.activeId) },
@@ -612,15 +620,64 @@ async function showExtensionsMenu(anchor) {
     try { items = await window.vespera.extensions.list() || []; }
     catch (err) { diagnostic('Could not list extensions: ' + err.message); }
   }
-  const rows = items.length ? items.map((ext) => '<div class="extension-menu-row"><span class="extension-menu-mark">' + icon('puzzle') + '</span><span class="extension-menu-name">' + escapeHtml(ext.name || 'Unnamed extension') + '<small>v' + escapeHtml(ext.version || '?') + '</small></span><span class="chip chip-ok">Loaded</span></div>').join('') : '<div class="popover-copy">No third-party extensions are loaded yet. Built-in tools are available in the Extensions page.</div>';
-  pop.el.innerHTML = '<div class="menu-label">Extensions <span class="chip">' + items.length + '</span></div>' + rows + '<div class="extension-menu-actions"><button class="btn btn-primary" data-ext-manage>Manage extensions</button><button class="btn" data-ext-load ' + (!platform.isElectron || state.private ? 'disabled' : '') + '>Load unpacked</button></div><p class="small faint">Only load extensions from sources you trust. Some Chrome APIs are not supported by Electron.</p>';
-  pop.el.querySelector('[data-ext-manage]')?.addEventListener('click', () => { pop.close(); navigate('vespera://extensions'); });
+  updateExtensionActions(items);
+  const extIcon = (ext) => typeof ext.icon === 'string' && /^data:image\/(?:png|jpeg|webp|gif);base64,[a-z0-9+/]+=*$/i.test(ext.icon)
+    ? '<img src="' + ext.icon + '" alt="" referrerpolicy="no-referrer">' : icon('puzzle');
+  const rows = items.length ? items.map((ext) => '<div class="extension-menu-row"><span class="extension-menu-mark">' + extIcon(ext) + '</span><span class="extension-menu-name">' + escapeHtml(ext.name || 'Unnamed extension') + '<small>v' + escapeHtml(ext.version || '?') + ' · ' + (ext.enabled ? 'Enabled' : 'Disabled') + '</small></span><span class="chip ' + (ext.enabled ? 'chip-ok' : '') + '">' + (ext.enabled ? 'On' : 'Off') + '</span></div>').join('') : '<div class="popover-copy">No third-party extensions are installed yet. Built-in tools are available in the Extensions page.</div>';
+  const devMode = Boolean(state.settings.extensions.developerMode);
+  pop.el.innerHTML = '<div class="menu-label">Extensions <span class="chip">' + items.length + '</span></div>' + rows + '<div class="extension-menu-actions"><button class="btn btn-primary" data-ext-manage>Manage extensions</button><button class="btn" data-ext-load ' + (!platform.isElectron || state.private || !devMode ? 'disabled' : '') + '>' + (devMode ? 'Load unpacked' : 'Developer mode') + '</button></div><p class="small faint">Only load code from sources you trust. Unpacked folders still require a permission review. Some Chrome APIs are not supported by Electron.</p>';
+  pop.el.querySelector('[data-ext-manage]')?.addEventListener('click', () => { pop.close(); tabs.add('vespera://extensions'); });
   pop.el.querySelector('[data-ext-load]')?.addEventListener('click', async () => {
-    if (!platform.isElectron || state.private) return;
-    const result = await window.vespera.extensions.install();
-    if (result.ok) { toast('Extension loaded.', 'ok'); pop.close(); showExtensionsMenu(anchor); }
+    if (!platform.isElectron || state.private || !devMode) return;
+    const result = await window.vespera.extensions.loadUnpacked();
+    if (result.ok) { toast(`${result.name || 'Extension'} loaded after review.`, 'ok'); pop.close(); showExtensionsMenu(anchor); }
     else if (!result.canceled) toast(result.message || 'Could not load this extension.', 'error', 6000);
   });
+}
+
+function showExtensionAction(anchor, ext) {
+  if (!platform.isElectron || !ext?.enabled || !ext.popup) {
+    toast(ext?.enabled ? `${ext?.name || 'This extension'} does not provide a toolbar popup.` : 'Enable this extension before opening it.', 'info');
+    return;
+  }
+  if (!/^[a-p]{32}$/i.test(ext.id || '') || typeof ext.popup !== 'string' || ext.popup.split('/').some((part) => part === '..')) {
+    toast('This extension has an invalid toolbar popup path.', 'error');
+    return;
+  }
+  const popupPath = ext.popup.split('/').map((part) => encodeURIComponent(part)).join('/');
+  const popupUrl = `chrome-extension://${ext.id}/${popupPath}`;
+  const popup = openPopover(anchor, `<div class="extension-action-popup-head"><span>${icon('puzzle')}</span><b>${escapeHtml(ext.name || 'Extension')}</b><span class="grow"></span><button class="icon-btn" data-dismiss aria-label="Close extension popup" title="Close">${icon('x')}</button></div><webview class="extension-action-frame" src="${escapeHtml(popupUrl)}" partition="persist:vespera" allowpopups></webview>`, { className: 'popover extension-action-popover', label: `${ext.name || 'Extension'} popup` });
+  if (!popup) return;
+  const frame = popup.el.querySelector('webview');
+  frame?.addEventListener('did-fail-load', (event) => {
+    if (event.errorCode === -3 || !frame.isConnected) return;
+    frame.replaceWith(Object.assign(document.createElement('div'), {
+      className: 'tab-hovercard-placeholder',
+      textContent: 'This extension popup could not be opened. Electron may not support one of its APIs.',
+    }));
+  });
+}
+
+async function updateExtensionActions(items = null) {
+  const host = $('extension-actions');
+  if (!host) return;
+  const request = ++extensionActionRequest;
+  if (!platform.isElectron || state.private) { host.replaceChildren(); return; }
+  try {
+    const available = Array.isArray(items) ? items : await window.vespera.extensions.list();
+    if (request !== extensionActionRequest || !host.isConnected) return;
+    const pinned = new Set(Array.isArray(state.settings.extensions.pinnedIds) ? state.settings.extensions.pinnedIds : []);
+    const actions = (Array.isArray(available) ? available : []).filter((ext) => ext?.enabled && pinned.has(ext.id));
+    host.innerHTML = actions.map((ext) => {
+      const visual = typeof ext.icon === 'string' && /^data:image\/(?:png|jpeg|webp|gif);base64,[a-z0-9+/]+=*$/i.test(ext.icon)
+        ? `<img src="${ext.icon}" alt="" referrerpolicy="no-referrer">` : icon('puzzle');
+      return `<button class="extension-toolbar-action" type="button" data-extension-action="${escapeHtml(ext.id)}" title="${escapeHtml(ext.name || 'Extension')}" aria-label="Open ${escapeHtml(ext.name || 'extension')}">${visual}</button>`;
+    }).join('');
+    host.querySelectorAll('[data-extension-action]').forEach((button) => button.addEventListener('click', () => {
+      const extension = actions.find((ext) => ext.id === button.dataset.extensionAction);
+      if (extension) showExtensionAction(button, extension);
+    }));
+  } catch (err) { diagnostic('Could not update pinned extensions: ' + (err.message || err)); }
 }
 
 /** Cursor-anchored menu, same technique as the page context menu. */
@@ -822,11 +879,19 @@ function boot() {
     onFocusPage: (tab) => { if (tab && !tab._internal) platform.focus(tab.view); },
     onToggleMute: toggleTabMute,
     getSettings: () => state.settings,
+    allowFileUrls: platform.isElectron,
   });
   tabHover = initTabHover(tabs, () => state.settings);
   buildRail(); positionTabUI(); renderBookmarksBar();
   omnibox = initOmnibox({ onNavigate: (target) => { navigate(target.value, { kind: target.kind }); focusPageSoon(); }, isPreviewSearch: () => previewRestricted && !platform.isElectron });
-  window.__vesperaNavigate = (t) => navigate(t.value, { kind: t.kind });
+  window.__vesperaPaletteSearch = (value) => {
+    const query = String(value || '').trim();
+    if (!query) return;
+    const url = previewRestricted && !platform.isElectron
+      ? 'vespera://search?q=' + encodeURIComponent(query)
+      : buildSearchUrl(query, state.settings.searchEngine);
+    tabs.add(url);
+  };
   $('btn-back').onclick = () => { goBack(); focusPageSoon(); }; $('btn-forward').onclick = () => { goForward(); focusPageSoon(); };
   $('btn-reload').onclick = () => { if (tabs.active?.loading) { platform.stop(tabs.active.view); tabs.update(tabs.active, { loading: false }); } else { reload(); focusPageSoon(); } };
   $('btn-home').onclick = () => navigate(state.settings.homepage || 'vespera://newtab');
@@ -871,7 +936,7 @@ function boot() {
   bus.on('storage-error', (message) => toast(message, 'error', 6000));
   bus.on('sync-error', (message) => toast(message, 'error', 5000));
   bus.on('settings', () => {
-    applyAppearance(); omnibox?.refreshEngine(); positionTabUI(); tabs.render(); renderBookmarksBar();
+    applyAppearance(); omnibox?.refreshEngine(); positionTabUI(); tabs.render(); renderBookmarksBar(); updateExtensionActions();
     tabHover?.close();
     tabs.focusActiveStrip();
     if (previousDark !== state.settings.extensions.darkPages) {
@@ -881,6 +946,7 @@ function boot() {
     if (tabs.active) { updateChromeFor(tabs.active); platform.setZoom(tabs.active.view, tabs.active.zoom); }
   });
   bus.on('bookmarks', () => { renderBookmarksBar(); if (tabs.active) updateChromeFor(tabs.active); });
+  bus.on('extensions', (items) => updateExtensionActions(items));
   matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (state.settings.theme === 'system') applyAppearance(); });
   let restored = false;
   if (!state.private) {
@@ -896,7 +962,7 @@ function boot() {
           color: TAB_GROUP_COLORS.includes(group.color) ? group.color : (legacyColor[String(group.color || '').toLowerCase()] || 'blue'),
           collapsed: Boolean(group.collapsed),
         }));
-        for (const [index, t] of session.tabs.slice(0, 60).entries()) if (safeTabUrl(t.url)) tabs.add(t.url, { title: t.title, pinned: t.pinned, muted: t.muted, groupId: t.groupId, index, activate: false });
+        for (const [index, t] of session.tabs.slice(0, 60).entries()) if (safeTabUrl(t.url, { allowFile: platform.isElectron })) tabs.add(t.url, { title: t.title, pinned: t.pinned, muted: t.muted, groupId: t.groupId, index, activate: false });
         tabs.pruneGroups();
         if (tabs.tabs.length) { tabs.activate(tabs.tabs[Math.max(0, Math.min(session.activeIndex || 0, tabs.tabs.length - 1))].id); restored = true; }
       }
@@ -905,18 +971,25 @@ function boot() {
   if (!restored) tabs.add(state.private ? 'vespera://private' : 'vespera://newtab');
   initDownloads().catch((err) => diagnostic(err.message));
   if (platform.isElectron) {
+    window.vespera.on('browser:extensions-changed', (items) => bus.emit('extensions', Array.isArray(items) ? items : []));
     window.vespera.on('browser:new-tab', (request) => {
       const url = typeof request === 'string' ? request : request?.url;
-      if (!safeTabUrl(url)) return;
-      const active = tabs.active;
+      if (!safeTabUrl(url, { allowFile: true })) return;
+      // A background webview can open a link too. Keep the new tab beside the
+      // page that actually opened it instead of whichever tab is active now.
+      const source = request?.sourceWebContentsId
+        ? tabs.tabs.find((item) => platform.inner(item.view)?.getWebContentsId?.() === request.sourceWebContentsId)
+        : null;
+      const opener = source || tabs.active;
       if (request?.gesture === 'middle' && state.settings.tabBehavior.middleClickOpensTab === false) {
-        navigate(url, { tab: active, kind: 'url' });
+        if (url.startsWith('file:')) openInTab(opener, url);
+        else navigate(url, { tab: opener, kind: 'url' });
         return;
       }
-      tabs.add(url, { activate: typeof request === 'string' ? true : request.foreground !== false, besideId: active?.id, groupId: active?.groupId || null });
+      tabs.add(url, { activate: typeof request === 'string' ? true : request.foreground !== false, besideId: opener?.id, groupId: opener?.groupId || null });
     });
     window.vespera.on('browser:new-tab-background', (url) => {
-      if (!safeTabUrl(url)) return;
+      if (!safeTabUrl(url, { allowFile: true })) return;
       const active = tabs.active;
       if (state.settings.tabBehavior.middleClickOpensTab === false) { navigate(url, { tab: active, kind: 'url' }); return; }
       tabs.add(url, { activate: false, besideId: active?.id, groupId: active?.groupId || null });
@@ -950,6 +1023,7 @@ function boot() {
       else if (INTERNAL_PAGES['vespera://' + action]) navigate('vespera://' + action);
     });
   }
+  updateExtensionActions();
   fetch('/api/health').then((r) => r.json()).then((health) => {
     previewRestricted = Boolean(health.previewRestricted); serviceVersion = health.version || '';
     omnibox?.refreshEngine();

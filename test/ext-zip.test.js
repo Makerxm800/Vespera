@@ -52,11 +52,12 @@ function makeZip(entries) {
 // Stub electron before loading the module
 const Module = require('module');
 const orig = Module.prototype.require;
+let extensionTestUserData = os.tmpdir();
 Module.prototype.require = function (id) {
-  if (id === 'electron') return { dialog: {}, app: { getPath: () => os.tmpdir() } };
+  if (id === 'electron') return { dialog: {}, app: { getPath: () => extensionTestUserData } };
   return orig.apply(this, arguments);
 };
-const { extractZip, findManifestDir } = require('../electron/extensions.js');
+const { extractZip, findManifestDir, installExtensions } = require('../electron/extensions.js');
 
 test('extractZip unpacks a real zip (built in-test) and findManifestDir locates nested manifests', async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vespera-ext-test-'));
@@ -91,6 +92,87 @@ test('extractZip rejects non-zip files with a clear error', async () => {
     fs.writeFileSync(bad, 'this is not a zip file at all');
     await assert.rejects(() => extractZip(bad, path.join(tmp, 'out')), /not a valid extension package/);
   } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('extractZip rejects ZIP-slip paths before writing outside its destination', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vespera-ext-slippage-'));
+  try {
+    const archive = path.join(tmp, 'unsafe.zip');
+    const destination = path.join(tmp, 'out');
+    fs.writeFileSync(archive, makeZip([['../escaped.txt', 'must not be written']]));
+    await assert.rejects(() => extractZip(archive, destination), /unsafe file path/i);
+    assert.equal(fs.existsSync(path.join(tmp, 'escaped.txt')), false);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('extension manager exposes icons and permissions and persists enable/disable state', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vespera-ext-manager-'));
+  const previousUserData = extensionTestUserData;
+  extensionTestUserData = tmp;
+  try {
+    const folder = path.join(tmp, 'reviewed-extension');
+    fs.mkdirSync(folder);
+    fs.writeFileSync(path.join(folder, 'manifest.json'), JSON.stringify({
+      manifest_version: 3, name: 'Reviewed helper', version: '2.4.1', description: 'A small reviewed helper.',
+      permissions: ['storage'], host_permissions: ['https://*.example.com/*'],
+      action: { default_popup: 'popup.html', default_title: 'Open helper' }, icons: { 48: 'icon.png' },
+    }));
+    fs.writeFileSync(path.join(folder, 'icon.png'), Buffer.from('89504e470d0a1a0a', 'hex'));
+    const id = 'a'.repeat(32);
+    const prefs = { extensionPaths: [folder], disabledExtensionIds: [], extensionMetadata: [] };
+    const makeSession = () => {
+      const loaded = new Map();
+      return {
+        loaded,
+        getAllExtensions: () => [...loaded.values()],
+        getExtension: (key) => loaded.get(key),
+        loadExtension: async (directory) => {
+          const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'manifest.json'), 'utf8'));
+          const extension = { id, name: manifest.name, version: manifest.version, path: directory, manifest };
+          loaded.set(id, extension);
+          return extension;
+        },
+        removeExtension: (key) => loaded.delete(key),
+      };
+    };
+    const logger = { info() {}, error() {} };
+    const session = makeSession();
+    const manager = installExtensions(session, () => prefs, () => {}, () => null, logger);
+    await manager.restore();
+    let details = manager.list()[0];
+    assert.equal(details.enabled, true);
+    assert.equal(details.name, 'Reviewed helper');
+    assert.equal(details.manifestVersion, 3);
+    assert.deepEqual(details.permissions, ['storage']);
+    assert.deepEqual(details.hostPermissions, ['https://*.example.com/*']);
+    assert.equal(details.popup, 'popup.html');
+    assert.match(details.icon, /^data:image\/png;base64,/);
+
+    const disabled = await manager.disable(id);
+    assert.equal(disabled.ok, true);
+    assert.equal(disabled.extensions[0].enabled, false);
+    assert.ok(prefs.disabledExtensionIds.includes(id));
+
+    const restoredSession = makeSession();
+    const restoredManager = installExtensions(restoredSession, () => prefs, () => {}, () => null, logger);
+    await restoredManager.restore();
+    assert.equal(restoredSession.loaded.size, 0, 'disabled extensions stay unloaded after restart');
+    assert.equal(restoredManager.list()[0].enabled, false);
+    const enabled = await restoredManager.enable(id);
+    assert.equal(enabled.ok, true);
+    assert.equal(enabled.extensions[0].enabled, true);
+    assert.deepEqual(prefs.disabledExtensionIds, []);
+
+    const removed = restoredManager.remove(id);
+    assert.equal(removed.ok, true);
+    assert.equal(removed.extensions.length, 0);
+    assert.equal(prefs.extensionPaths.length, 0);
+  } finally {
+    extensionTestUserData = previousUserData;
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });

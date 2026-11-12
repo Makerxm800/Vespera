@@ -161,7 +161,8 @@ function bridgeScript(pageUrl, error = '', extra = '', parentOrigin = '') {
       if(a.hasAttribute('download'))parent.postMessage({type:'vespera:download',url,name:a.getAttribute('download')||''},'*');
       else {
         const modified=e.ctrlKey||e.metaKey;
-        const newTab=a.target==='_blank'||modified;
+        const targetBlank=(a.getAttribute('target')||'').toLowerCase()==='_blank';
+        const newTab=targetBlank||modified;
         parent.postMessage({type:'vespera:navigate',url,newTab,foreground:!modified||e.shiftKey,gesture:modified?'modifier':''},'*');
       }
     },true);
