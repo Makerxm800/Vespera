@@ -644,17 +644,35 @@
 .wallpaper-dim input { flex: 1; accent-color: var(--accent); min-width: 60px; }
 .wallpaper-dim output { min-width: 34px; }
 
-/* ---- v0.1.6: wallpaper tiles + settings feedback ---- */
-.wallpaper-preview.custom { background: linear-gradient(135deg, #2b2f52, #4a3f6b 45%, #8b7cf6); position: relative; }
-.wallpaper-preview.custom.live { background-image: var(--wallpaper-image); background-size: cover; background-position: center; }
-.wallpaper-preview.custom:not(.live)::after {
-  content: 'yours'; position: absolute; inset: auto 0 6px; text-align: center;
-  font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.72);
-}
+/* ---- Wallpaper tiles + settings feedback ---- */
 .wallpaper-choice { transition: transform var(--fast), border-color var(--fast), box-shadow var(--fast); }
 .wallpaper-choice:hover { transform: translateY(-2px); }
 .wallpaper-choice.selected { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 .wallpaper-choice:active { transform: scale(.97); }
+.wallpaper-home-row { align-items: center; }
+.wallpaper-library-label { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 19px 0 10px; }
+.wallpaper-library-label b { font-size: 12px; }
+.wallpaper-library-label span { color: var(--text-faint); font-size: 10.5px; }
+.appearance-card .wallpaper-grid { margin-top: 0; }
+.custom-wallpaper-library { margin-top: 16px; padding: 18px; border: 1px solid var(--border); border-radius: 14px; background: color-mix(in srgb, var(--surface) 90%, transparent); }
+.custom-wallpaper-library-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.custom-wallpaper-library-head > div { min-width: 0; }
+.custom-wallpaper-library-head .btn { flex: none; }
+.custom-wallpaper-library-head .btn svg { width: 14px; height: 14px; }
+.custom-wallpaper-grid { margin-top: 14px; }
+.custom-wallpaper-tile { position: relative; min-width: 0; }
+.custom-wallpaper-choice { display: block; width: 100%; height: 100%; padding: 0; }
+.custom-wallpaper-choice .wallpaper-preview { height: 88px; background-size: cover; background-position: center; }
+.custom-wallpaper-choice > span:last-child { padding: 8px 34px 8px 9px; }
+.custom-wallpaper-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.custom-wallpaper-remove { position: absolute; right: 7px; bottom: 7px; z-index: 1; display: grid; place-items: center; width: 25px; height: 25px; padding: 0; border: 1px solid var(--border); border-radius: 7px; background: color-mix(in srgb, var(--surface) 92%, transparent); color: var(--text-faint); cursor: pointer; }
+.custom-wallpaper-remove svg { width: 13px; height: 13px; }
+.custom-wallpaper-remove:hover { color: #f87171; border-color: color-mix(in srgb, #f87171 42%, var(--border)); background: color-mix(in srgb, #f87171 12%, var(--surface)); }
+.wallpaper-empty { grid-column: 1 / -1; min-height: 94px; display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 18px; border: 1px dashed var(--border-strong); border-radius: 11px; color: var(--text-dim); text-align: center; }
+.wallpaper-empty b { color: var(--text); font-size: 12px; }
+.wallpaper-empty span { font-size: 11px; }
+.wallpaper-empty.is-loading { min-height: 55px; border-style: solid; opacity: .72; }
+.wallpaper-library-error { margin-top: 10px; color: #f87171; font-size: 11px; }
 /* A toggle that just fired sends a soft ripple down its row. */
 @keyframes row-pulse { 0% { background-color: color-mix(in srgb, var(--accent) 18%, transparent); } 100% { background-color: transparent; } }
 .setting-row.row-pulse, .appearance-card.row-pulse { animation: row-pulse .62s var(--ease); border-radius: 12px; }
@@ -748,6 +766,10 @@
   .segmented button { padding: 6px 11px; font-size: 11px; }
   .wallpaper-grid { grid-template-columns: repeat(2, 1fr); }
   .wallpaper-preview { height: 85px; }
+  .custom-wallpaper-library { padding: 14px; }
+  .custom-wallpaper-library-head { align-items: flex-start; flex-wrap: wrap; }
+  .custom-wallpaper-library-head .btn { margin-left: auto; }
+  .custom-wallpaper-choice .wallpaper-preview { height: 76px; }
   .extension-grid { grid-template-columns: 1fr; }
   .extension-banner { flex-wrap: wrap; padding: 18px; }
   .extension-banner .chip { margin-left: 65px; }

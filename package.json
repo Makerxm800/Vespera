@@ -1,6 +1,6 @@
 {
   "name": "vespera-browser",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Vespera — a next-gen, community-first Chromium browser engineered for absolute privacy and superior performance.",
   "main": "electron/main.js",
   "type": "commonjs",

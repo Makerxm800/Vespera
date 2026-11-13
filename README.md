@@ -5,16 +5,18 @@
 
 Im very sorry, i don't like using AI on my serious projects — i built Vespera by hand to see where the whole vibe-code experiment is actually going. It turned into a browser i use every day, so here it is. :P
 
-**Current release: [v0.1.7](https://github.com/Makerxm800/Vespera/releases)** — Windows, macOS and Linux installers are published automatically from every `v*` tag.
+**Next release in preparation: v0.1.8** — the currently published installers are still [v0.1.7](https://github.com/Makerxm800/Vespera/releases/tag/v0.1.7). The release workflow builds Windows, macOS and Linux installers when the new `v*` tag is pushed after merge.
 
 ---
 
-## ✨ What's new in 0.1.7
+## ✨ What's new in 0.1.8
 
-* **Tabs & groups settings** — choose layout, tab placement, scroll-or-compress behavior, close buttons, middle-click actions, group visibility, audio controls, hover details and inactive-tab styling.
-* **Tabs where you expect them** — new tabs can open beside the current tab or at the end of the strip; existing groups stay intact when their headers are hidden.
-* **Richer tab controls** — mute tabs, pick hover cards or tooltips, and see previews or memory estimates where the desktop runtime supports them.
-* **Sessions that remember more** — tab order, active tab, group collapse state, pinning and mute state are restored together.
+* **Reorder whole tab groups** — drag groups in the horizontal strip or vertical sidebar; long lists auto-scroll, and group order is restored with your session.
+* **Right-click group actions** — edit group names/colors, add a tab, collapse, ungroup or close without an ellipsis button.
+* **Saved groups** — names, colors, membership, order and collapsed state persist with the tab session. Group names appear once in their header, not as repeated tags on every tab.
+* **A personal wallpaper gallery** — add multiple custom images, switch between them, remove individual wallpapers and tune the active image. Previous custom wallpapers remain available.
+* **A cleaner left sidebar** — Settings remains in the browser menu and on Ctrl+comma; per-site privacy settings remain in the site-information panel.
+* **Focused audio controls** — tabs playing audio, or already muted, keep their mute toggle; the existing indicator/hide preferences are unchanged.
 
 Full details in [CHANGELOG.md](CHANGELOG.md) and in-app at **`vespera://updates`**.
 
@@ -79,7 +81,7 @@ and the browser launches right away.
 
 | Action | Shortcut |
 |---|---|
-| Settings panel | `Ctrl+,` |
+| Settings page | `Ctrl+,` |
 | Command palette | `Ctrl+K` |
 | New tab / close tab / reopen closed | `Ctrl+T` / `Ctrl+W` / `Ctrl+Shift+T` |
 | Switch to tab 1–9 | `Ctrl+1` … `Ctrl+9` |
@@ -136,11 +138,11 @@ npm run dist
 ```
 
 **Requirements:** Node.js 20+ and npm. That's it.
-**Current release: 0.1.7** — desktop installers are published by CI whenever a `v*` tag is pushed (see [RELEASING.md](RELEASING.md)).
+**Published release: 0.1.7. Next release candidate: 0.1.8** — follow [RELEASING.md](RELEASING.md) to merge and tag the prepared release.
 
 ### Live web preview / installable app
 
-`npm run preview` serves the same browser UI at `http://localhost:4600`. In a hosted preview, Vespera runs directly in the browser: tabs, Home, right-click menus, the Settings panel, downloads, extensions and customization work without installing the desktop shell. The web app includes a manifest and app-shell cache, so supported browsers can offer **Install Vespera as an app** from the Vespera menu. Open **What's new** (`vespera://updates`) for build notes and the published Releases link.
+`npm run preview` serves the same browser UI at `http://localhost:4600`. In a hosted preview, Vespera runs directly in the browser: tabs, Home, right-click menus, the full Settings page, downloads, extensions and customization work without installing the desktop shell. The web app includes a manifest and app-shell cache, so supported browsers can offer **Install Vespera as an app** from the Vespera menu. Open **What's new** (`vespera://updates`) for build notes and the published Releases link.
 
 The preview proxy is intentionally limited: some sites block embedding or are unreachable from the host environment. Use **Open original** for those sites. The Electron desktop app remains the full Chromium runtime.
 
@@ -182,7 +184,7 @@ Vespera/
 │   │   └── privacy-utils.mjs   Link cleaning, search engines, omnibox logic
 │   └── renderer/       The Vespera chrome UI (vanilla ESM, zero frameworks)
 │       ├── styles/     Twilight design system (tokens, chrome, pages)
-│       └── js/         Tabs, omnibox, shields, palette, state, Settings panel + all pages
+│       └── js/         Tabs, omnibox, shields, palette, state, Settings page + all pages
 ├── server/             Bundled local service (zero dependencies)
 │   ├── routes/         Accounts, sync, community voting API
 │   └── lib/            Auth (scrypt+HMAC), atomic JSON store, preview proxy

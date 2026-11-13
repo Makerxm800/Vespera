@@ -26,7 +26,6 @@ import { renderExtensions } from './pages/extensions.js';
 import { renderReader, renderSearch, renderNotFound } from './pages/tools.js';
 import { renderUpdates } from './pages/updates.js';
 import { bridge } from './app-bridge.js';
-import { openSettingsPanel, closeSettingsPanel, settingsPanelOpen } from './settings-panel.js';
 
 const PAGE_RENDERERS = {
   'vespera://newtab': renderNewtab, 'vespera://private': renderPrivate, 'vespera://welcome': renderWelcome,
@@ -62,11 +61,7 @@ function navigate(input, opts = {}) {
     url = 'vespera://search?q=' + encodeURIComponent(target.value);
   }
   if (!safeTabUrl(url)) return toast('That address is not a safe web page. Use an http:// or https:// address.', 'error');
-  // Settings is a floating panel, not a page you navigate away to.
-  if (isInternal(url) && internalPageKey(url) === 'vespera://settings') {
-    openSettingsPanel(url.includes('#') ? url.split('#')[1] : '');
-    return;
-  }  const sh = state.settings.shields;
+  const sh = state.settings.shields;
   if (sh.enabled && sh.cleanLinks && !isInternal(url)) {
     const clean = cleanTrackingParams(url);
     if (clean.removed.length) { tab.shields.cleaned += clean.removed.length; state.recordBlock('link', hostOf(clean.url)); url = clean.url; }
@@ -77,10 +72,12 @@ function navigate(input, opts = {}) {
   openInTab(tab, url);
 }
 
-/** Settings is a panel: the buttons that open it also close it. */
-function toggleSettings(section = '') {
-  if (settingsPanelOpen() && !section) { closeSettingsPanel(); return; }
-  openSettingsPanel(section);
+/** Settings is a regular internal page so it stays in the tab's navigation history. */
+function openSettingsPage(section = '', tab = tabs?.active) {
+  if (!tab) return;
+  const route = `vespera://settings${section ? '#' + encodeURIComponent(section) : ''}`;
+  if (tab.url === route || (!section && tab.url.split('#')[0] === 'vespera://settings')) return;
+  navigate(route, { tab });
 }
 function disposeView(tab) {
   clearTimeout(tab.loadTimer);
@@ -206,7 +203,7 @@ function updateChromeFor(tab) {
   $('open-original').classList.toggle('hidden', tab._internal);
   if (!tab._internal) $('open-original').href = tab.url;
   document.querySelectorAll('[data-nav]').forEach((el) => el.classList.toggle('active',
-    (tab._internal && el.dataset.nav === internalPageKey(tab.url)) || (el.dataset.nav === 'vespera://settings' && settingsPanelOpen())));
+    Boolean(tab._internal && el.dataset.nav === internalPageKey(tab.url))));
   syncStoreBanner(tab);
 }
 /** Chrome Web Store detail URLs carry a 32-character extension id in the path. */
@@ -296,14 +293,14 @@ function buildRail() {
     ['vespera://newtab', 'sparkle', 'Home'], ['vespera://extensions', 'split', 'Extensions'],
     ['vespera://privacy', 'shield', 'Privacy Hub'], ['vespera://community', 'users', 'Community'],
     ['vespera://history', 'clock', 'History'], ['vespera://bookmarks', 'bookmark', 'Bookmarks'],
-    ['vespera://downloads', 'download', 'Downloads'], ['vespera://settings', 'gear', 'Settings'],
+    ['vespera://downloads', 'download', 'Downloads'],
     ['vespera://account', 'user', 'Account'],
   ];
   $('rail').innerHTML = items.map(([url, ic, title], i) => `${i === 4 || i === 7 ? '<div class="rail-sep"></div>' : ''}<button class="icon-btn" data-nav="${url}" title="${title}" aria-label="${title}">${icon(ic)}</button>${i === 1 ? `<button class="icon-btn" data-vtabs title="Tab sidebar" aria-label="Toggle tab sidebar">${icon('panel')}</button>` : ''}`).join('')
     + `<div class="rail-sep"></div><button class="icon-btn" data-rail-collapse title="Hide sidebar" aria-label="Hide sidebar">${icon('panel')}</button>`;
   $('vtabs-foot').innerHTML = items.filter(([url]) => !['vespera://newtab', 'vespera://community'].includes(url)).map(([url, ic, title]) => `<button class="vtab-nav" data-nav="${url}">${icon(ic)} ${title}</button>`).join('');
   document.querySelectorAll('[data-nav]').forEach((btn) => {
-    btn.addEventListener('click', () => (btn.dataset.nav === 'vespera://settings' ? toggleSettings() : navigate(btn.dataset.nav)));
+    btn.addEventListener('click', () => navigate(btn.dataset.nav));
     btn.addEventListener('auxclick', (e) => { if (e.button === 1) { e.preventDefault(); tabs.add(btn.dataset.nav); } });
   });
   $('rail').querySelector('[data-rail-collapse]')?.addEventListener('click', () => state.set('railHidden', true));
@@ -472,7 +469,7 @@ function showContextMenu(tab, x, y, info = {}) {
       case 'customize': navigate('vespera://settings#appearance', { tab }); break;
       case 'copy-address': copyText(tab.url); break;
       case 'home': navigate(state.settings.homepage || 'vespera://newtab', { tab }); break;
-      case 'settings': toggleSettings(); break;
+      case 'settings': openSettingsPage('', tab); break;
     }
   });
 }
@@ -553,7 +550,7 @@ function openMenu(anchor) {
       case 'install': if (installPrompt) { installPrompt.prompt(); const choice = await installPrompt.userChoice; if (choice.outcome === 'accepted') toast('Vespera is installing as an app.', 'ok'); installPrompt = null; } break;
       case 'private': if (platform.isElectron) window.vespera.window.incognito(); break;
       case 'history': case 'bookmarks': case 'downloads': case 'extensions': case 'privacy': case 'account': case 'logs': case 'welcome': case 'updates': tabs.add('vespera://' + act); break;
-      case 'settings': toggleSettings(); break;
+      case 'settings': openSettingsPage(); break;
       case 'customize': navigate('vespera://settings#appearance'); break;
       case 'theme': state.set('theme', document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); break;
       case 'vertical': state.set('tabLayout', s.tabLayout === 'vertical' ? 'horizontal' : 'vertical'); break;
@@ -716,6 +713,7 @@ function openGroupEditor(groupId, anchor) {
     if (e.target.closest('[data-group-save]')) {
       const selectedColor = pop.el.querySelector('[data-group-color-choice][aria-pressed="true"]')?.dataset.groupColorChoice || group.color;
       tabs.updateGroup(groupId, { title: pop.el.querySelector('[data-group-name]').value, color: selectedColor });
+      persistSession();
       pop.close();
       return;
     }
@@ -813,11 +811,11 @@ function wireKeyboard() {
     const field = /^(input|textarea|select)$/i.test(e.target.tagName) || e.target.isContentEditable;
     if (e.key === 'Escape') {
       closePopover();
-      if (settingsPanelOpen()) closeSettingsPanel();
-      else { if (paletteOpen()) closePalette(); closeFind(); }
+      if (paletteOpen()) closePalette();
+      closeFind();
       return;
     }
-    else if (mod && !e.shiftKey && !e.altKey && key === ',') { e.preventDefault(); settingsPanelOpen() ? closeSettingsPanel() : openSettingsPanel(); }
+    else if (mod && !e.shiftKey && !e.altKey && key === ',') { e.preventDefault(); openSettingsPage(); }
     else if (mod && e.shiftKey && key === 't') { e.preventDefault(); tabs.reopenClosed() || toast('No recently closed tabs.', 'info'); }
     else if (mod && e.shiftKey && key === 'n') { e.preventDefault(); if (platform.isElectron) window.vespera.window.incognito(); else toast('Private windows are available in the desktop app.', 'info'); }
     else if (mod && !e.shiftKey && !e.altKey && /^[1-9]$/.test(key)) { e.preventDefault(); tabShortcut('tab-' + key); }
@@ -865,7 +863,6 @@ function boot() {
     refreshChrome: (rebuild) => { applyAppearance(); omnibox?.refreshEngine(); if (rebuild) { positionTabUI(); tabs.render(); } },
     reader: () => openReader(),
     download: downloadUrl,
-    settingsToggled: () => updateChromeFor(tabs.active),
   });
   state.saveSettings(); applyAppearance();
   previousDark = state.settings.extensions.darkPages;

@@ -939,17 +939,6 @@ body.focus-mode .sidebar, body.focus-mode .bookmarks-bar { display: none !import
 .tabstrip .tab { flex: 0 1 230px; max-width: 240px; min-width: 90px; }
 .tabstrip .tab.active { flex: 0 1 250px; max-width: 260px; }
 .tabstrip .tab.pinned { flex: 0 0 54px; min-width: 44px; max-width: 54px; }
-.tab-group-label {
-  display: inline-flex; align-items: center; gap: 5px; flex: none;
-  max-width: 74px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: var(--tab-group-color, var(--accent)); font-size: 9px; font-weight: 750;
-  letter-spacing: .015em; padding: 2px 5px; border-radius: 5px;
-  background: color-mix(in srgb, var(--tab-group-color, var(--accent)) 13%, transparent);
-}
-.tab-group-label::before {
-  content: ""; width: 5px; height: 5px; border-radius: 50%;
-  background: var(--tab-group-color, var(--accent)); flex: none;
-}
 .tab.grouped { border-top: 2px solid var(--tab-group-color, var(--accent)); }
 .site-info-popover { width: min(330px, calc(100vw - 16px)); padding: 0; }
 .site-info-panel-head { display:flex; align-items:center; gap:12px; padding:14px 16px; border-bottom:1px solid var(--border); }
@@ -985,11 +974,9 @@ body.browser-fullscreen .status-bar { display:none !important; }
 body.browser-fullscreen .content-col { height:100dvh; }
 @media (max-width:560px) {
   .tabstrip .tab { min-width:58px; }
-  .tab-group-label { max-width:48px; font-size:8px; padding:2px 4px; }
 }
 
 .tab-group-name-input { width:100%; margin:2px 0 6px; padding:7px 10px; font-size:12px; }
-.tab-group-label { text-overflow:ellipsis; }
 
 /* Tab drag & drop: insertion marker + clearly visible source tab (only while dragging). */
 .drop-indicator { position: absolute; z-index: 8; pointer-events: none; background: var(--accent); border-radius: 3px; box-shadow: 0 0 10px var(--accent); }
@@ -1102,8 +1089,7 @@ body.browser-fullscreen .content-col { height:100dvh; }
 }
 
 /* ============================================================
-   v0.1.6 — collapsible rail, tab groups, pinned tabs,
-   floating settings panel
+   v0.1.6 — collapsible rail, tab groups and pinned tabs
    ============================================================ */
 
 /* ---- Collapsible icon rail (horizontal tabs) ---- */
@@ -1143,62 +1129,6 @@ body.rail-hidden .main-row .sidebar { display: none; }
 .tab-more:hover { opacity: 1; background: var(--surface-3); color: var(--text); transform: scale(1.08); }
 .tab-more:active { transform: scale(.9); }
 .tab.pinned:hover .tab-more, .tab.pinned.active .tab-more { opacity: 1; }
-/* A pinned tab is too narrow for the group name — show the colour dot only. */
-.tab.pinned .tab-group-label { max-width: 10px; padding: 2px; font-size: 0; gap: 0; }
-
-/* ============================================================
-   Floating settings panel — a UI you toggle, not a page you visit.
-   The layer never blocks the page: only the panel itself takes
-   pointer events, so you can keep browsing with Settings open.
-   ============================================================ */
-.settings-layer { position: fixed; inset: 0; z-index: 90; display: flex; justify-content: flex-end; pointer-events: none; }
-.settings-scrim {
-  position: absolute; inset: 0;
-  background: rgba(4, 7, 16, .34); backdrop-filter: blur(2px);
-  opacity: 0; transition: opacity .26s var(--ease);
-  pointer-events: none;
-}
-.settings-layer.open .settings-scrim { opacity: 1; }
-.settings-panel {
-  position: relative; display: flex; flex-direction: column; pointer-events: auto;
-  width: min(530px, 100vw); height: 100%;
-  background: var(--bg); border-left: 1px solid var(--border-strong);
-  box-shadow: -30px 0 70px rgba(0, 0, 0, .45);
-  transform: translateX(103%);
-  transition: transform .36s cubic-bezier(.22, .9, .24, 1);
-}
-.settings-layer.open .settings-panel { transform: none; }
-.settings-head { display: flex; align-items: center; gap: 12px; flex: none; padding: 15px 18px; border-bottom: 1px solid var(--border); }
-.settings-mark { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 12px; background: var(--accent-soft); color: var(--accent); }
-.settings-mark svg { width: 18px; height: 18px; }
-.settings-head-copy { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-.settings-head-copy b { font-size: 14.5px; letter-spacing: -.01em; }
-.settings-head-copy small { font-size: 11px; color: var(--text-faint); }
-.settings-pills {
-  display: flex; gap: 4px 6px; flex: none; flex-wrap: wrap; padding: 11px 14px;
-  border-bottom: 1px solid var(--border);
-}
-.settings-pills button {
-  flex: none; border: 1px solid transparent; background: transparent;
-  color: var(--text-dim); font: inherit; font-size: 11.5px; font-weight: 600;
-  padding: 6px 10px; border-radius: 999px; cursor: pointer;
-  transition: background .2s var(--ease), color .2s var(--ease), border-color .2s var(--ease), transform .2s var(--ease);
-}
-.settings-pills button:hover { background: var(--surface-2); color: var(--text); transform: translateY(-1px); }
-.settings-pills button.active {
-  background: var(--accent-soft); color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
-  transform: translateY(-1px);
-}
-.settings-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 18px 34px; scroll-behavior: smooth; }
-.settings-body .page { max-width: none; margin: 0; padding: 8px 0 0; }
-.settings-body .settings-heading, .settings-body .settings-nav { display: none; }
-.settings-body .section:first-of-type { margin-top: 14px; }
-.settings-body .section { scroll-margin-top: 8px; }
-@media (prefers-reduced-motion: reduce) {
-  .settings-panel, .settings-scrim, .settings-pills button { transition: none; }
-}
-
 /* Pinned extension actions use the extension's declared icon where available. */
 .extension-actions { display: none; align-items: center; gap: 2px; flex: none; }
 .extension-actions:has(.extension-toolbar-action) { display: flex; }

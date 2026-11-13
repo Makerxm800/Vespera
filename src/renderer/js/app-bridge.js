@@ -9,6 +9,4 @@ export const bridge = {
   refreshChrome: () => {},
   reader: () => {},
   download: () => {},
-  settingsClosed: null,
-  settingsToggled: null,
 };

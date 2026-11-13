@@ -13,6 +13,7 @@ process.env.VESPERA_PROXY_ALLOW_PRIVATE = '1';
 process.env.VESPERA_PROXY_ALLOWED_HOSTS = '127.0.0.1,api.github.com';
 const { createServer } = require('../server/server.js');
 const article = 'Vespera makes room for a calmer web. '.repeat(30);
+const tinyWallpaperPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 const fixture = http.createServer((req, res) => {
   if (req.url.startsWith('/file.txt')) { res.writeHead(200, { 'content-type': 'text/plain', 'content-disposition': 'attachment; filename="hello.txt"' }); return res.end('Hello from Vespera'); }
   if (req.url.startsWith('/second')) { res.writeHead(200, { 'content-type': 'text/html' }); return res.end('<title>Second page</title><h1>Second page</h1><a href="/">Back to fixture</a>'); }
@@ -38,6 +39,8 @@ try {
   await page.goto(base);
   await step('startup renders one real tab, live clock, visible window controls and wallpaper', async () => {
     assert.equal(await page.locator('#tabstrip .tab').count(), 1);
+    assert.equal(await page.locator('#rail [data-nav="vespera://settings"]').count(), 0, 'Settings is removed from the left rail');
+    assert.equal(await page.locator('#vtabs-foot [data-nav="vespera://settings"]').count(), 0, 'Settings is removed from the vertical sidebar');
     assert.match(await page.locator('.nt-hero h1').textContent(), /Welcome to Vespera/);
     const before = await page.locator('#nt-time').textContent(); await page.waitForTimeout(1200); assert.notEqual(await page.locator('#nt-time').textContent(), before);
     for (const id of ['wc-min', 'wc-max', 'wc-close']) assert.equal(await page.locator('#' + id).isVisible(), true);
@@ -60,16 +63,27 @@ try {
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.mouse.move(0, 0);
   });
-  await step('home search animates on focus/submit and Settings opens as a panel', async () => {
+  await step('home search, browser menu and Ctrl+, open the full internal Settings page', async () => {
     await page.locator('#nt-input').focus(); assert.match(await page.locator('#nt-search').getAttribute('class'), /is-focused/);
     await page.locator('#nt-go').click(); assert.match(await page.locator('#nt-search').getAttribute('class'), /is-empty/);
     await page.locator('#nt-input').fill('vespera://settings'); await page.locator('#nt-go').click();
-    assert.match(await page.locator('#nt-search').getAttribute('class'), /is-searching/);
-    // Settings is a floating panel: it must not navigate the tab away from home.
-    await page.waitForSelector('.settings-layer .settings-page');
-    assert.equal(await page.locator('#btn-back').isDisabled(), true);
-    await page.keyboard.press('Escape'); await page.waitForSelector('.settings-layer', { state: 'detached' });
-    await page.waitForSelector('.nt-hero');
+    await page.waitForSelector('.settings-layout');
+    assert.equal(await page.locator('.settings-layer').count(), 0, 'Settings no longer renders a floating panel');
+    assert.match(await page.locator('#omni-input').inputValue(), /^vespera:\/\/settings/);
+    assert.equal(await page.locator('#btn-back').isDisabled(), false, 'Settings is part of the current tab history');
+    assert.ok(await page.locator('.settings-nav [data-section="privacy"]').count());
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('.settings-layout').count(), 1, 'Escape does not dismiss a normal page');
+    await go('vespera://newtab'); await page.waitForSelector('.nt-hero');
+    await page.locator('#site-info').click();
+    assert.match(await page.locator('.site-info-popover').textContent(), /Site privacy settings/, 'site-specific settings remain available');
+    await page.locator('.site-info-popover [data-site-action="privacy"]').click();
+    await page.waitForFunction(() => document.querySelector('.settings-layout .settings-nav a.active')?.dataset.section === 'privacy');
+    assert.match(await page.locator('#omni-input').inputValue(), /#privacy$/, 'the site privacy control opens its Settings section');
+    await go('vespera://newtab'); await page.waitForSelector('.nt-hero');
+    await page.keyboard.press('Control+,'); await page.waitForSelector('.settings-layout');
+    assert.match(await page.locator('#omni-input').inputValue(), /^vespera:\/\/settings/);
+    await go('vespera://newtab'); await page.waitForSelector('.nt-hero');
     await page.locator('.nt-hero h1').click({ button: 'right' }); assert.equal(await page.locator('.context-menu').count(), 1);
     assert.match(await page.locator('.context-menu').textContent(), /Customize home/); await page.keyboard.press('Escape');
   });
@@ -91,7 +105,8 @@ try {
     await page.locator('#tabstrip .tab.grouped').first().click({ button: 'right' });
     await page.locator('[data-group-name]').fill('Research');
     await page.locator('[data-tab-act="rename"]').click();
-    assert.equal(await page.locator('.tab-group-label').first().textContent(), 'Research');
+    assert.equal(await page.locator('.tab-group-header .tab-group-title').first().textContent(), 'Research');
+    assert.equal(await page.locator('#tabstrip .tab-group-label').count(), 0, 'group names are not repeated as tags on individual tabs');
     await page.locator('#tabstrip .tab.grouped').first().click({ button: 'right' });
     await page.locator('[data-tab-act="ungroup"]').click();
     assert.equal(await page.locator('#tabstrip .tab.grouped').count(), 1);
@@ -110,7 +125,8 @@ try {
     await page.waitForFunction(() => document.querySelector('.tab-group-header')?.textContent.includes('Weekend plans'));
     const groupId = await header.getAttribute('data-group-header');
     assert.equal(await header.getAttribute('data-group-color'), 'pink');
-    await header.locator('[data-group-menu]').click();
+    await header.click({ button: 'right' });
+    await page.waitForSelector('.group-editor-menu');
     await page.locator('[data-group-action="newtab"]').click();
     await page.waitForFunction((id) => document.querySelectorAll(`#tabstrip [data-id][data-group-id="${id}"]`).length === 2, groupId);
     await page.locator(`#tabstrip [data-group-toggle="${groupId}"]`).click();
@@ -118,31 +134,51 @@ try {
     assert.equal(await page.locator(`#tabstrip [data-id][data-group-id="${groupId}"]`).count(), 0);
     await page.locator(`#tabstrip [data-group-toggle="${groupId}"]`).click();
     assert.equal(await page.locator(`#tabstrip [data-id][data-group-id="${groupId}"]`).count(), 2);
+
+    // Create a second group, then drag the first group to the end of the strip.
+    await page.locator('#btn-newtab').click();
+    await page.locator('#tabstrip .tab.active').click({ button: 'right' });
+    await page.locator('.tab-actions-menu [data-action="new-group"]').click();
+    await page.waitForSelector('.group-editor-menu');
+    await page.locator('[data-group-name]').fill('Reading list');
+    await page.locator('[data-group-save]').click();
+    const secondHeader = page.locator('.tab-group-header').nth(1);
+    const secondGroupId = await secondHeader.getAttribute('data-group-header');
+    const targetBox = await secondHeader.boundingBox();
+    await page.locator(`#tabstrip [data-group-header="${groupId}"]`).dragTo(secondHeader, { targetPosition: { x: targetBox.width - 2, y: targetBox.height / 2 } });
+    assert.deepEqual(await page.locator('.tab-group-header').evaluateAll((headers) => headers.map((node) => node.dataset.groupHeader)), [secondGroupId, groupId]);
+
     await go('vespera://settings#tabs');
-    await page.locator('.settings-layer .settings-body [data-setting="tabBehavior.tabGroupsEnabled"]').uncheck();
-    await page.locator('.settings-layer .settings-close').click(); await page.waitForSelector('.settings-layer', { state: 'detached' });
+    await page.locator('.settings-layout .settings-content [data-setting="tabBehavior.tabGroupsEnabled"]').uncheck();
+    await go('vespera://newtab');
     assert.equal(await page.locator('#tabstrip .tab-group-header').count(), 0);
     assert.equal(await page.locator(`#tabstrip [data-id][data-group-id="${groupId}"]`).count(), 2, 'disabling groups preserves their membership');
     await go('vespera://settings#tabs');
-    await page.locator('.settings-layer .settings-body [data-setting="tabBehavior.tabGroupsEnabled"]').check();
-    await page.locator('.settings-layer .settings-close').click(); await page.waitForSelector('.settings-layer', { state: 'detached' });
+    await page.locator('.settings-layout .settings-content [data-setting="tabBehavior.tabGroupsEnabled"]').check();
+    await go('vespera://newtab');
     await page.waitForSelector(`#tabstrip [data-group-header="${groupId}"]`);
     await go('vespera://settings#tabs');
-    const settings = page.locator('.settings-layer .settings-body');
+    const settings = page.locator('.settings-layout .settings-content');
     await settings.locator('[data-segment="tabLayout"] [data-v="vertical"]').click();
-    await page.keyboard.press('Escape'); await page.waitForSelector('.settings-layer', { state: 'detached' });
+    await go('vespera://newtab');
     await page.waitForSelector(`#vtabs-list [data-group-header="${groupId}"]`);
     assert.equal(await page.locator(`#vtabs-list [data-id][data-group-id="${groupId}"]`).count(), 2);
     await page.locator(`#vtabs-list [data-group-toggle="${groupId}"]`).click();
     assert.equal(await page.locator(`#vtabs-list [data-id][data-group-id="${groupId}"]`).count(), 0);
     await page.locator(`#vtabs-list [data-group-toggle="${groupId}"]`).click();
+    const verticalTarget = page.locator(`#vtabs-list [data-group-header="${groupId}"]`);
+    const verticalBox = await verticalTarget.boundingBox();
+    await page.locator(`#vtabs-list [data-group-header="${secondGroupId}"]`).dragTo(verticalTarget, { targetPosition: { x: verticalBox.width / 2, y: verticalBox.height - 2 } });
+    assert.deepEqual(await page.locator('#vtabs-list [data-group-header]').evaluateAll((headers) => headers.map((node) => node.dataset.groupHeader)), [groupId, secondGroupId]);
     await go('vespera://settings#tabs');
-    await page.locator('.settings-layer .settings-body [data-segment="tabLayout"] [data-v="horizontal"]').click();
-    await page.keyboard.press('Escape'); await page.waitForSelector('.settings-layer', { state: 'detached' });
+    await page.locator('.settings-layout .settings-content [data-segment="tabLayout"] [data-v="horizontal"]').click();
+    await go('vespera://newtab');
     await page.waitForTimeout(250); await page.reload(); await page.waitForSelector('#tabstrip .tab.active');
-    assert.equal(await page.locator('.tab-group-header').textContent().then((text) => text.includes('Weekend plans')), true);
-    assert.equal(await page.locator('.tab-group-header').getAttribute('data-group-color'), 'pink');
-    await page.locator('.tab-group-header [data-group-menu]').click();
+    assert.deepEqual(await page.locator('.tab-group-header').evaluateAll((headers) => headers.map((node) => node.dataset.groupHeader)), [groupId, secondGroupId], 'vertical group order survives a session reload');
+    assert.equal(await page.locator(`#tabstrip [data-group-header="${groupId}"]`).getAttribute('data-group-color'), 'pink');
+    await page.locator(`#tabstrip [data-group-header="${secondGroupId}"]`).click({ button: 'right' });
+    await page.locator('[data-group-action="close"]').click();
+    await page.locator(`#tabstrip [data-group-header="${groupId}"]`).click({ button: 'right' });
     await page.locator('[data-group-action="ungroup"]').click();
     assert.equal(await page.locator('.tab-group-header').count(), 0);
     await page.keyboard.press('Control+w'); assert.equal(await page.locator('#tabstrip .tab').count(), 1);
@@ -156,19 +192,24 @@ try {
     await page.keyboard.press('Control+w');
     await go('vespera://newtab');
   });
-  await step('menu toggles closed on the same anchor, is labeled clearly, and opens honest browser settings', async () => {
+  await step('menu toggles closed on the same anchor and opens the full browser Settings page', async () => {
     assert.equal(await page.locator('#btn-menu').getAttribute('aria-label'), 'Toggle Menu');
     assert.equal(await page.locator('#btn-menu').getAttribute('title'), 'Toggle Menu');
     await page.locator('#btn-menu').click(); assert.equal(await page.locator('.browser-menu').getAttribute('aria-label'), 'Toggle Menu');
     await page.locator('#btn-menu').click(); assert.equal(await page.locator('.browser-menu').count(), 0);
-    await menu('settings'); assert.equal(await page.locator('.settings-layer').count(), 1);
-    assert.match(await page.locator('.settings-pills button.active').textContent(), /Appearance/);
-    await page.locator('.settings-pills [data-section="browser"]').click();
+    await menu('settings'); assert.equal(await page.locator('.settings-layout').count(), 1);
+    assert.equal(await page.locator('.settings-layer').count(), 0);
+    assert.match(await page.locator('.settings-layout .settings-nav a.active').textContent(), /Appearance/);
+    assert.equal(await page.locator('.settings-layout .settings-nav a').count(), 9);
+    const navBox = await page.locator('.settings-layout .settings-nav').boundingBox();
+    assert.ok(navBox.height < 450, 'section navigation hugs its links instead of filling an oversized empty box');
+    await page.locator('.settings-layout .settings-nav [data-section="browser"]').click();
+    await page.waitForFunction(() => document.querySelector('.settings-layout .settings-nav a.active')?.dataset.section === 'browser');
     assert.equal(await page.locator('#set-default-browser').isDisabled(), true);
     assert.equal(await page.locator('#open-default-browser-settings').isDisabled(), true);
     assert.match(await page.locator('#default-browser-status').textContent(), /desktop app/i);
     assert.doesNotMatch(await page.locator('#default-browser-status').textContent(), /now your default/i);
-    await page.locator('.settings-pills [data-section="appearance"]').click();
+    await page.locator('.settings-nav [data-section="appearance"]').click();
   });
   await step('command-palette searches and utility pages open in new tabs without replacing current work', async () => {
     await page.waitForFunction(() => document.querySelector('#preview-label')?.textContent.includes('GitHub search'));
@@ -196,15 +237,83 @@ try {
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('vespera.settings')));
     assert.equal(saved.theme, 'light'); assert.equal(saved.accent, 'teal'); assert.equal(saved.wallpaper.id, 'aurora'); assert.equal(saved.clock24, true); assert.equal(saved.homepage, 'vespera://welcome');
     await page.locator('#btn-home').click(); assert.match(await page.locator('.welcome-hero').textContent(), /Welcome to Vespera/);
-    await page.locator('#btn-back').click(); await page.waitForSelector('.nt-hero');
-    assert.equal(await page.locator('#omni-input').inputValue(), ''); // the new tab page leaves the address box empty
+    await page.locator('#btn-back').click(); await page.waitForSelector('.settings-layout');
+    assert.match(await page.locator('#omni-input').inputValue(), /^vespera:\/\/settings/);
     await page.locator('#btn-forward').click(); assert.match(await page.locator('.welcome-hero').textContent(), /Welcome to Vespera/);
+  });
+  await step('custom wallpaper library can add several images, restore them, and remove safely', async () => {
+    await go('vespera://settings#appearance'); await page.waitForSelector('#custom-wallpaper-grid');
+    await page.locator('#wallpaper-file').setInputFiles([
+      { name: 'Mountains.png', mimeType: 'image/png', buffer: tinyWallpaperPng },
+      { name: 'Forest.png', mimeType: 'image/png', buffer: tinyWallpaperPng },
+    ]);
+    await page.waitForFunction(() => document.querySelectorAll('.custom-wallpaper-choice').length === 2);
+    const selectedAfterUpload = await page.evaluate(() => JSON.parse(localStorage.getItem('vespera.settings')).wallpaper.id);
+    assert.ok(await page.locator(`[data-wallpaper-select="${selectedAfterUpload}"]`).count(), 'the last imported image becomes active');
+    assert.match(await page.locator('#custom-wallpaper-grid').textContent(), /Mountains\.png|Forest\.png/);
+
+    await page.waitForTimeout(220);
+    await page.reload(); await page.waitForSelector('.settings-layout');
+    await page.waitForFunction(() => document.querySelectorAll('.custom-wallpaper-choice').length === 2);
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('vespera.settings')).wallpaper.id), selectedAfterUpload, 'custom images and active selection survive reload');
+    assert.match(await page.locator('#custom-wallpaper-grid').textContent(), /Mountains\.png/);
+    assert.match(await page.locator('#custom-wallpaper-grid').textContent(), /Forest\.png/);
+    assert.equal(await page.locator('#edit-wallpaper').isEnabled(), true, 'the active custom image can be edited');
+    await page.locator('#edit-wallpaper').click();
+    await page.waitForFunction(() => document.querySelector('#wp-editor')?.classList.contains('open'));
+    await page.locator('#wp-zoom').evaluate((input) => { input.value = '175'; input.dispatchEvent(new Event('input', { bubbles: true })); });
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('vespera.settings')).wallpaperAdjust.zoom === 1.75);
+    assert.equal(await page.locator('#wp-zoom').evaluate((input) => input.nextElementSibling.textContent), '175%', 'the editor updates its live value and saved adjustment');
+    await page.locator('#wp-done').click(); await page.waitForTimeout(280);
+    const ids = await page.locator('.custom-wallpaper-choice').evaluateAll((buttons) => buttons.map((button) => button.dataset.wallpaperSelect));
+    const firstId = ids.find((id) => id !== selectedAfterUpload);
+    await page.locator(`[data-wallpaper-select="${firstId}"]`).click();
+    await page.waitForFunction((id) => JSON.parse(localStorage.getItem('vespera.settings')).wallpaper.id === id, firstId);
+    await page.locator(`[data-wallpaper-remove="${firstId}"]`).click(); await page.locator('.confirm-dialog [data-confirm]').click();
+    await page.waitForFunction(() => document.querySelectorAll('.custom-wallpaper-choice').length === 1);
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('vespera.settings')).wallpaper.id), 'twilight', 'deleting the active image selects a safe built-in wallpaper');
+
+    await page.locator('#wallpaper-file').setInputFiles({ name: 'Clouds.png', mimeType: 'image/png', buffer: tinyWallpaperPng });
+    await page.waitForFunction(() => document.querySelectorAll('.custom-wallpaper-choice').length === 2);
+    const cloudId = await page.locator('.custom-wallpaper-choice[aria-label="Use wallpaper Clouds.png"]').getAttribute('data-wallpaper-select');
+    assert.ok(cloudId); assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('vespera.settings')).wallpaper.id), cloudId);
+    const remainingId = await page.locator('.custom-wallpaper-choice').evaluateAll((buttons) => buttons.find((button) => button.dataset.wallpaperSelect !== document.querySelector('.custom-wallpaper-choice[aria-pressed="true"]')?.dataset.wallpaperSelect)?.dataset.wallpaperSelect);
+    await page.locator(`[data-wallpaper-remove="${remainingId}"]`).click(); await page.locator('.confirm-dialog [data-confirm]').click();
+    await page.waitForFunction(() => document.querySelectorAll('.custom-wallpaper-choice').length === 1);
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('vespera.settings')).wallpaper.id), cloudId, 'removing a different image leaves the selection intact');
+    await page.locator(`[data-wallpaper-remove="${cloudId}"]`).click(); await page.locator('.confirm-dialog [data-confirm]').click();
+    await page.waitForSelector('.wallpaper-empty');
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('vespera.settings')).wallpaper.id), 'twilight');
+
+    // Older releases stored one raw Blob under `custom`; it remains selectable and removable.
+    await page.evaluate(async (png) => {
+      const db = await new Promise((resolve, reject) => {
+        const request = indexedDB.open('vespera-wallpapers', 1);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction('images', 'readwrite');
+        tx.objectStore('images').put(new Blob([Uint8Array.from(png)], { type: 'image/png' }), 'custom');
+        tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error);
+      });
+      db.close();
+    }, [...tinyWallpaperPng]);
+    await page.reload(); await page.waitForSelector('.settings-layout');
+    await page.waitForSelector('[data-wallpaper-select="custom"]');
+    assert.match(await page.locator('#custom-wallpaper-grid').textContent(), /Custom wallpaper/);
+    await page.locator('[data-wallpaper-select="custom"]').click();
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('vespera.settings')).wallpaper.id === 'custom');
+    await page.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue('--wallpaper-image').includes('blob:'));
+    await page.locator('[data-wallpaper-remove="custom"]').click(); await page.locator('.confirm-dialog [data-confirm]').click();
+    await page.waitForSelector('.wallpaper-empty');
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('vespera.settings')).wallpaper.id), 'twilight', 'removing the legacy image falls back safely');
   });
   await step('vertical tabs retain a working omnibox; all four built-in extensions render', async () => {
     await go('vespera://settings'); await page.locator('[data-segment="tabLayout"] [data-v="vertical"]').click();
     assert.equal(await page.locator('#omni-input').count(), 1); assert.equal(await page.locator('#toolbar').isVisible(), true);
-    // The panel overlays the page — close it before driving the page below.
-    await page.keyboard.press('Escape'); await page.waitForSelector('.settings-layer', { state: 'detached' });
+    // Settings is a normal page; leave it through browser navigation before the next route.
+    await go('vespera://newtab');
     await go('vespera://extensions');
     assert.equal(await page.locator('#ext-grid .extension-card').count(), 4);
     assert.ok(await page.locator('#catalog-grid .extension-card').count() > 0);
@@ -216,7 +325,7 @@ try {
     await page.locator('[data-ext-toggle="focusMode"]').check(); assert.equal(await page.locator('#sidebar').isVisible(), false);
     await page.locator('[data-ext-toggle="focusMode"]').uncheck(); assert.equal(await page.locator('#sidebar').isVisible(), true);
     await go('vespera://settings'); await page.locator('[data-segment="tabLayout"] [data-v="horizontal"]').click();
-    await page.keyboard.press('Escape'); await page.waitForSelector('.settings-layer', { state: 'detached' });
+    await go('vespera://newtab');
   });
   await step('new, close and reopen tab keyboard controls', async () => {
     await page.keyboard.press('Control+t'); assert.equal(await page.locator('#tabstrip .tab').count(), 2);
@@ -294,11 +403,11 @@ try {
 
     const baseCount = await page.locator('#tabstrip .tab').count();
     await go('vespera://settings#tabs');
-    const layoutSettings = page.locator('.settings-layer .settings-body');
+    const layoutSettings = page.locator('.settings-layout .settings-content');
     await layoutSettings.locator('[data-setting="tabBehavior.openTabsNextToCurrent"]').uncheck();
     await layoutSettings.locator('[data-setting="tabBehavior.hideCloseButtons"]').check();
     await layoutSettings.locator('[data-setting="tabBehavior.scrollableTabStrip"]').uncheck();
-    await page.locator('.settings-layer .settings-close').click(); await page.waitForSelector('.settings-layer', { state: 'detached' });
+    await go(fixtureUrl); await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'Fixture Home');
     assert.equal(await page.locator('body').evaluate((el) => el.classList.contains('tabs-hide-close')), true);
     assert.equal(await page.locator('body').evaluate((el) => el.classList.contains('tabs-no-scroll')), true);
     assert.equal(await page.locator('#tabstrip .tab.active .close').isVisible(), false);
@@ -311,57 +420,56 @@ try {
     assert.equal(orderAfterNew.indexOf(lastOpened), orderAfterNew.length - 1, 'disabling beside-current opens tabs at the end');
     while (await page.locator('#tabstrip .tab').count() > baseCount) await page.keyboard.press('Control+w');
     await go('vespera://settings#tabs');
-    const restoreLayoutSettings = page.locator('.settings-layer .settings-body');
+    const restoreLayoutSettings = page.locator('.settings-layout .settings-content');
     await restoreLayoutSettings.locator('[data-setting="tabBehavior.openTabsNextToCurrent"]').check();
     await restoreLayoutSettings.locator('[data-setting="tabBehavior.hideCloseButtons"]').uncheck();
     await restoreLayoutSettings.locator('[data-setting="tabBehavior.scrollableTabStrip"]').check();
-    await page.locator('.settings-layer .settings-close').click(); await page.waitForSelector('.settings-layer', { state: 'detached' });
+    await go(fixtureUrl); await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'Fixture Home');
 
     await go('vespera://settings#tabs');
-    const settings = page.locator('.settings-layer .settings-body');
+    const settings = page.locator('.settings-layout .settings-content');
     await settings.locator('[data-setting-select="tabBehavior.tabHoverMode"]').selectOption('preview');
-    await page.locator('.settings-layer .settings-close').click(); await page.waitForSelector('.settings-layer', { state: 'detached' });
+    await go(fixtureUrl); await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'Fixture Home');
     await page.locator('#tabstrip .tab.active').hover(); await page.waitForSelector('.tab-hovercard.has-preview');
     assert.match(await page.locator('.tab-hovercard').textContent(), /Page snapshots are available in the desktop app/);
     assert.match(await page.locator('.tab-hovercard').textContent(), /Memory estimate unavailable in web preview/);
     await page.mouse.move(700, 400);
 
     await go('vespera://settings#tabs');
-    const settingsAgain = page.locator('.settings-layer .settings-body');
+    const settingsAgain = page.locator('.settings-layout .settings-content');
     await settingsAgain.locator('[data-setting-select="tabBehavior.tabHoverMode"]').selectOption('tooltip');
     await settingsAgain.locator('[data-setting="tabBehavior.memoryUsageOnHover"]').uncheck();
     await settingsAgain.locator('[data-segment="tabBehavior.inactiveTabAppearance"] [data-v="dimmed"]').click();
     assert.equal(await page.locator('body').evaluate((el) => el.classList.contains('tabs-inactive-dimmed')), true);
     await settingsAgain.locator('[data-segment="tabBehavior.inactiveTabAppearance"] [data-v="minimal"]').click();
     assert.equal(await page.locator('body').evaluate((el) => el.classList.contains('tabs-inactive-minimal')), true);
-    await page.keyboard.press('Escape'); await page.waitForSelector('.settings-layer', { state: 'detached' });
+    await go(fixtureUrl); await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'Fixture Home');
     await page.locator('#tabstrip .tab.active').hover(); await page.waitForTimeout(450);
     assert.equal(await page.locator('.tab-hovercard').count(), 0, 'tooltip mode with memory off uses the native tab tooltip');
     assert.match(await page.locator('#tabstrip .tab.active').getAttribute('title'), /Fixture Home/);
     await page.mouse.move(700, 400);
 
     await go('vespera://settings#tabs');
-    const restoreSettings = page.locator('.settings-layer .settings-body');
+    const restoreSettings = page.locator('.settings-layout .settings-content');
     await restoreSettings.locator('[data-setting-select="tabBehavior.tabHoverMode"]').selectOption('card');
     await restoreSettings.locator('[data-setting="tabBehavior.memoryUsageOnHover"]').check();
     await restoreSettings.locator('[data-setting-select="tabBehavior.tabAudioMode"]').selectOption('click-to-mute');
     await restoreSettings.locator('[data-segment="tabBehavior.inactiveTabAppearance"] [data-v="balanced"]').click();
     await restoreSettings.locator('[data-setting="tabBehavior.middleClickOpensTab"]').uncheck();
-    await page.locator('.settings-layer .settings-close').click(); await page.waitForSelector('.settings-layer', { state: 'detached' });
+    await go(fixtureUrl); await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'Fixture Home');
     const countBeforeCurrent = await page.locator('#tabstrip .tab').count();
     frame = page.frames().find((f) => f.url().includes('/proxy?'));
     await frame.locator('#next').click({ button: 'middle' });
     await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'Second page');
     assert.equal(await page.locator('#tabstrip .tab').count(), countBeforeCurrent, 'disabling middle-click tab opening navigates the current tab');
     await go('vespera://settings#tabs');
-    await page.locator('.settings-layer .settings-body [data-setting="tabBehavior.middleClickOpensTab"]').check();
-    await page.locator('.settings-layer .settings-body [data-setting="tabBehavior.middleClickClosesTab"]').uncheck();
-    await page.locator('.settings-layer .settings-close').click(); await page.waitForSelector('.settings-layer', { state: 'detached' });
+    await page.locator('.settings-layout .settings-content [data-setting="tabBehavior.middleClickOpensTab"]').check();
+    await page.locator('.settings-layout .settings-content [data-setting="tabBehavior.middleClickClosesTab"]').uncheck();
+    await go(fixtureUrl); await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'Fixture Home');
     await page.locator('#tabstrip .tab.active').click({ button: 'middle' });
     assert.equal(await page.locator('#tabstrip .tab').count(), countBeforeCurrent, 'disabling middle-click tab closing leaves the tab open');
     await go('vespera://settings#tabs');
-    await page.locator('.settings-layer .settings-body [data-setting="tabBehavior.middleClickClosesTab"]').check();
-    await page.locator('.settings-layer .settings-close').click(); await page.waitForSelector('.settings-layer', { state: 'detached' });
+    await page.locator('.settings-layout .settings-content [data-setting="tabBehavior.middleClickClosesTab"]').check();
     await go(fixtureUrl); await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'Fixture Home');
   });
   await step('Shields block a real tracker resource and update the badge', async () => {
@@ -450,7 +558,7 @@ try {
     await page.locator('#download-local-backup').click();
     const backup = await backupDownload;
     assert.ok(backup.suggestedFilename().startsWith('Vespera-Backup-') && backup.suggestedFilename().endsWith('.json'));
-    await page.keyboard.press('Escape'); await page.waitForSelector('.settings-layer', { state: 'detached' });
+    await go('vespera://newtab');
   });
   await step('release notes identify the running build and link to published installers', async () => {
     await menu('updates'); await page.waitForSelector('.updates-page');
@@ -480,6 +588,24 @@ try {
       const fit = await page.evaluate(() => { const el = document.querySelector('.page-scroll:not(.hidden)'); return el.scrollWidth <= el.clientWidth + 1; });
       assert.ok(fit, route + ' fits a small viewport');
     }
+    await go('vespera://settings#privacy'); await page.waitForSelector('.settings-layout');
+    await page.waitForFunction(() => document.querySelector('.settings-layout .settings-nav a.active')?.dataset.section === 'privacy');
+    const settingsFit = await page.evaluate(() => {
+      const page = document.querySelector('.page-scroll:not(.hidden)'), nav = document.querySelector('.settings-layout .settings-nav');
+      const active = nav.querySelector('a.active').getBoundingClientRect(), navBox = nav.getBoundingClientRect();
+      const privacy = document.querySelector('#privacy').getBoundingClientRect();
+      return {
+        pageFits: page.scrollWidth <= page.clientWidth + 1,
+        navScrolls: nav.scrollWidth > nav.clientWidth,
+        navIsSingleRow: getComputedStyle(nav).flexWrap === 'nowrap',
+        activeVisible: active.left >= navBox.left - 1 && active.right <= navBox.right + 1,
+        sectionClearsNav: privacy.top >= navBox.bottom - 1,
+      };
+    });
+    assert.ok(settingsFit.pageFits, 'full Settings page fits without document overflow on mobile');
+    assert.ok(settingsFit.navScrolls && settingsFit.navIsSingleRow, 'section navigation stays on one horizontally scrollable row');
+    assert.ok(settingsFit.activeVisible, 'the active section remains visible in the compact navigation');
+    assert.ok(settingsFit.sectionClearsNav, 'deep-linked section heading clears the sticky navigation');
   });
   assert.deepEqual(errors, [], 'No uncaught browser errors');
   console.log(`\n${passed} browser UI checks passed; no uncaught errors.`);

@@ -20,10 +20,11 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push('CONSOLE: ' + 
 
 const shot = async (name) => { await page.waitForTimeout(350); await page.screenshot({ path: OUT + name + '.png' }); };
 const dump = () => page.evaluate(() => [...document.querySelectorAll('#tabstrip .tab')].map((t) => ({
-  g: t.dataset.groupId || '-', label: t.querySelector('.tab-group-label')?.textContent || '-', w: Math.round(t.getBoundingClientRect().width),
+  g: t.dataset.groupId || '-', title: t.querySelector('.title')?.textContent || '', w: Math.round(t.getBoundingClientRect().width),
 })));
 const settings = () => page.evaluate(() => JSON.parse(localStorage.getItem('vespera.settings')));
 const rootVar = (n) => page.evaluate((k) => getComputedStyle(document.documentElement).getPropertyValue(k).trim().slice(0, 70), n);
+const navigateTo = async (url) => { await page.locator('#omni-input').fill(url); await page.locator('#omni-input').press('Enter'); };
 
 const scenarios = {
   async home() {
@@ -33,17 +34,18 @@ const scenarios = {
   },
 
   async wallpaper() {
-    await page.click('.rail [data-nav="vespera://settings"]'); await page.waitForTimeout(700);
+    await navigateTo('vespera://settings'); await page.waitForSelector('.settings-layout'); await page.waitForTimeout(700);
     await shot('wp-settings');
     await page.setInputFiles('#wallpaper-file', OUT + 'wp-test.png'); await page.waitForTimeout(1000);
-    console.log('afterUpload', JSON.stringify({ wp: (await settings()).wallpaper, img: await rootVar('--wallpaper-image'), customTile: await page.$('[data-wallpaper="custom"]').then(Boolean) }));
+    await page.waitForSelector('.custom-wallpaper-choice');
+    console.log('afterUpload', JSON.stringify({ wp: (await settings()).wallpaper, img: await rootVar('--wallpaper-image'), customCount: await page.locator('.custom-wallpaper-choice').count() }));
     await shot('wp-custom');
     await page.click('[data-wallpaper="aurora"]'); await page.waitForTimeout(700);
     console.log('afterBuiltin', JSON.stringify({ wp: (await settings()).wallpaper, img: await rootVar('--wallpaper-image') }));
     await shot('wp-builtin');
-    const custom = await page.$('[data-wallpaper="custom"]');
-    console.log('customTileStillThere', Boolean(custom));
-    if (custom) { await custom.click(); await page.waitForTimeout(700); }
+    const custom = page.locator('.custom-wallpaper-choice').first();
+    console.log('customWallpaperAvailable', await custom.count() > 0);
+    if (await custom.count()) { await custom.click(); await page.waitForTimeout(700); }
     console.log('afterCustomClick', JSON.stringify({ wp: (await settings()).wallpaper, img: await rootVar('--wallpaper-image') }));
     await shot('wp-back-to-custom');
   },
@@ -70,7 +72,7 @@ const scenarios = {
     await page.click('#tabstrip .tab:nth-child(1)', { button: 'right' }); await page.waitForTimeout(350);
     await page.click('[data-tab-act="pin"]'); await page.waitForTimeout(450);
     console.log('pinned', JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('#tabstrip .tab')].map((t) => ({
-      cls: t.className, w: Math.round(t.getBoundingClientRect().width), label: t.querySelector('.tab-group-label')?.textContent || '-',
+      cls: t.className, w: Math.round(t.getBoundingClientRect().width), title: t.querySelector('.title')?.textContent || '',
     })))));
     await shot('tabs-pinned');
     // A pinned tab has no close button — its ⋮ must open the tab menu.
@@ -81,22 +83,21 @@ const scenarios = {
   },
 
   async settings() {
-    // The rail's Settings button must open the floating panel, not navigate.
+    // Browser-menu Settings now navigates the active tab to the full internal page.
     const beforeUrl = page.url();
-    await page.click('.rail [data-nav="vespera://settings"]'); await page.waitForTimeout(600);
-    console.log('panelOpen', await page.$('.settings-layer .settings-panel').then(Boolean), 'navigated', page.url() !== beforeUrl);
-    await shot('s-panel');
-    await page.click('.settings-pills button[data-section="privacy"]'); await page.waitForTimeout(700);
-    console.log('activePill', await page.$eval('.settings-pills button.active', (b) => b.textContent));
+    await page.click('#btn-menu'); await page.click('[data-act="settings"]'); await page.waitForSelector('.settings-layout');
+    console.log('pageOpen', await page.$('.settings-layout').then(Boolean), 'navigated', page.url() !== beforeUrl, 'overlay', await page.$('.settings-layer').then(Boolean));
+    await shot('s-settings-page');
+    await page.click('.settings-layout .settings-nav [data-section="privacy"]'); await page.waitForTimeout(700);
+    console.log('activeSection', await page.$eval('.settings-layout .settings-nav a.active', (a) => a.dataset.section));
     await shot('s-privacy');
-    const toggle = await page.$('.settings-body [data-setting]');
-    if (toggle) { await toggle.click(); await page.waitForTimeout(150); console.log('pulse', await page.$eval('.settings-body .row-pulse', (el) => el.className).catch(() => 'none')); }
-    await page.keyboard.press('Escape'); await page.waitForTimeout(500);
-    console.log('closedByEsc', !(await page.$('.settings-layer')));
+    const toggle = await page.$('.settings-layout .settings-content [data-setting]');
+    if (toggle) { await toggle.click(); await page.waitForTimeout(150); console.log('pulse', await page.$eval('.settings-layout .settings-content .row-pulse', (el) => el.className).catch(() => 'none')); }
+    await page.keyboard.press('Escape'); await page.waitForTimeout(250);
+    console.log('pageStaysOnEscape', await page.$('.settings-layout').then(Boolean));
     await page.keyboard.press('Control+,'); await page.waitForTimeout(600);
-    console.log('reopenedByHotkey', await page.$('.settings-layer').then(Boolean));
+    console.log('hotkeyKeepsSettingsPage', await page.$('.settings-layout').then(Boolean));
     await shot('s-hotkey');
-    await page.keyboard.press('Escape'); await page.waitForTimeout(400);
   },
 
   async ext() {

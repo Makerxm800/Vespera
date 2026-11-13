@@ -109,3 +109,41 @@ export function moveIntoGroup(tabs, id, groupId) {
   next.splice(last + 1, 0, item);
   return pinnedFirst(next);
 }
+
+/**
+ * Move a complete group before/after another group or ungrouped tab.
+ * `targetId` may be a group id or a tab id; targeting a member tab resolves
+ * to its whole group so a drag cannot split that group's block. Pinned tabs
+ * are never included in a group move.
+ */
+export function moveGroupRelative(tabs, groupId, targetId, after = false) {
+  if (!Array.isArray(tabs) || !groupId || !targetId || groupId === targetId) return tabs.slice();
+  const source = tabs.filter((tab) => !tab.pinned && tab.groupId === groupId);
+  if (!source.length) return tabs.slice();
+
+  const targetGroupMembers = tabs.filter((tab) => !tab.pinned && tab.groupId === targetId);
+  const targetTab = tabs.find((tab) => tab.id === targetId && !tab.pinned);
+  const targetGroupId = targetGroupMembers.length ? targetId : (targetTab?.groupId || null);
+  if (targetGroupId === groupId) return tabs.slice();
+  const targetMembers = targetGroupId
+    ? tabs.filter((tab) => !tab.pinned && tab.groupId === targetGroupId)
+    : (targetTab ? [targetTab] : []);
+  if (!targetMembers.length) return tabs.slice();
+
+  const sourceIds = new Set(source.map((tab) => tab.id));
+  const next = tabs.filter((tab) => !sourceIds.has(tab.id));
+  let insertion;
+  if (targetGroupId) {
+    const first = next.findIndex((tab) => tab.groupId === targetGroupId);
+    if (first < 0) return tabs.slice();
+    insertion = after
+      ? next.findLastIndex((tab) => tab.groupId === targetGroupId) + 1
+      : first;
+  } else {
+    const targetIndex = next.findIndex((tab) => tab.id === targetMembers[0].id);
+    if (targetIndex < 0) return tabs.slice();
+    insertion = targetIndex + (after ? 1 : 0);
+  }
+  next.splice(insertion, 0, ...source);
+  return pinnedFirst(next);
+}
