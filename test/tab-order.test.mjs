@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeDrop, clampedInsertion, moveTabTo, moveTabAfter, moveIntoGroup, pinnedFirst } from '../src/shared/tab-order.mjs';
+import { computeDrop, clampedInsertion, moveTabTo, moveTabAfter, moveIntoGroup, moveGroupRelative, pinnedFirst } from '../src/shared/tab-order.mjs';
 
 const row = (id, start, extent) => ({ id, start, extent });
 const rows3 = [row('a', 0, 100), row('b', 100, 100), row('c', 200, 100)];
@@ -82,4 +82,25 @@ test('moveIntoGroup puts a tab right after the last tab of the group and keeps p
   assert.deepEqual(moveIntoGroup(list, 'y', 'g').map((t) => t.id), ['p', 'a', 'x', 'b', 'y']);
   assert.deepEqual(moveIntoGroup(list, 'x', 'g').map((t) => t.id), ['p', 'a', 'b', 'x', 'y']);
   assert.deepEqual(moveIntoGroup(list, 'x', 'missing').map((t) => t.id), ['p', 'a', 'x', 'b', 'y']);
+});
+
+test('moveGroupRelative moves every group member as one block and keeps pinned tabs first', () => {
+  const list = [
+    { id: 'p', pinned: true }, { id: 'a1', groupId: 'a' }, { id: 'a2', groupId: 'a' },
+    { id: 'loose' }, { id: 'b1', groupId: 'b' }, { id: 'b2', groupId: 'b' }, { id: 'tail' },
+  ];
+  assert.deepEqual(moveGroupRelative(list, 'a', 'b', true).map((t) => t.id), [
+    'p', 'loose', 'b1', 'b2', 'a1', 'a2', 'tail',
+  ]);
+  // A member tab resolves to its whole group, not an insertion inside it.
+  assert.deepEqual(moveGroupRelative(list, 'b', 'a2', false).map((t) => t.id), [
+    'p', 'b1', 'b2', 'a1', 'a2', 'loose', 'tail',
+  ]);
+});
+
+test('moveGroupRelative can place a group around ungrouped tabs and safely ignores no-op targets', () => {
+  const list = [{ id: 'a', groupId: 'g1' }, { id: 'x' }, { id: 'b', groupId: 'g2' }, { id: 'y' }];
+  assert.deepEqual(moveGroupRelative(list, 'g1', 'x', true).map((t) => t.id), ['x', 'a', 'b', 'y']);
+  assert.deepEqual(moveGroupRelative(list, 'g1', 'missing').map((t) => t.id), list.map((t) => t.id));
+  assert.deepEqual(moveGroupRelative(list, 'g1', 'a').map((t) => t.id), list.map((t) => t.id));
 });

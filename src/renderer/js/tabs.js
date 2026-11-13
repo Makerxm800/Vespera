@@ -2,7 +2,7 @@
 import { icon } from './icons.js';
 import { escapeHtml } from './toasts.js';
 import { safeTabUrl } from '../../shared/privacy-utils.mjs';
-import { computeDrop, clampedInsertion, moveTabAfter, moveIntoGroup, pinnedFirst } from '../../shared/tab-order.mjs';
+import { computeDrop, clampedInsertion, moveTabAfter, moveIntoGroup, moveGroupRelative as reorderGroupRelative, pinnedFirst } from '../../shared/tab-order.mjs';
 
 let nextId = 1;
 export const TAB_GROUP_COLORS = Object.freeze(['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan']);
@@ -60,6 +60,12 @@ export class TabManager {
         if (this.getSettings()?.tabBehavior?.middleClickClosesTab !== false) this.close(tab.dataset.id);
       });
       el?.addEventListener('keydown', (e) => {
+        const groupHeader = e.target.closest('[data-group-header]');
+        if (groupHeader && (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10'))) {
+          e.preventDefault();
+          this.onGroupContextMenu(groupHeader.dataset.groupHeader, groupHeader);
+          return;
+        }
         const row = e.target.closest('[data-id]');
         if (!row || e.target.closest('button')) return;
         const vertical = el === this.vlist;
@@ -79,9 +85,20 @@ export class TabManager {
         else if (e.key === 'End') { e.preventDefault(); this.selectIndex(-1); this.focusActive(); }
       });
       el?.addEventListener('dragstart', (e) => {
+        const groupHeader = e.target.closest('[data-group-header]');
+        if (groupHeader) {
+          const groupId = groupHeader.dataset.groupHeader;
+          this._drag = { kind: 'group', groupId, list: el, mode: null, targetId: null, after: false };
+          for (const list of [this.strip, this.vlist]) list?.querySelectorAll('[data-group-header]').forEach((node) => {
+            if (node.dataset.groupHeader === groupId) node.classList.add('dragging');
+          });
+          e.dataTransfer.setData('text/group-id', groupId);
+          e.dataTransfer.effectAllowed = 'move';
+          return;
+        }
         const row = e.target.closest('[data-id]');
         if (!row) return;
-        this._drag = { fromId: row.dataset.id, list: el, mode: null, index: -1, targetId: null };
+        this._drag = { kind: 'tab', fromId: row.dataset.id, list: el, mode: null, index: -1, targetId: null };
         for (const list of [this.strip, this.vlist]) list?.querySelectorAll(`[data-id="${row.dataset.id}"]`).forEach((n) => n.classList.add('dragging'));
         e.dataTransfer.setData('text/tab-id', row.dataset.id);
         e.dataTransfer.effectAllowed = 'move';
@@ -100,14 +117,22 @@ export class TabManager {
         if (this._drag?.list === el) { this._drag.mode = null; this._drag.index = -1; this._drag.targetId = null; }
       });
       el?.addEventListener('drop', (e) => {
-        const fromId = this._drag?.fromId || e.dataTransfer.getData('text/tab-id');
+        const drag = this._drag || {};
+        const fromId = drag.kind === 'group'
+          ? drag.groupId
+          : (drag.fromId || e.dataTransfer.getData('text/tab-id'));
         if (!fromId) return;
         e.preventDefault();
         this.updateDropTarget(el, e); // resolve the final slot under the pointer
-        const drag = this._drag || {};
-        if (drag.mode === 'group-header' && drag.targetId) this.moveToGroup(fromId, drag.targetId);
-        else if (drag.mode === 'group' && drag.targetId && drag.targetId !== fromId) this.groupWith(fromId, drag.targetId);
-        else if (drag.mode === 'move' && drag.index >= 0) this.moveToIndex(fromId, drag.index, drag.targetGroupId);
+        if (drag.kind === 'group' && drag.mode === 'move-group' && drag.targetId) {
+          this.moveGroupRelative(drag.groupId, drag.targetId, drag.after);
+        } else if (drag.kind !== 'group' && drag.mode === 'group-header' && drag.targetId) {
+          this.moveToGroup(fromId, drag.targetId);
+        } else if (drag.kind !== 'group' && drag.mode === 'group' && drag.targetId && drag.targetId !== fromId) {
+          this.groupWith(fromId, drag.targetId);
+        } else if (drag.kind !== 'group' && drag.mode === 'move' && drag.index >= 0) {
+          this.moveToIndex(fromId, drag.index, drag.targetGroupId);
+        }
         this.endDrag();
       });
       el?.addEventListener('dragend', () => this.endDrag());
@@ -144,9 +169,54 @@ export class TabManager {
   }
   updateDropTarget(list, e) {
     const vertical = list === this.vlist;
-    const rows = this.stripRows(list);
     const coord = vertical ? e.clientY : e.clientX;
     const drag = this._drag;
+    if (drag?.kind === 'group') {
+      const groupHeader = e.target.closest('[data-group-header]');
+      const tabRow = e.target.closest('[data-id]');
+      const targetGroupId = groupHeader?.dataset.groupHeader || tabRow?.dataset.groupId || '';
+      const matchingHeader = targetGroupId
+        ? [...list.querySelectorAll('[data-group-header]')].find((node) => node.dataset.groupHeader === targetGroupId)
+        : null;
+      const target = matchingHeader || groupHeader || tabRow;
+      const targetId = targetGroupId || tabRow?.dataset.id || '';
+      list.querySelectorAll('.drag-over, .group-drop-target').forEach((node) => {
+        node.classList.remove('drag-over', 'group-drop-target');
+        delete node.dataset.dropSide;
+      });
+      if (!target || !targetId || targetGroupId === drag.groupId || tabRow?.classList.contains('pinned')) {
+        drag.list = list; drag.mode = null; drag.targetId = null; drag.index = -1;
+        this.ensureIndicator(list).hidden = true;
+        return;
+      }
+      const targetRect = target.getBoundingClientRect();
+      const decisionRect = (groupHeader || tabRow).getBoundingClientRect();
+      const targetMembers = targetGroupId
+        ? [...list.querySelectorAll('[data-id]')].filter((node) => node.dataset.groupId === targetGroupId)
+        : [];
+      const lastMemberRect = targetMembers.length ? targetMembers.at(-1).getBoundingClientRect() : targetRect;
+      const start = vertical ? targetRect.top : targetRect.left;
+      const end = vertical ? lastMemberRect.bottom : lastMemberRect.right;
+      const decisionStart = vertical ? decisionRect.top : decisionRect.left;
+      const decisionExtent = vertical ? decisionRect.height : decisionRect.width;
+      const after = coord >= decisionStart + decisionExtent / 2;
+      const boundary = after ? end : start;
+      drag.list = list; drag.mode = 'move-group'; drag.targetId = targetId; drag.after = after; drag.index = -1;
+      target.classList.add('group-drop-target');
+      target.dataset.dropSide = after ? 'after' : 'before';
+      const indicator = this.ensureIndicator(list);
+      const host = list.getBoundingClientRect();
+      if (vertical) {
+        indicator.style.top = `${boundary - host.top + list.scrollTop}px`;
+        indicator.style.left = '';
+      } else {
+        indicator.style.left = `${boundary - host.left + list.scrollLeft}px`;
+        indicator.style.top = '';
+      }
+      indicator.hidden = false;
+      return;
+    }
+    const rows = this.stripRows(list);
     const groupHeader = e.target.closest('[data-group-header]');
     if (groupHeader) {
       for (const r of rows) r.el.classList.remove('drag-over');
@@ -211,14 +281,17 @@ export class TabManager {
     }
   }
   clearDropUi(list) {
-    list?.querySelectorAll('.drag-over').forEach((n) => n.classList.remove('drag-over'));
+    list?.querySelectorAll('.drag-over, .group-drop-target').forEach((node) => {
+      node.classList.remove('drag-over', 'group-drop-target');
+      delete node.dataset.dropSide;
+    });
     const indicator = list?.querySelector('.drop-indicator');
     if (indicator) indicator.hidden = true;
   }
   endDrag() {
     this._drag = null;
     for (const list of [this.strip, this.vlist]) {
-      list?.querySelectorAll('.dragging, [data-group-header].drag-over').forEach((n) => n.classList.remove('dragging', 'drag-over'));
+      list?.querySelectorAll('.dragging').forEach((node) => node.classList.remove('dragging'));
       this.clearDropUi(list);
     }
   }
@@ -227,8 +300,6 @@ export class TabManager {
   handleClick(e) {
     const toggle = e.target.closest('[data-group-toggle]');
     if (toggle) { e.preventDefault(); e.stopPropagation(); this.toggleGroup(toggle.dataset.groupToggle); return; }
-    const edit = e.target.closest('[data-group-menu]');
-    if (edit) { e.preventDefault(); e.stopPropagation(); this.onGroupContextMenu(edit.dataset.groupMenu, edit.closest('[data-group-header]')); return; }
     const audio = e.target.closest('[data-audio-toggle]');
     if (audio) { e.preventDefault(); e.stopPropagation(); this.onToggleMute(audio.dataset.audioToggle); return; }
     const close = e.target.closest('[data-close]');
@@ -380,6 +451,15 @@ export class TabManager {
     this.render(); this.onChange();
   }
   addToGroup(tabId, groupId) { this.moveToGroup(tabId, groupId); }
+  moveGroupRelative(groupId, targetId, after = false) {
+    if (this.getSettings()?.tabBehavior?.tabGroupsEnabled === false) return;
+    if (!this.getGroup(groupId)) return;
+    const next = reorderGroupRelative(this.tabs, groupId, targetId, after);
+    if (next.every((tab, index) => tab === this.tabs[index])) return;
+    this.tabs = next;
+    this.normalizeGroupOrder();
+    this.render(); this.onChange();
+  }
   ungroupTab(tabId) {
     const tab = this.tabs.find((item) => item.id === tabId);
     if (!tab?.groupId) return;
@@ -552,7 +632,6 @@ export class TabManager {
       : '';
     return `<div class="${cls} ${tab.id === this.activeId ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${group ? 'grouped' : ''}" data-id="${escapeHtml(tab.id)}" data-group-id="${escapeHtml(tab.groupId || '')}" ${group ? `data-group-color="${group.color}" style="--tab-group-color:${group.color}"` : ''} draggable="true" role="tab" tabindex="${tab.id === this.activeId ? 0 : -1}" aria-selected="${tab.id === this.activeId}" aria-label="${escapeHtml(tab.title)}" title="${escapeHtml(tooltip)}">
       <div class="favicon">${this.faviconHtml(tab)}</div>
-      ${group ? `<span class="tab-group-label">${escapeHtml(group.title)}</span>` : ''}
       <div class="title">${escapeHtml(tab.title)}</div>
       ${pinnedControl}
       ${this.audioHtml(tab)}
@@ -562,11 +641,12 @@ export class TabManager {
   groupHeaderHtml(group, vertical = false) {
     const count = this.groupTabs(group.id).length;
     const active = this.groupTabs(group.id).some((tab) => tab.id === this.activeId);
-    return `<div class="${vertical ? 'vtab-group-header' : 'tab-group-header'} ${active ? 'active' : ''}" data-group-header="${escapeHtml(group.id)}" data-group-color="${group.color}">
-      <button class="tab-group-toggle" data-group-toggle="${escapeHtml(group.id)}" type="button" aria-expanded="${!group.collapsed}" aria-label="${group.collapsed ? 'Expand' : 'Collapse'} ${escapeHtml(group.title)}, ${count} tabs" title="${escapeHtml(group.title)} · ${count} ${count === 1 ? 'tab' : 'tabs'}">
-        <span class="tab-group-dot"></span><span class="tab-group-title">${escapeHtml(group.title)}</span><span class="tab-group-count">${count}</span><span class="tab-group-chevron" aria-hidden="true">${group.collapsed ? '›' : '⌄'}</span>
+    const countLabel = `${count} ${count === 1 ? 'tab' : 'tabs'}`;
+    return `<div class="${vertical ? 'vtab-group-header' : 'tab-group-header'} ${active ? 'active' : ''}" data-group-header="${escapeHtml(group.id)}" data-group-color="${group.color}" draggable="true" role="group" aria-label="${escapeHtml(group.title)}, ${countLabel}. Drag to reorder; right-click for group actions." title="Drag to reorder · Right-click for group actions">
+      <span class="tab-group-grip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      <button class="tab-group-toggle" data-group-toggle="${escapeHtml(group.id)}" type="button" aria-expanded="${!group.collapsed}" aria-label="${group.collapsed ? 'Expand' : 'Collapse'} ${escapeHtml(group.title)}, ${countLabel}" title="${escapeHtml(group.title)} · ${countLabel}">
+        <span class="tab-group-dot"></span><span class="tab-group-title">${escapeHtml(group.title)}</span><span class="tab-group-count" aria-hidden="true">${count}</span><span class="tab-group-chevron" aria-hidden="true">${group.collapsed ? '›' : '⌄'}</span>
       </button>
-      <button class="tab-group-menu" data-group-menu="${escapeHtml(group.id)}" type="button" aria-label="Edit ${escapeHtml(group.title)}" title="Group options">···</button>
     </div>`;
   }
   render() {
@@ -624,15 +704,19 @@ export class TabManager {
             row.addEventListener('animationend', () => row.classList.remove('group-enter'), { once: true });
           }
         }
+        const countValue = this.groupTabs(group.id).length;
+        const countLabel = `${countValue} ${countValue === 1 ? 'tab' : 'tabs'}`;
         row.classList.toggle('active', this.groupTabs(group.id).some((tab) => tab.id === this.activeId));
         row.dataset.groupColor = group.color;
+        row.setAttribute('aria-label', `${group.title}, ${countLabel}. Drag to reorder; right-click for group actions.`);
+        row.title = 'Drag to reorder · Right-click for group actions';
         const toggle = row.querySelector('[data-group-toggle]');
         if (toggle) {
           toggle.setAttribute('aria-expanded', String(!group.collapsed));
-          toggle.setAttribute('aria-label', `${group.collapsed ? 'Expand' : 'Collapse'} ${group.title}, ${this.groupTabs(group.id).length} tabs`);
-          toggle.title = `${group.title} · ${this.groupTabs(group.id).length} ${this.groupTabs(group.id).length === 1 ? 'tab' : 'tabs'}`;
+          toggle.setAttribute('aria-label', `${group.collapsed ? 'Expand' : 'Collapse'} ${group.title}, ${countLabel}`);
+          toggle.title = `${group.title} · ${countLabel}`;
           const title = toggle.querySelector('.tab-group-title'); if (title) title.textContent = group.title;
-          const count = toggle.querySelector('.tab-group-count'); if (count) count.textContent = this.groupTabs(group.id).length;
+          const count = toggle.querySelector('.tab-group-count'); if (count) count.textContent = countValue;
           const chevron = toggle.querySelector('.tab-group-chevron'); if (chevron) chevron.textContent = group.collapsed ? '›' : '⌄';
         }
         ordered.push(row);
@@ -663,10 +747,6 @@ export class TabManager {
       row.setAttribute('aria-selected', String(active));
       row.setAttribute('aria-label', tab.title);
       row.title = hoverMode === 'tooltip' && behavior.memoryUsageOnHover === false ? `${tab.title}\n${tab.url}` : '';
-      const groupLabel = row.querySelector('.tab-group-label');
-      if (group && !groupLabel) { const label = document.createElement('span'); label.className = 'tab-group-label'; row.querySelector('.favicon')?.after(label); }
-      else if (!group && groupLabel) groupLabel.remove();
-      if (groupLabel && group) groupLabel.textContent = group.title;
       const title = row.querySelector('.title');
       if (title && title.textContent !== tab.title) title.textContent = tab.title;
       const faviconKey = `${tab.loading ? 'loading' : 'idle'}|${tab.favicon || ''}|${tab._internal ? 'internal' : 'web'}`;

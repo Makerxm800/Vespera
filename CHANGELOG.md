@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.8
+
+### Groups that move and stay put
+- Group headers are better aligned and show a clear drag grip, group color and tab count in both horizontal and vertical layouts.
+- Drag a whole group before or after another group or tab. Long strips auto-scroll while dragging, and the resulting group order is saved with the session.
+- Group actions now open by right-clicking the group (or pressing Shift+F10 when its control is focused); the separate ellipsis button is removed.
+- Saving group name and color writes them to the local session immediately. Session restore continues to preserve group membership, order, color and collapsed state; the Tabs & groups setting can hide or restore groups without deleting them.
+- Group names appear in the shared group header only; the repeated per-tab group-name tags are gone.
+
+### Settings and browser chrome
+- Replaced the floating Settings drawer with the full internal Settings page, with clearer hierarchy and spacing, a compact section navigator, and a horizontally scrollable section bar on narrow windows. The page participates in normal tab history; the browser menu and Ctrl+comma open it.
+- Removed only the Settings shortcut from the left navigation. Site privacy settings remain available from site information.
+- Kept tab audio behavior focused: the mute toggle appears only on tabs playing audio or already muted, with the existing indicator/hide preferences unchanged.
+- Added a separate **Your wallpapers** library for custom backgrounds. Add several images at once, switch between them, remove individual images, or tune the selected image; existing single-image wallpapers remain available.
+
+Release: https://github.com/Makerxm800/Vespera/releases/tag/v0.1.8
+
 ## 0.1.7
 
 ### Tabs, organized your way
