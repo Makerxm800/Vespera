@@ -7,6 +7,7 @@
 use crate::proxy::{ProxyEngine, STRIP_HEADERS};
 use include_dir::{include_dir, Dir};
 use serde_json::json;
+use std::io::Read;
 use std::sync::Arc;
 use tiny_http::{Header, Response, Server, StatusCode};
 
@@ -91,7 +92,11 @@ fn handle_proxy(
     let url = request.url();
     let params = url::Url::parse(&format!("http://local{url}"))
         .ok()
-        .map(|u| u.query_pairs().collect::<Vec<_>>())
+        .map(|u| {
+            u.query_pairs()
+                .map(|(key, value)| (key.into_owned(), value.into_owned()))
+                .collect::<Vec<_>>()
+        })
         .unwrap_or_default();
     let get = |key: &str| -> String {
         params.iter().find(|(k, _)| k == key).map(|(_, v)| v.to_string()).unwrap_or_default()
@@ -278,10 +283,11 @@ pub fn start(engine: Arc<ProxyEngine>, rules_snapshot: serde_json::Value, versio
     let engine = Arc::clone(&engine);
     let rules_snapshot = Arc::new(rules_snapshot);
     let version = Arc::new(version);
+    let thread_origin = origin.clone();
     let thread = std::thread::spawn(move || {
         for request in server.incoming_requests() {
             let engine = Arc::clone(&engine);
-            let origin = origin.clone();
+            let origin = thread_origin.clone();
             let rules_snapshot = Arc::clone(&rules_snapshot);
             let version = Arc::clone(&version);
             let response = (|| -> Response<std::io::Cursor<Vec<u8>>> {
