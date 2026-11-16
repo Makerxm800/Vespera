@@ -33,7 +33,7 @@ pub fn content_type(path: &str) -> &'static str {
     match ext.as_str() {
         "html" | "htm" => "text/html; charset=utf-8",
         "css" => "text/css; charset=utf-8",
-        "js" | "mjs" => "text/javascript; charset=utf-8",
+        "js" | "mjs" | "jsx" => "text/javascript; charset=utf-8",
         "json" => "application/json; charset=utf-8",
         "webmanifest" => "application/manifest+json; charset=utf-8",
         "png" => "image/png",

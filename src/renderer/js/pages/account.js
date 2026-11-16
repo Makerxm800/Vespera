@@ -1,7 +1,7 @@
 /** Personal Vespera account — compact email/password auth, profile and sync. */
 import { icon } from '../icons.js';
 import { state } from '../state.js';
-import * as api from '../api.js';
+import * as api from '../api.jsx';
 import { escapeHtml, toast } from '../toasts.js';
 
 export function renderAccount(container, ctx) {
