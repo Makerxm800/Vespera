@@ -29,5 +29,6 @@ custom-protocol = ["tauri/custom-protocol"]
 codegen-units = 1
 lto = true
 opt-level = "s"
-strip = true
+# Note: no `strip = true` — the strip tool is Unix-only and breaks the
+# Windows/MSVC release build. The binary is still small enough without it.
 panic = "abort"
