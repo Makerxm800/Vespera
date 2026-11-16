@@ -8,7 +8,10 @@ fn main_window(app: &AppHandle) -> Option<tauri::WebviewWindow> {
 }
 
 pub fn minimize(app: &AppHandle) -> Result<(), String> {
-    main_window(app).map(|w| w.minimize()).ok_or_else(|| "No main window.".to_string())
+    main_window(app)
+        .ok_or_else(|| "No main window.".to_string())?
+        .minimize()
+        .map_err(|e| e.to_string())
 }
 
 pub fn maximize(app: &AppHandle) -> Result<(), String> {
@@ -24,7 +27,10 @@ pub fn maximize(app: &AppHandle) -> Result<(), String> {
 }
 
 pub fn close(app: &AppHandle) -> Result<(), String> {
-    main_window(app).map(|w| w.close()).ok_or_else(|| "No main window.".to_string())
+    main_window(app)
+        .ok_or_else(|| "No main window.".to_string())?
+        .close()
+        .map_err(|e| e.to_string())
 }
 
 pub fn toggle_fullscreen(app: &AppHandle) -> Result<(), String> {

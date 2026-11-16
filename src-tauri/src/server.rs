@@ -310,7 +310,7 @@ pub fn start(engine: Arc<ProxyEngine>, rules_snapshot: serde_json::Value, versio
                     }));
                 }
                 if path == "/api/filters" {
-                    return json_response(200, rules_snapshot.clone());
+                    return json_response(200, (*rules_snapshot).clone());
                 }
                 if path == "/api/reader" {
                     let target = request
