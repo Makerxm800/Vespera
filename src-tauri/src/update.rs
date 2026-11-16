@@ -149,6 +149,7 @@ pub fn install(app: &AppHandle, release_info: &Value) -> Value {
         let path = file_path.to_string_lossy().to_string();
         let _ = std::process::Command::new(&path).spawn();
         // Let the installer take over the files, then leave the app.
+        let app = app.clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(2500));
             app.exit(0);

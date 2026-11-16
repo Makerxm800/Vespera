@@ -363,7 +363,7 @@ pub fn start(engine: Arc<ProxyEngine>, rules_snapshot: serde_json::Value, versio
 }
 
 #[allow(dead_code)]
-fn read_request_body(request: &tiny_http::Request) -> String {
+fn read_request_body(request: &mut tiny_http::Request) -> String {
     let mut body = String::new();
     let _ = request.as_reader().read_to_string(&mut body);
     body

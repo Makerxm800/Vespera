@@ -40,7 +40,7 @@ pub fn run() {
 
             let prefs_path = data_dir.join("preferences.json");
             let prefs = Prefs::load(&prefs_path);
-            let disabled_ids: Vec<String> = prefs
+            let mut disabled_ids: Vec<String> = prefs
                 .data
                 .get("disabledExtensionIds")
                 .and_then(Value::as_array)
@@ -391,7 +391,7 @@ fn extensions_disable(state: tauri::State<AppState>, id: String) -> Value {
 
 fn set_extension_enabled(state: &tauri::State<AppState>, id: &str, enabled: bool) -> Value {
     let mut guard = state.prefs.lock().unwrap();
-    let disabled_ids = guard
+    let mut disabled_ids = guard
         .data
         .get_mut("disabledExtensionIds")
         .and_then(Value::as_array_mut)
