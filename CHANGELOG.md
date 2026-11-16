@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1
+
+### Windows and release fixes
+- Fixed the Windows/MSVC release build by removing the unsupported release-profile strip step and correcting Windows-only Rust code.
+- Registered Windows HTTP/HTTPS protocol capabilities through the supported registry APIs; Windows Settings remains responsible for the protected default-browser choice.
+- Made cross-platform installer collection tolerant of filename case, and made release publishing safe to retry.
+- Added Windows Rust compilation to CI so platform-specific errors are caught before packaging.
+
 ## 0.2.0
 
 ### Rebuilt on Tauri v2

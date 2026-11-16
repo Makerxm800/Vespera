@@ -18,7 +18,7 @@ fn is_askable(permission: &str) -> bool {
 pub fn origin_of(url: &str) -> Option<String> {
     let u = url::Url::parse(url).ok()?;
     if u.scheme() == "http" || u.scheme() == "https" {
-        Some(u.origin().to_string())
+        Some(u.origin().ascii_serialization())
     } else {
         None
     }
@@ -70,8 +70,11 @@ pub fn decide(
         .and_then(|o| o.get(permission))
         .and_then(Value::as_str)
     {
-        if saved == "allow" || saved == "deny" {
-            return saved;
+        if saved == "allow" {
+            return "allow";
+        }
+        if saved == "deny" {
+            return "deny";
         }
     }
     if session_granted.contains(&format!("{origin}|{permission}")) {

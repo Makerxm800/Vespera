@@ -8,7 +8,8 @@
 use crate::filters::FilterEngine;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
-use serde_json::json;
+use serde_json::{json, Value};
+use std::net::ToSocketAddrs;
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -65,7 +66,7 @@ impl ProxyEngine {
     /// Public-address check mirroring publicAddress() in the JS proxy.
     fn is_public_ip(addr: &str) -> bool {
         if let Ok(ip) = addr.parse::<std::net::Ipv4Addr>() {
-            let [a, b, c, _d] = ip.octets();
+            let [a, b, _c, _d] = ip.octets();
             return !(a == 0
                 || a == 10
                 || a == 127
@@ -111,7 +112,7 @@ impl ProxyEngine {
         if allowed.is_empty() {
             return true;
         }
-        allowed.iter().any(|h| host == h || host.ends_with(&format!(".{h}")))
+        allowed.iter().any(|h| host == h.as_str() || host.ends_with(&format!(".{h}")))
     }
 
     fn validate_target(target: &str) -> Result<url::Url, String> {
@@ -119,12 +120,12 @@ impl ProxyEngine {
         if u.scheme() != "http" && u.scheme() != "https" {
             return Err("Only HTTP and HTTPS websites can be previewed.".to_string());
         }
-        if !u.username().is_empty() || !u.password().is_empty() {
+        if !u.username().is_empty() || u.password().is_some() {
             return Err("URLs containing credentials are not allowed.".to_string());
         }
         let host = u.host_str().unwrap_or("").to_lowercase();
         let allowed = Self::allowed_hosts();
-        if !allowed.is_empty() && !allowed.iter().any(|h| host == h || host.ends_with(&format!(".{h}"))) {
+        if !allowed.is_empty() && !allowed.iter().any(|h| host == h.as_str() || host.ends_with(&format!(".{h}"))) {
             return Err(format!(
                 "{host} is not reachable from this hosted preview. Open the original site in your browser, or use the desktop app for unrestricted browsing."
             ));
@@ -179,13 +180,13 @@ impl ProxyEngine {
         if resp.content_length().unwrap_or(0) > MAX_BYTES as u64 {
             return Err("This resource is too large for the web preview (20 MB limit).".to_string());
         }
+        let header_map = resp.headers().clone();
         let body = resp
             .bytes()
             .map_err(|e| format!("Could not read the website response. ({e})"))?;
         if body.len() > MAX_BYTES {
             return Err("This resource is too large for the web preview (20 MB limit).".to_string());
         }
-        let header_map = resp.headers().clone();
         Ok(FetchResult {
             status,
             headers: header_map,
@@ -256,17 +257,15 @@ impl ProxyEngine {
     /// Full document rewrite (port of rewriteHtml).
     pub fn rewrite_html(&self, html: &str, page_url: &str, dark: bool, mask: u32, origin: &str) -> String {
         let extra = format!("&vp={mask}{}", if dark { "&vespera_dark=1" } else { "" });
-        let mut out = html
-            .replace_all(&base_tag_re(), "")
-            .replace_all(&meta_refresh_re(), "")
-            .to_string();
+        let without_base = base_tag_re().replace_all(html, "");
+        let mut out = meta_refresh_re().replace_all(&without_base, "").to_string();
 
         out = tag_re()
             .replace_all(&out, |caps: &regex::Captures| {
                 let name = caps.get(1).unwrap().as_str();
                 let attrs = caps.get(2).unwrap().as_str();
                 let attrs = integrity_re().replace_all(attrs, "");
-                let attrs = attr_re().replace_all(attrs, |c: &regex::Captures| {
+                let attrs = attr_re().replace_all(attrs.as_ref(), |c: &regex::Captures| {
                     let key = c.get(1).unwrap().as_str();
                     let quote = c.get(2).unwrap().as_str();
                     let value = c.get(3).unwrap().as_str();
@@ -293,7 +292,7 @@ impl ProxyEngine {
                         esc(&self.proxied(value, page_url, proxied_extra, rtype, page_url, mask, origin))
                     )
                 });
-                let attrs = srcset_re().replace_all(attrs, |c: &regex::Captures| {
+                let attrs = srcset_re().replace_all(attrs.as_ref(), |c: &regex::Captures| {
                     let quote = c.get(1).unwrap().as_str();
                     let value = c.get(2).unwrap().as_str();
                     let rewritten = value
@@ -586,7 +585,7 @@ fn collapse_ws(s: &str) -> String {
     out
 }
 
-fn first_group(re: &Regex, text: &str) -> Option<&str> {
+fn first_group<'a>(re: &Regex, text: &'a str) -> Option<&'a str> {
     let caps = re.captures(text)?;
     Some(caps.get(1).unwrap().as_str())
 }

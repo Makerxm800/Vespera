@@ -7,18 +7,22 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Existing v* tag to build and publish; leave blank for build-only.
+        description: v* tag to publish, or leave blank for build-only.
         required: false
         type: string
-
+      artifact_run_id:
+        description: Optional successful build-only run ID to publish without rebuilding.
+        required: false
+        type: string
 permissions:
   contents: write
+  actions: read
 
 jobs:
   build:
     name: Build on ${{ matrix.os }} (${{ matrix.arch }})
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.artifact_run_id == '' }}
     runs-on: ${{ matrix.os }}
-
     strategy:
       fail-fast: false
       matrix:
@@ -26,10 +30,10 @@ jobs:
           - os: windows-latest
             arch: x64
             bundles: msi,nsis
-          - os: macos-13
+          - os: macos-15-intel
             arch: x64
             bundles: dmg
-          - os: macos-14
+          - os: macos-15
             arch: arm64
             bundles: dmg
           - os: ubuntu-latest
@@ -51,6 +55,11 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
       - name: Install Linux webview dependencies
         if: runner.os == 'Linux'
         run: |
@@ -67,49 +76,203 @@ jobs:
         run: npm run icons
 
       - name: Build with Tauri
-        run: npx tauri build --bundles ${{ matrix.bundles }}
+        shell: bash
+        run: npx tauri build --bundles "${{ matrix.bundles }}" 2>&1 | tee tauri-build.log
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Report build failure details
+        if: failure()
+        shell: bash
+        run: |
+          if [[ -s tauri-build.log ]]; then
+            {
+              echo '### Tauri build failure details'
+              echo '```text'
+              tail -n 100 tauri-build.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            grep -iE 'error:|failed|not found|no such file' tauri-build.log | tail -n 40 | while IFS= read -r line; do
+              line="${line//'%'/'%25'}"
+              line="${line//$'\r'/'%0D'}"
+              printf '::error::%s\n' "$line"
+            done
+          else
+            echo 'No Tauri build log was produced.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Collect installers
+        if: success()
+        shell: bash
+        run: |
+          mkdir -p dist
+          find src-tauri/target/release/bundle -type f \
+            \( -iname '*.msi' -o -iname '*.exe' -o -iname '*.dmg' -o -iname '*.deb' -o -iname '*.appimage' \) \
+            -exec cp {} dist/ \;
+          echo 'Installer files:'
+          find dist -maxdepth 1 -type f -print
+          test -n "$(find dist -maxdepth 1 -type f -print -quit)" || {
+            echo 'No installers were generated.' >&2
+            find src-tauri/target/release/bundle -maxdepth 4 -print 2>/dev/null || true
+            exit 1
+          }
+
       - name: Upload installers
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: vespera-${{ matrix.os }}-${{ matrix.arch }}
-          path: |
-            src-tauri/target/release/bundle/msi/*.msi
-            src-tauri/target/release/bundle/nsis/*.exe
-            src-tauri/target/release/bundle/dmg/*.dmg
-            src-tauri/target/release/bundle/deb/*.deb
-            src-tauri/target/release/bundle/appimage/*.AppImage
+          path: dist/
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Save build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-diagnostics-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            tauri-build.log
+            src-tauri/target/release/bundle/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Summarize build outputs
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '### ${{ matrix.os }} (${{ matrix.arch }}) output'
+            echo '```'
+            find src-tauri/target/release/bundle -maxdepth 4 -type f 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   publish:
     name: Publish release
+    if: >-
+      always() &&
+      ((startsWith(github.ref, 'refs/tags/') && needs.build.result == 'success') ||
+      (github.event_name == 'workflow_dispatch' && inputs.release_tag != '' &&
+      (inputs.artifact_run_id != '' || needs.build.result == 'success')))
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
     steps:
-      - name: Check out repository
+      - name: Check out release source
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.inputs.release_tag || github.ref }}
+          ref: ${{ github.event.inputs.artifact_run_id != '' && github.ref || github.event.inputs.release_tag || github.ref }}
+          fetch-depth: 0
 
-      - name: Download all installers
+      - name: Download installer artifacts
         uses: actions/download-artifact@v4
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.inputs.artifact_run_id || github.run_id }}
           path: installers
+          pattern: vespera-*
+          merge-multiple: true
 
-      - name: Publish to GitHub Releases
+      - name: Publish installers
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+          PUSH_REF_NAME: ${{ github.ref_name }}
+          ARTIFACT_RUN_ID: ${{ github.event.inputs.artifact_run_id }}
+        shell: bash
         run: |
-          TAG="$(echo "${{ github.event.inputs.release_tag || github.ref }}" | sed 's#refs/tags/##')"
-          SHA="${{ github.sha }}"
-          # Release notes: the top version section of the changelog.
+          set -euo pipefail
+          exec > >(tee -a publish.log) 2>&1
+          TAG="${RELEASE_TAG:-$PUSH_REF_NAME}"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Refusing to publish invalid release tag: $TAG" >&2
+            exit 1
+          fi
+          APP_VERSION="$(node -p "require('./package.json').version")"
+          if [[ "$TAG" != "v$APP_VERSION" ]]; then
+            echo "Release tag $TAG does not match package version $APP_VERSION." >&2
+            exit 1
+          fi
+
+          TARGET="$(git rev-parse HEAD)"
+          if [[ -n "$ARTIFACT_RUN_ID" ]]; then
+            RUN_INFO="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ARTIFACT_RUN_ID")"
+            BUILD_SHA="$(jq -r '.head_sha' <<< "$RUN_INFO")"
+            BUILD_BRANCH="$(jq -r '.head_branch' <<< "$RUN_INFO")"
+            if [[ "$(jq -r '.status' <<< "$RUN_INFO")" != "completed" || "$(jq -r '.conclusion' <<< "$RUN_INFO")" != "success" || "$BUILD_BRANCH" != "$PUSH_REF_NAME" ]]; then
+              echo "Artifact run $ARTIFACT_RUN_ID is not a successful build from this branch." >&2
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "$BUILD_SHA" "$TARGET"; then
+              echo "Artifact run commit $BUILD_SHA is not in this checkout's history." >&2
+              exit 1
+            fi
+            mapfile -t BUILD_RESULTS < <(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$ARTIFACT_RUN_ID/jobs" --jq '.jobs[] | select(.name | startswith("Build on ")) | .conclusion')
+            BUILD_COUNT="${#BUILD_RESULTS[@]}"
+            BUILD_FAILED=false
+            for result in "${BUILD_RESULTS[@]}"; do
+              [[ "$result" == "success" ]] || BUILD_FAILED=true
+            done
+            ASSET_COUNT="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ARTIFACT_RUN_ID/artifacts" --jq '[.artifacts[] | select(.name | startswith("vespera-")) | select(.expired == false)] | length')"
+            if [[ "$BUILD_COUNT" != "4" || "$BUILD_FAILED" != "false" || "$ASSET_COUNT" != "4" ]]; then
+              echo "Artifact run must contain four successful platform builds and four unexpired installer archives (got $BUILD_COUNT jobs, failed=$BUILD_FAILED, $ASSET_COUNT artifacts)." >&2
+              exit 1
+            fi
+            TARGET="$BUILD_SHA"
+          fi
+
+          mapfile -d '' -t FILES < <(find installers -type f \
+            \( -iname '*.msi' -o -iname '*.exe' -o -iname '*.dmg' -o -iname '*.deb' -o -iname '*.appimage' \) \
+            -print0 | sort -z)
+          if (( ${#FILES[@]} == 0 )); then
+            echo 'No installer assets were downloaded.' >&2
+            find installers -maxdepth 3 -print || true
+            exit 1
+          fi
+          count_assets() { find installers -type f -iname "*.$1" | wc -l; }
+          for extension in msi exe deb appimage; do
+            count="$(count_assets "$extension")"
+            if (( count < 1 )); then
+              echo "Missing required .$extension installer asset." >&2
+              exit 1
+            fi
+          done
+          dmg_count="$(count_assets dmg)"
+          if (( dmg_count < 2 )); then
+            echo "Expected both macOS DMGs; found $dmg_count." >&2
+            exit 1
+          fi
+
           NOTES="$(awk '/^## /{n++} n==1' CHANGELOG.md)"
-          [ -z "$NOTES" ] && NOTES="Vespera $TAG"
-          gh release create "$TAG" \
-            --title "Vespera $TAG" \
-            --notes "$NOTES" \
-            --target "$SHA" \
-            installers/*/* \
-            || gh release upload "$TAG" installers/*/*
+          NOTES="${NOTES:-Vespera $TAG}"
+          TITLE="Vespera $TAG"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TITLE" --notes "$NOTES"
+            gh release upload "$TAG" "${FILES[@]}" --clobber
+          else
+            gh release create "$TAG" "${FILES[@]}" \
+              --title "$TITLE" \
+              --notes "$NOTES" \
+              --target "$TARGET"
+          fi
+
+      - name: Report publish failure details
+        if: failure()
+        shell: bash
+        run: |
+          if [[ -s publish.log ]]; then
+            {
+              echo '### Publish failure details'
+              echo '```text'
+              tail -n 100 publish.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            tail -n 50 publish.log | while IFS= read -r line; do
+              line="${line//'%'/'%25'}"
+              line="${line//$'\r'/'%0D'}"
+              printf '::error::%s\n' "$line"
+            done
+          fi

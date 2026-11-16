@@ -8,7 +8,7 @@
 //! is a lookup plus a few regex tests.
 
 use regex::Regex;
-use std::collections::{HashMap, HashSet, HashSet as Set};
+use std::collections::{HashMap, HashSet as Set};
 use std::sync::Mutex;
 
 const RESOURCE_TYPES: [&str; 14] = [
@@ -112,7 +112,6 @@ impl CosmeticRule {
 /// patternToRegExpSource).
 fn pattern_to_regex_source(pattern: &str) -> (String, bool) {
     let mut src = String::new();
-    let mut anchored_start = false;
     let mut anchored_end = false;
     let mut domain_anchored = false;
 
@@ -122,7 +121,6 @@ fn pattern_to_regex_source(pattern: &str) -> (String, bool) {
         pat = rest;
         src.push_str("^[a-z][a-z0-9+.\\-]*://(?:[^/?#]*\\.)?");
     } else if let Some(rest) = pat.strip_prefix('|') {
-        anchored_start = true;
         pat = rest;
         src.push('^');
     }
@@ -334,7 +332,7 @@ pub struct FilterEngine {
     pub stats: FilterStats,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, serde::Serialize)]
 pub struct FilterStats {
     pub total: usize,
     pub network: usize,

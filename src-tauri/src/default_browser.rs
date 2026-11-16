@@ -1,30 +1,53 @@
 //! Default-browser registration (port of the former shell's protocol client
-//! handling). Best effort per platform: Windows via the UserChoice registry
-//! entries, Linux via xdg-settings, macOS via a clear system-settings message.
+//! handling). Best effort per platform: Windows protocol registration plus
+//! the supported Default Apps UI, Linux via xdg-settings, and macOS via a clear
+//! system-settings message.
 
 use serde_json::json;
 use std::process::Command;
 
 fn exe_path() -> String {
     std::env::current_exe()
-        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_default()
 }
 
 #[cfg(target_os = "windows")]
 fn windows_registered(scheme: &str) -> bool {
+    let key = format!(
+        r"HKCU\Software\Microsoft\Windows\Shell\Associations\URLAssociations\{scheme}\UserChoice"
+    );
     let output = Command::new("reg")
-        .args([
-            "query",
-            r"HKCU\Software\Microsoft\Windows\Shell\Associations\URLAssociations",
-            &format!("{scheme}\\UserChoice"),
-            "/v",
-            "ProgId",
-        ])
+        .args(["query"])
+        .arg(key)
+        .args(["/v", "ProgId"])
         .output();
     match output {
         Ok(o) => String::from_utf8_lossy(&o.stdout).to_lowercase().contains("vespera"),
         Err(_) => false,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_registry_add(key: &str, name: &str, value: &str) -> Result<(), String> {
+    // Pass each registry argument directly to reg.exe. Building a shell command
+    // and splitting it on whitespace breaks paths containing spaces and also
+    // cannot safely quote the "%1" argument.
+    let mut command = Command::new("reg");
+    command.args(["add", key]);
+    if name.is_empty() {
+        command.arg("/ve");
+    } else {
+        command.args(["/v", name]);
+    }
+    let status = command
+        .args(["/t", "REG_SZ", "/d", value, "/f"])
+        .status()
+        .map_err(|e| format!("Could not run reg.exe. ({e})"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err("Windows declined to register Vespera's URL handlers.".to_string())
     }
 }
 
@@ -34,27 +57,41 @@ fn windows_register() -> Result<bool, String> {
     if exe.is_empty() {
         return Err("Could not locate the Vespera executable.".to_string());
     }
-    let command = format!("\"{exe}\" \"%1\"");
-    let icon = format!("\"{exe}\"");
-    let prog_id = "Vespera";
+
+    // Windows protects URLAssociations\\*\\UserChoice with a system-generated
+    // hash. Register the protocol classes here and let the supported Default
+    // Apps settings UI set the user's choice.
+    let prog_id = "VesperaURL";
+    let class_key = format!(r"HKCU\Software\Classes\{prog_id}");
+    let command_key = format!(r"{class_key}\shell\open\command");
+    let icon_key = format!(r"{class_key}\DefaultIcon");
+    let command = format!(r#""{exe}" "%1""#);
+    let icon = format!(r#""{exe}",0"#);
+
+    windows_registry_add(&class_key, "", "Vespera URL")?;
+    windows_registry_add(&class_key, "URL Protocol", "")?;
+    windows_registry_add(&command_key, "", &command)?;
+    windows_registry_add(&icon_key, "", &icon)?;
     for scheme in ["http", "https"] {
-        let steps = [
-            format!(r"reg add "HKCU\Software\Classes\{prog_id}" /v "" /t REG_SZ /d "Vespera" /f"),
-            format!(r"reg add "HKCU\Software\Classes\{prog_id}\shell\open\command" /v "" /t REG_SZ /d "{command}" /f"),
-            format!(r"reg add "HKCU\Software\Classes\{prog_id}\DefaultIcon" /v "" /t REG_SZ /d "{icon}" /f"),
-            format!(r"reg add "HKCU\Software\Microsoft\Windows\Shell\Associations\URLAssociations\{scheme}\UserChoice" /v ProgId /t REG_SZ /d {prog_id} /f"),
-        ];
-        for step in steps {
-            let mut parts: Vec<&str> = step.split_whitespace().collect();
-            if parts.is_empty() {
-                continue;
-            }
-            let status = Command::new(&parts[0]).args(&parts[1..]).status();
-            if !matches!(status, Ok(s) if s.success()) {
-                return Err("The operating system declined the registration. Confirm Vespera in the Windows default-apps settings.".to_string());
-            }
-        }
+        let scheme_key = format!(r"HKCU\Software\Classes\{scheme}");
+        windows_registry_add(&scheme_key, "", prog_id)?;
+        windows_registry_add(&scheme_key, "URL Protocol", "")?;
     }
+
+    // Register the capabilities so Vespera appears in Windows Default Apps.
+    let capabilities = r"HKCU\Software\Vespera\Capabilities";
+    windows_registry_add(capabilities, "ApplicationName", "Vespera")?;
+    windows_registry_add(capabilities, "ApplicationDescription", "Vespera Browser")?;
+    for scheme in ["http", "https"] {
+        let associations = format!(r"{capabilities}\URLAssociations");
+        windows_registry_add(&associations, scheme, prog_id)?;
+    }
+    windows_registry_add(
+        r"HKCU\Software\RegisteredApplications",
+        "Vespera",
+        r"Software\Vespera\Capabilities",
+    )?;
+
     Ok(windows_registered("http") && windows_registered("https"))
 }
 
@@ -99,7 +136,14 @@ pub fn status() -> serde_json::Value {
     {
         let http = windows_registered("http");
         let https = windows_registered("https");
-        return json!({ "supported": true, "registered": http && https, "http": http, "https": https, "platform": platform });
+        return json!({
+            "supported": true,
+            "registered": http && https,
+            "http": http,
+            "https": https,
+            "platform": platform,
+            "message": if http && https { "Vespera is the default browser for HTTP and HTTPS." } else { "To finish, choose Vespera under Default apps in Windows Settings." }
+        });
     }
     #[cfg(target_os = "linux")]
     {
@@ -115,21 +159,38 @@ pub fn status() -> serde_json::Value {
             "message": "macOS manages the default browser in System Settings → Desktop → Default Applications. Choose Vespera there to make it the default."
         });
     }
-    #[allow(unreachable_code)]
+    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
     json!({ "supported": false, "registered": false, "platform": platform, "message": "Default-browser registration is not available on this platform." })
 }
 
 pub fn register() -> serde_json::Value {
     let platform = std::env::consts::OS;
     #[cfg(target_os = "windows")]
-    let result: Result<bool, String> = windows_register();
-    #[cfg(target_os = "linux")]
-    let result: Result<bool, String> = linux_register();
-    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
-    let result: Result<bool, String> = Err("Default-browser registration is not available on this platform.".to_string());
-    match result {
-        Ok(registered) => json!({ "ok": registered, "registered": registered, "platform": platform }),
-        Err(message) => json!({ "ok": false, "registered": false, "platform": platform, "message": message }),
+    {
+        return match windows_register() {
+            Ok(registered) => json!({
+                "ok": true,
+                "registered": registered,
+                "platform": platform,
+                "message": if registered {
+                    "Vespera is already the default browser for HTTP and HTTPS."
+                } else {
+                    "Vespera's URL handlers are registered. Choose Vespera under Default apps in Windows Settings to finish."
+                }
+            }),
+            Err(message) => json!({ "ok": false, "registered": false, "platform": platform, "message": message }),
+        };
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        #[cfg(target_os = "linux")]
+        let result: Result<bool, String> = linux_register();
+        #[cfg(not(target_os = "linux"))]
+        let result: Result<bool, String> = Err("Default-browser registration is not available on this platform.".to_string());
+        match result {
+            Ok(registered) => json!({ "ok": registered, "registered": registered, "platform": platform }),
+            Err(message) => json!({ "ok": false, "registered": false, "platform": platform, "message": message }),
+        }
     }
 }
 

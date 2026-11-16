@@ -7,7 +7,6 @@
 use crate::proxy::{ProxyEngine, STRIP_HEADERS};
 use include_dir::{include_dir, Dir};
 use serde_json::json;
-use std::io::Read;
 use std::sync::Arc;
 use tiny_http::{Header, Response, Server, StatusCode};
 
@@ -67,26 +66,21 @@ fn serve_static(path: &str) -> Response<std::io::Cursor<Vec<u8>>> {
     let Some(rel) = sanitize_path(path) else {
         return Response::from_string("Not found.").with_status_code(StatusCode(404));
     };
-    match RENDERER.get(&rel) {
-        Some(file) => {
-            let body = file.contents().to_vec();
-            let mut response = Response::from_data(body)
-                .with_header(Header::from_bytes(&b"content-type"[..], content_type(&rel).as_bytes()).unwrap())
-                .with_header(Header::from_bytes(&b"cache-control"[..], b"no-cache").unwrap());
-            response.set_status_code(StatusCode(200));
-            response
-        }
+    match RENDERER.get_file(&rel) {
+        Some(file) => Response::from_data(file.contents().to_vec())
+            .with_header(Header::from_bytes(&b"content-type"[..], content_type(&rel).as_bytes()).unwrap())
+            .with_header(Header::from_bytes(&b"cache-control"[..], b"no-cache").unwrap())
+            .with_status_code(StatusCode(200)),
         None => Response::from_string("Not found.").with_status_code(StatusCode(404)),
     }
 }
 
 fn json_response(status: u16, value: serde_json::Value) -> Response<std::io::Cursor<Vec<u8>>> {
     let body = serde_json::to_string(&value).unwrap_or_else(|_| "{}".to_string());
-    let mut response = Response::from_string(body)
+    Response::from_string(body)
         .with_header(Header::from_bytes(&b"content-type"[..], b"application/json; charset=utf-8").unwrap())
-        .with_header(Header::from_bytes(&b"cache-control"[..], b"no-store").unwrap());
-    response.set_status_code(StatusCode(status));
-    response
+        .with_header(Header::from_bytes(&b"cache-control"[..], b"no-store").unwrap())
+        .with_status_code(StatusCode(status))
 }
 
 fn handle_proxy(
@@ -95,9 +89,13 @@ fn handle_proxy(
     origin: &str,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
     let url = request.url();
-    let params = url::Url::parse(format!("http://local{url}"))
+    let params = url::Url::parse(&format!("http://local{url}"))
         .ok()
-        .map(|u| u.query_pairs().collect::<Vec<_>>())
+        .map(|u| {
+            u.query_pairs()
+                .map(|(key, value)| (key.into_owned(), value.into_owned()))
+                .collect::<Vec<_>>()
+        })
         .unwrap_or_default();
     let get = |key: &str| -> String {
         params.iter().find(|(k, _)| k == key).map(|(_, v)| v.to_string()).unwrap_or_default()
@@ -138,14 +136,14 @@ fn handle_proxy(
         } else {
             body.into_bytes()
         };
-        let mut response = Response::from_data(body_bytes)
+        let response = Response::from_data(body_bytes)
             .with_header(Header::from_bytes(&b"content-type"[..], ctype.as_bytes()).unwrap())
             .with_header(Header::from_bytes(&b"cache-control"[..], b"no-store").unwrap())
             .with_header(Header::from_bytes(&b"access-control-allow-origin"[..], b"*").unwrap())
             .with_header(
                 Header::from_bytes(&b"content-security-policy"[..], b"sandbox allow-scripts").unwrap(),
-            );
-        response.set_status_code(StatusCode(200));
+            )
+            .with_status_code(StatusCode(200));
         return response;
     }
 
@@ -228,20 +226,18 @@ fn handle_proxy(
                     response = response.with_header(header);
                 }
             }
-            response.set_status_code(StatusCode(result.status));
-            response
+            response.with_status_code(StatusCode(result.status))
         }
         Err(err) => {
             let status = if err.contains("not reachable") { 403u16 } else { 502 };
             let body = engine.error_document(&err, &target);
-            let mut response = Response::from_string(body)
+            Response::from_string(body)
                 .with_header(Header::from_bytes(&b"content-type"[..], b"text/html; charset=utf-8").unwrap())
                 .with_header(Header::from_bytes(&b"cache-control"[..], b"no-store").unwrap())
                 .with_header(
                     Header::from_bytes(&b"content-security-policy"[..], b"sandbox allow-scripts allow-forms").unwrap(),
-                );
-            response.set_status_code(StatusCode(status));
-            response
+                )
+                .with_status_code(StatusCode(status))
         }
     }
 }
@@ -273,7 +269,7 @@ pub fn start(engine: Arc<ProxyEngine>, rules_snapshot: serde_json::Value, versio
     let server = loop {
         match Server::http(format!("127.0.0.1:{port}")) {
             Ok(server) => break server,
-            Err(e) if port < BASE_PORT + PORT_SPAN => {
+            Err(_) if port < BASE_PORT + PORT_SPAN => {
                 port += 1;
                 continue;
             }
@@ -286,10 +282,11 @@ pub fn start(engine: Arc<ProxyEngine>, rules_snapshot: serde_json::Value, versio
     let engine = Arc::clone(&engine);
     let rules_snapshot = Arc::new(rules_snapshot);
     let version = Arc::new(version);
+    let thread_origin = origin.clone();
     let thread = std::thread::spawn(move || {
         for request in server.incoming_requests() {
             let engine = Arc::clone(&engine);
-            let origin = origin.clone();
+            let origin = thread_origin.clone();
             let rules_snapshot = Arc::clone(&rules_snapshot);
             let version = Arc::clone(&version);
             let response = (|| -> Response<std::io::Cursor<Vec<u8>>> {
@@ -317,7 +314,7 @@ pub fn start(engine: Arc<ProxyEngine>, rules_snapshot: serde_json::Value, versio
                     }));
                 }
                 if path == "/api/filters" {
-                    return json_response(200, rules_snapshot.clone());
+                    return json_response(200, (*rules_snapshot).clone());
                 }
                 if path == "/api/reader" {
                     let target = request
@@ -366,7 +363,7 @@ pub fn start(engine: Arc<ProxyEngine>, rules_snapshot: serde_json::Value, versio
 }
 
 #[allow(dead_code)]
-fn read_request_body(request: &tiny_http::Request) -> String {
+fn read_request_body(request: &mut tiny_http::Request) -> String {
     let mut body = String::new();
     let _ = request.as_reader().read_to_string(&mut body);
     body

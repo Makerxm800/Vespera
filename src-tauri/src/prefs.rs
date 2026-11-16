@@ -103,7 +103,7 @@ impl Prefs {
                     base.insert(k.clone(), v.clone());
                 }
             }
-            base.as_mut().unwrap().as_object_mut().unwrap().remove("wallpaperData");
+            base.remove("wallpaperData");
         }
         // Normalize remembered site permissions (drop junk entries).
         if let Some(sp) = merged.get_mut("sitePermissions") {
@@ -170,7 +170,7 @@ pub fn shield_mask_from_value(shields: &Map<String, Value>, allowlist: &Map<Stri
     if b("gpc") {
         mask |= 16;
     }
-    if allowlist.values().any(|v| v.is_true()) {
+    if allowlist.values().any(|v| v.as_bool().unwrap_or(false)) {
         mask |= 32;
     }
     mask

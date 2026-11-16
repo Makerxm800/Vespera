@@ -6,7 +6,7 @@
 use serde_json::{json, Value};
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
@@ -148,7 +148,7 @@ impl DownloadManager {
             .collect()
     }
 
-    pub fn start(&self, url: &str, is_private: bool) -> Result<Value, String> {
+    pub fn start(&mut self, url: &str, is_private: bool) -> Result<Value, String> {
         let parsed = url::Url::parse(url)
             .map_err(|_| "Only HTTP and HTTPS files can be downloaded.".to_string())?;
         if parsed.scheme() != "http" && parsed.scheme() != "https" {
@@ -189,7 +189,6 @@ impl DownloadManager {
         let record_id = record.id.clone();
         let emitter = self.emitter.clone();
         let records_path = self.records_path.clone();
-        let downloads_dir = self.downloads_dir.clone();
         let record_name = record.name.clone();
         let record_at = record.at;
         let record_url = record.url.clone();
@@ -209,10 +208,15 @@ impl DownloadManager {
                     .map_err(|e| format!("Could not write the file. ({e})"))?;
                 let mut received = 0u64;
                 let mut last_emit = now_ms();
-                while let Some(chunk) = resp.chunk().map_err(|e| format!("Download interrupted. ({e})"))? {
-                    use std::io::Write;
-                    file.write_all(&chunk).map_err(|e| format!("Could not write the file. ({e})"))?;
-                    received += chunk.len() as u64;
+                let mut buffer = [0u8; 32 * 1024];
+                loop {
+                    use std::io::{Read, Write};
+                    let count = resp.read(&mut buffer).map_err(|e| format!("Download interrupted. ({e})"))?;
+                    if count == 0 {
+                        break;
+                    }
+                    file.write_all(&buffer[..count]).map_err(|e| format!("Could not write the file. ({e})"))?;
+                    received += count as u64;
                     if now_ms() - last_emit > 400 {
                         last_emit = now_ms();
                         let entry = DownloadRecord {
@@ -235,8 +239,8 @@ impl DownloadManager {
             })();
 
             let manager = {
-                let mut guard = MANAGERS.lock().unwrap();
-                guard.get(&records_path).cloned()
+            let guard = managers().lock().unwrap();
+            guard.get(&records_path.to_string_lossy().to_string()).cloned()
             };
             let Some(manager) = manager else { return };
             let mut guard = manager.lock().unwrap();
@@ -256,7 +260,7 @@ impl DownloadManager {
                 }
                 let snapshot = entry.clone();
                 drop(guard);
-                manager.persist();
+                manager.lock().unwrap().persist();
                 let _ = emitter.emit("download:done", snapshot.to_json());
             }
         });
@@ -264,7 +268,7 @@ impl DownloadManager {
         Ok(json!({ "ok": true }))
     }
 
-    pub fn action(&self, action: &str, id: &str, is_private: bool) -> Result<Value, String> {
+    pub fn action(&mut self, action: &str, id: &str, is_private: bool) -> Result<Value, String> {
         let record = self
             .records
             .iter()
@@ -321,7 +325,7 @@ impl DownloadManager {
         Err("This download cannot be resumed. Please retry it.".to_string())
     }
 
-    pub fn clear(&self, is_private: bool) {
+    pub fn clear(&mut self, is_private: bool) {
         self.records
             .retain(|r| !(r.is_private == is_private && matches!(r.status.as_str(), "progressing" | "paused")));
         self.persist();
@@ -334,15 +338,18 @@ impl DownloadManager {
 
 /// Every live DownloadManager keyed by its records path, so background
 /// download threads can find the manager that owns a record.
-pub static MANAGERS: Mutex<std::collections::HashMap<String, Arc<Mutex<DownloadManager>>>> =
-    Mutex::new(std::collections::HashMap::new());
+static MANAGERS: OnceLock<Mutex<std::collections::HashMap<String, Arc<Mutex<DownloadManager>>>>> = OnceLock::new();
+
+fn managers() -> &'static Mutex<std::collections::HashMap<String, Arc<Mutex<DownloadManager>>>> {
+    MANAGERS.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+}
 
 pub fn register_manager(manager: Arc<Mutex<DownloadManager>>) {
     let key = manager
         .lock()
         .map(|m| m.records_path.to_string_lossy().to_string())
         .unwrap_or_default();
-    if let Ok(mut guard) = MANAGERS.lock() {
+    if let Ok(mut guard) = managers().lock() {
         guard.insert(key, manager);
     }
 }

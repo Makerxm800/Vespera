@@ -5,7 +5,7 @@
 
 Im very sorry, i don't like using AI on my serious projects — i built Vespera by hand to see where the whole vibe-code experiment is actually going. It turned into a browser i use every day, so here it is. :P
 
-**Latest release: v0.2.0** — installers for Windows, macOS and Linux are published on the GitHub Releases page. The release workflow builds all platforms when a new `v*` tag is pushed.
+**Latest release: v0.2.1** — installers for Windows, macOS and Linux are published on the GitHub Releases page. The release workflow builds all platforms when a new `v*` tag is pushed.
 
 ---
 
@@ -139,7 +139,7 @@ npm run dist
 **Requirements:** Node.js 20+, npm, and the Rust toolchain (`rustup`).
 On Linux you also need the webview development packages (see the release
 workflow: `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`,
-`librsvg2-dev`, `libjavascriptcoregtk-4.1-dev`). **Published release: v0.2.0**
+`librsvg2-dev`, `libjavascriptcoregtk-4.1-dev`). **Published release: v0.2.1**
 — follow [RELEASING.md](RELEASING.md) to merge and tag a release.
 
 ### Live web preview / installable app

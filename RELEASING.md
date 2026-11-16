@@ -5,13 +5,13 @@ Cutting a release builds real desktop installers for **Windows**, **macOS** and
 
 ## Steps
 
-1. **Bump the version** in `package.json`, the top-level `package-lock.json` entries **and** `src-tauri/Cargo.toml` (e.g. `"version": "0.2.0"`). Update `CHANGELOG.md` and the in-app release notes.
+1. **Bump the version** in `package.json`, the top-level `package-lock.json` entries and `src-tauri/Cargo.toml`. Update `CHANGELOG.md` with the new release notes.
 2. **Commit & merge** the change to `main`.
-3. **Tag and push:**
+3. **Tag and push** the matching `vX.Y.Z` tag; for example:
 
    ```bash
-   git tag v0.2.0
-   git push origin v0.2.0
+   git tag v0.2.1
+   git push origin v0.2.1
    ```
 
 4. Done. GitHub Actions (`.github/workflows/release.yml`) then:
@@ -29,7 +29,7 @@ Watch progress at **Actions → Build & Release** on the repo.
 Run **Actions → Build & publish Vespera → Run workflow** manually from `main`.
 Leave `release_tag` blank to build installers and upload them as run artifacts
 without publishing a release. To rebuild and publish an existing `v*` tag,
-enter it in `release_tag` (for example, `v0.2.0`); the workflow checks out that
+enter it in `release_tag` (for example, `v0.2.1`); the workflow checks out that
 tag's source and attaches the installers to its GitHub Release.
 
 ## Code signing (optional)
