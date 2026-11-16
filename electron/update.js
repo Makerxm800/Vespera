@@ -93,8 +93,11 @@ function launchInstaller(file) {
   try {
     if (process.platform === 'win32') {
       // The NSIS wizard installs and launches Vespera after it finishes.
+      // The running app holds files the installer needs to replace, so quit
+      // shortly after the wizard starts (the renderer still gets its result).
       spawn('cmd.exe', ['/d', '/c', 'start', '""', file], { detached: true, stdio: 'ignore' }).unref();
-      return 'The Vespera installer is opening. Follow the wizard to finish the update.';
+      setTimeout(() => { try { app.quit(); } catch { /* already exiting */ } }, 2500);
+      return 'The Vespera installer is opening. Vespera will restart once the update is installed.';
     }
     if (process.platform === 'darwin') {
       spawn('open', [file], { detached: true, stdio: 'ignore' }).unref();

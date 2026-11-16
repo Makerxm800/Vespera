@@ -101,13 +101,22 @@ export function initTabHover(tabs, getSettings) {
       return;
     }
     if (!platform.isElectron || !platform.isWebview(tab.view)) return;
+    // Capture on demand when no automatic snapshot exists yet; if the page
+    // wasn't ready, retry once shortly after so hover previews still appear.
     try {
       const image = await platform.capturePreview(tab.view);
       if (!current || current.token !== token) return;
       if (image) {
         previewCache.set(tab.id, image);
         target.innerHTML = `<img src="${escapeHtml(image)}" alt="Preview of ${escapeHtml(tab.title)}" referrerpolicy="no-referrer">`;
+      } else if (!tab._previewRetried) {
+        tab._previewRetried = true;
+        setTimeout(() => {
+          tab._previewRetried = false;
+          if (current?.tab?.id === tab.id) ensurePreview(card, tab, mode, token);
+        }, 600);
       } else {
+        tab._previewRetried = false;
         target.innerHTML = previewPlaceholder('Preview not available for this page.');
       }
     } catch { /* The page may have navigated mid-capture. */ }
@@ -137,7 +146,7 @@ export function initTabHover(tabs, getSettings) {
       // and slide it to the new tab instead of tearing it down.
       const card = current.card;
       card.classList.add('is-leaving');
-      await wait(reduce() ? 0 : 120);
+      await wait(reduce() ? 0 : 80);
       card.classList.remove('is-leaving');
       fillCard(card, tab, mode, showMemory);
       applyCardClass(card, mode);
@@ -173,7 +182,7 @@ export function initTabHover(tabs, getSettings) {
     if (current?.row === row) return;
     clearTimeout(leaveTimer);
     const hoverMode = behavior.tabHoverMode || 'card';
-    timer = setTimeout(() => { timer = null; show(row, { reuse: Boolean(current?.card?.isConnected) && !reduce() }); }, hoverMode === 'tooltip' ? 180 : 280);
+    timer = setTimeout(() => { timer = null; show(row, { reuse: Boolean(current?.card?.isConnected) && !reduce() }); }, hoverMode === 'tooltip' ? 120 : 190);
   }
 
   function inStrip(node) {
@@ -234,7 +243,15 @@ export function initTabHover(tabs, getSettings) {
       if (!tab || !platform.isElectron || !platform.isWebview(tab.view)) return;
       try {
         const image = await platform.capturePreview(tab.view);
-        if (!image) return;
+        if (!image) {
+          // The page may still have been loading — retry once shortly after.
+          clearTimeout(tab._previewRetryTimer);
+          tab._previewRetryTimer = setTimeout(() => {
+            delete tab._previewRetryTimer;
+            captureForTab(tab);
+          }, 700);
+          return;
+        }
         previewCache.set(tab.id, image);
         if (current?.tab?.id === tab.id) {
           const target = current.card.querySelector('[data-hover-preview]');

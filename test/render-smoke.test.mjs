@@ -12,10 +12,12 @@ import { JSDOM } from 'jsdom';
 const html = readFileSync(fileURLToPath(new URL('../src/renderer/index.html', import.meta.url)), 'utf8');
 
 /** Fakes for the desktop (Electron) surface the renderer probes through window.vespera. */
+const EXT_ALL = 'a'.repeat(32), EXT_SITE = 'b'.repeat(32), EXT_BARE = 'c'.repeat(32), EXT_NONE = 'd'.repeat(32);
 const FAKE_EXTENSIONS = [
-  { id: 'ext-all', name: 'All Sites Guard', version: '1.2.0', enabled: true, description: 'Guards every site.', permissions: ['storage', 'tabs'], hostPermissions: ['<all_urls>'], popup: true, actionTitle: 'All Sites Guard', icon: null },
-  { id: 'ext-site', name: 'Site Tools', version: '0.9.1', enabled: true, description: 'Tools for example sites.', permissions: ['activeTab'], hostPermissions: ['*://*.example.com/*'], popup: false, actionTitle: '', icon: null },
-  { id: 'ext-none', name: 'Quiet Notes', version: '2.0.0', enabled: false, description: 'Local notes only.', permissions: ['storage'], hostPermissions: [], popup: true, actionTitle: 'Quiet Notes', icon: null },
+  { id: EXT_ALL, name: 'All Sites Guard', version: '1.2.0', enabled: true, description: 'Guards every site.', permissions: ['storage', 'tabs'], hostPermissions: ['<all_urls>'], popup: true, options: '', actionTitle: 'All Sites Guard', icon: null },
+  { id: EXT_SITE, name: 'Site Tools', version: '0.9.1', enabled: true, description: 'Tools for example sites.', permissions: ['activeTab'], hostPermissions: ['*://*.example.com/*'], popup: false, options: 'options.html', actionTitle: '', icon: null },
+  { id: EXT_BARE, name: 'Bare Worker', version: '0.4.0', enabled: true, description: 'Runs without any UI.', permissions: ['alarms'], hostPermissions: [], popup: false, options: '', actionTitle: '', icon: null },
+  { id: EXT_NONE, name: 'Quiet Notes', version: '2.0.0', enabled: false, description: 'Local notes only.', permissions: ['storage'], hostPermissions: [], popup: true, options: '', actionTitle: 'Quiet Notes', icon: null },
 ];
 
 const calls = { inspectTab: [], checkUpdate: 0, installUpdate: 0 };
@@ -30,12 +32,12 @@ function makeVespera() {
     },
     extensions: {
       list: async () => FAKE_EXTENSIONS,
-      enable: async (id) => ({ ok: true, extensions: FAKE_EXTENSIONS.map((ext) => (ext.id === id ? { ...ext, enabled: true } : ext)) }),
-      disable: async (id) => ({ ok: true, extensions: FAKE_EXTENSIONS.map((ext) => (ext.id === id ? { ...ext, enabled: false } : ext)) }),
+      enable: async (id) => { const ext = FAKE_EXTENSIONS.find((e) => e.id === id); if (ext) ext.enabled = true; return { ok: true, extensions: FAKE_EXTENSIONS }; },
+      disable: async (id) => { const ext = FAKE_EXTENSIONS.find((e) => e.id === id); if (ext) ext.enabled = false; return { ok: true, extensions: FAKE_EXTENSIONS }; },
       install: async () => ({ ok: true, name: 'Installed', extensions: FAKE_EXTENSIONS }),
       installFromStore: async () => ({ ok: true, name: 'Installed', extensions: FAKE_EXTENSIONS }),
       loadUnpacked: async () => ({ ok: true, name: 'Unpacked', extensions: FAKE_EXTENSIONS }),
-      remove: async (id) => ({ ok: true, extensions: FAKE_EXTENSIONS.filter((ext) => ext.id !== id) }),
+      remove: async (id) => { const i = FAKE_EXTENSIONS.findIndex((e) => e.id === id); if (i >= 0) FAKE_EXTENSIONS.splice(i, 1); return { ok: true, extensions: FAKE_EXTENSIONS }; },
     },
     window: { isPrivate: false, minimize() {}, maximize() {}, close() {}, toggleFullscreen() {}, incognito() {} },
     on: () => {},
@@ -166,14 +168,17 @@ test('extensions page renders sections, cards and controls', async () => {
   assert.ok(page.querySelector('#ext-access'), 'access panel present');
   assert.match(page.querySelector('#ext-access').textContent, /Open a website to see its extension access/, 'empty access state without a site');
   const cards = page.querySelectorAll('#ext-external .extension-manager-card');
-  assert.equal(cards.length, 3, 'one card per installed extension');
+  assert.equal(cards.length, 4, 'one card per installed extension');
   assert.ok(cards[0].querySelector('[data-enable-ext]'), 'enable switch present');
   assert.ok(cards[0].querySelector('[data-pin-toggle]'), 'pin switch present');
   assert.ok(cards[0].querySelector('[data-pin-ext]'), 'pin star button present');
   assert.ok(cards[0].querySelector('[data-details-ext]'), 'details button present');
   assert.match(cards[0].textContent, /On all sites/, 'all-sites access label');
+  assert.match(cards[0].textContent, /Sees and changes every website/, 'capability line from host permissions');
   assert.match(cards[1].textContent, /No site access/, 'host-scoped extension needs a host to be labelled');
-  assert.match(cards[2].textContent, /Disabled/, 'disabled extension is labelled disabled');
+  assert.match(cards[1].textContent, /Options/, 'popup-less extension offers its options page');
+  assert.match(cards[3].textContent, /Disabled/, 'disabled extension is labelled disabled');
+  assert.match(cards[2].textContent, /Runs on a schedule/, 'capability line from declared permissions');
 });
 
 test('extension details popover lists permissions and site access', async () => {
@@ -193,7 +198,7 @@ test('pinning an extension from a card pins it and adds its toolbar action', asy
   const card = page.querySelector('#ext-external .extension-manager-card');
   click(card.querySelector('[data-pin-ext]'));
   await tick(40);
-  assert.deepEqual(state.settings.extensions.pinnedIds, ['ext-all'], 'pinned id is stored');
+  assert.deepEqual(state.settings.extensions.pinnedIds, [EXT_ALL], 'pinned id is stored');
   const action = document.querySelector('#extension-actions [data-extension-action]');
   assert.ok(action, 'pinned extension action appears in the toolbar');
   // Unpinning removes it again.
@@ -202,6 +207,37 @@ test('pinning an extension from a card pins it and adds its toolbar action', asy
   await tick(40);
   assert.deepEqual(state.settings.extensions.pinnedIds, [], 'unpin clears the id');
   assert.equal(document.querySelectorAll('#extension-actions [data-extension-action]').length, 0, 'toolbar action removed');
+});
+
+test('extension toolbar actions open popup, options or details — never nothing', async () => {
+  // ext-site has no popup but ships an options page → opens it in a popover.
+  const page = activePage('.extensions-page');
+  click(page.querySelectorAll('#ext-external .extension-manager-card')[1].querySelector('[data-pin-ext]'));
+  await tick(40);
+  const action = [...document.querySelectorAll('#extension-actions [data-extension-action]')].find((b) => b.dataset.extensionAction === EXT_SITE);
+  assert.ok(action, 'site tools is pinned to the toolbar');
+  click(action);
+  await tick(40);
+  const optionsPop = document.querySelector('.extension-action-popover');
+  assert.ok(optionsPop, 'popup-less extension opens its options page');
+  assert.match(optionsPop.textContent, /Options/);
+  closePopovers();
+  // ext-bare has neither popup nor options → falls back to its details view.
+  click(page.querySelectorAll('#ext-external .extension-manager-card')[2].querySelector('[data-pin-ext]'));
+  await tick(40);
+  const bareAction = [...document.querySelectorAll('#extension-actions [data-extension-action]')].find((b) => b.dataset.extensionAction === EXT_BARE);
+  assert.ok(bareAction, 'bare worker is pinned to the toolbar');
+  click(bareAction);
+  await tick(40);
+  assert.ok(document.querySelector('.extension-perms-popover'), 'extension with no popup or options opens its details');
+  closePopovers();
+  // Unpin both to keep later tests clean.
+  for (const card of document.querySelectorAll('#ext-external .extension-manager-card')) {
+    const name = card.querySelector('h3')?.textContent;
+    if (name === 'Site Tools' || name === 'Bare Worker') click(card.querySelector('[data-pin-ext]'));
+    await tick(30);
+  }
+  assert.deepEqual(state.settings.extensions.pinnedIds, [], 'cleanup unpinned both');
 });
 
 test('built-in extension toggles flip their settings', async () => {
@@ -230,6 +266,7 @@ test('access panel groups extensions for the site in the active website tab', as
   assert.match(full.textContent, /Site Tools/, 'site-matching extension lands in full access');
   assert.match(none.textContent, /No access needed/);
   assert.match(none.textContent, /Quiet Notes/, 'disabled extension lands in no access');
+  assert.match(none.textContent, /Bare Worker/, 'extension without site access lands in no access');
   // Per-extension card labels adapt to the active site.
   const siteCard = [...activePage('.extensions-page').querySelectorAll('#ext-external .extension-manager-card')].find((card) => card.textContent.includes('Site Tools'));
   assert.match(siteCard.textContent, /On this site/, 'site-scoped extension is labelled On this site');
@@ -252,7 +289,7 @@ test('toolbar extensions menu has per-extension switches, pin and details', asyn
   const menu = document.querySelector('.extensions-menu');
   assert.ok(menu, 'extensions menu opens');
   const rows = menu.querySelectorAll('.extension-menu-row');
-  assert.equal(rows.length, 3, 'one row per installed extension');
+  assert.equal(rows.length, 4, 'one row per installed extension');
   assert.ok(rows[0].querySelector('[data-ext-enable]'), 'on/off switch present');
   assert.ok(rows[0].querySelector('[data-ext-pin]'), 'pin button present');
   assert.ok(rows[0].querySelector('[data-ext-details]'), 'details button present');
@@ -262,7 +299,7 @@ test('toolbar extensions menu has per-extension switches, pin and details', asyn
   enable.checked = false;
   enable.dispatchEvent(new window.Event('change', { bubbles: true }));
   await tick(60);
-  assert.equal(FAKE_EXTENSIONS[2].enabled, false, 'disable was applied');
+  assert.equal(FAKE_EXTENSIONS.find((e) => e.id === EXT_BARE).enabled, false, 'disable was applied');
   closePopovers();
 });
 

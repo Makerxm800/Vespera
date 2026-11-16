@@ -81,6 +81,34 @@ export function extensionSiteAccess(ext, host = '') {
   return { level: 'none', enabled: true, all: false, onSite: false, access: 'No site access' };
 }
 
+/**
+ * Human-readable capabilities an extension's declared permissions grant it.
+ * The UI uses this to show what each extension can actually do — extensions
+ * differ in what they know how to do, so the list reflects their real tools.
+ */
+export function extensionCapabilities(ext) {
+  const permissions = new Set(Array.isArray(ext?.permissions) ? ext.permissions : []);
+  const hostPermissions = Array.isArray(ext?.hostPermissions) ? ext.hostPermissions : [];
+  const all = hostPermissions.some((p) => ['<all_urls>', '*://*/*'].includes(String(p).trim()));
+  const out = [];
+  if (permissions.has('storage') || permissions.has('unlimitedStorage')) out.push('Saves data on this device');
+  if (permissions.has('tabs')) out.push('Sees your open tabs');
+  if (permissions.has('activeTab')) out.push('Acts only when you use the site');
+  if (permissions.has('scripting') || permissions.has('scriptingPrivate')) out.push('Runs scripts on pages');
+  if (permissions.has('notifications')) out.push('Can send you notifications');
+  if (permissions.has('clipboardRead') || permissions.has('clipboardWrite')) out.push('Can read or write the clipboard');
+  if (permissions.has('downloads')) out.push('Can save files for you');
+  if (permissions.has('bookmarks')) out.push('Can see and change bookmarks');
+  if (permissions.has('history')) out.push('Can see browsing history');
+  if (permissions.has('alarms')) out.push('Runs on a schedule');
+  if (permissions.has('contextMenus')) out.push('Adds menu items');
+  if (permissions.has('idle')) out.push('Knows when you are away');
+  if (all) out.push('Sees and changes every website');
+  else if (hostPermissions.length) out.push('Sees and changes the sites it is granted');
+  if (!out.length) out.push('Runs in the background without extra tools');
+  return out;
+}
+
 /** Plain-language summary of what an extension needs to run. */
 export function extensionNeedsSummary(ext, host = '') {
   const permissions = Array.isArray(ext?.permissions) ? ext.permissions : [];

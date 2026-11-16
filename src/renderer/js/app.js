@@ -378,11 +378,23 @@ function inspectTab(tab = tabs.active, x, y) {
     if (!result?.ok) toast(result?.message || 'The page inspector could not be opened.', 'error');
   }).catch((err) => toast(err.message || 'The page inspector could not be opened.', 'error'));
 }
-/** Snapshot the active tab while it is visible so every tab can show a preview on hover. */
+/**
+ * Snapshot the active tab while it is visible so every tab can show a
+ * preview on hover. Capped so navigation/chrome refreshes don't trigger a
+ * capture storm (the expensive part) — only on URL change or at most every
+ * 8s, and never while the page is still loading.
+ */
 function capturePreviewSoon(tab) {
-  if (!tab || tab._internal || !platform.isElectron || !tab.view) return;
+  if (!tab || tab._internal || !platform.isElectron || !tab.view || tab.loading) return;
+  const now = Date.now();
+  if (tab._previewUrl === tab.url && now - (tab._previewAt || 0) < 8000) return;
   clearTimeout(tab._previewCaptureTimer);
-  tab._previewCaptureTimer = setTimeout(() => tabHover?.captureForTab(tab), 450);
+  tab._previewCaptureTimer = setTimeout(() => {
+    tab._previewCaptureTimer = null;
+    tab._previewUrl = tab.url;
+    tab._previewAt = Date.now();
+    tabHover?.captureForTab(tab);
+  }, 450);
 }
 async function openReader(tab = tabs.active) {
   const previousArticle = tab?.entries.slice(0, tab.entryIndex).reverse().find((e) => /^https?:/.test(e.url));
@@ -548,7 +560,7 @@ function openMenu(anchor) {
     ${item('customize', 'palette', 'Customize Vespera')}${item('theme', s.theme === 'dark' ? 'sun' : 'moon', s.theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme')}
     ${item('vertical', 'split', (s.tabLayout === 'vertical' ? '✓ ' : '') + 'Vertical tabs')}${item('railhide', 'panel', (s.railHidden && s.tabLayout !== 'vertical' ? '✓ ' : '') + 'Hide sidebar')}${item('bookbar', 'bookmark', (s.showBookmarksBar ? '✓ ' : '') + 'Bookmarks bar')}${item('focus', 'eye', (s.extensions.focusMode ? '✓ ' : '') + 'Focus mode')}
     <div class="menu-sep"></div>
-    ${item('palette', 'keyboard', 'Command palette', 'Ctrl+K')}${item('privacy', 'shield', 'Privacy Hub')}${item('account', 'user', state.user ? 'Account · ' + escapeHtml(state.user.displayName) : 'Sign in / create account')}${item('settings', 'gear', 'Settings')}${item('check-update', 'update', 'Check for updates')}${item('updates', 'sparkle', 'What’s new')}${item('logs', 'flask', 'View logs')}${item('welcome', 'sparkle', 'Welcome & about')}
+    ${item('palette', 'keyboard', 'Command palette', 'Ctrl+K')}${item('privacy', 'shield', 'Privacy Hub')}${item('account', 'user', state.user ? 'Account · ' + escapeHtml(state.user.displayName) : 'Sign in / create account')}${item('settings', 'gear', 'Settings')}${item('check-update', 'update', 'Check for updates')}<span class="menu-update-flag hidden" id="menu-update-flag" title="New Vespera version available" aria-label="Update available">${icon('update')}</span>${item('updates', 'sparkle', 'What’s new')}${item('logs', 'flask', 'View logs')}${item('welcome', 'sparkle', 'Welcome & about')}
   `, { label: 'Toggle Menu', className: 'menu browser-menu' });
   if (!pop) return;
   if (!platform.isElectron) pop.el.querySelector('[data-act="private"]').disabled = true;
@@ -696,16 +708,25 @@ async function showExtensionsMenu(anchor) {
 }
 
 function showExtensionAction(anchor, ext) {
-  if (!platform.isElectron || !ext?.enabled || !ext.popup) {
-    toast(ext?.enabled ? `${ext?.name || 'This extension'} does not provide a toolbar popup.` : 'Enable this extension before opening it.', 'info');
+  if (!platform.isElectron) return toast('Extensions are available in the desktop app.', 'info');
+  if (!ext?.enabled) return toast('Enable this extension before opening it.', 'info');
+  const safePath = (value) => typeof value === 'string' && value.split('/').every((part) => part && part !== '..') ? value : '';
+  const extId = String(ext.id || '');
+  if (!/^[a-p]{32}$/i.test(extId)) return toast('This extension has an invalid identifier.', 'error');
+  // Prefer the toolbar popup; extensions that only ship an options page (or
+  // neither) still open something useful instead of silently doing nothing.
+  const popupUrl = safePath(ext.popup) ? `chrome-extension://${extId}/${safePath(ext.popup).split('/').map((part) => encodeURIComponent(part)).join('/')}` : '';
+  if (!popupUrl) {
+    if (safePath(ext.options)) {
+      // chrome-extension:// pages can't go through the public omnibox
+      // sanitizer, so load the options page in a webview popover like a popup.
+      const optionsUrl = `chrome-extension://${extId}/${safePath(ext.options).split('/').map((part) => encodeURIComponent(part)).join('/')}`;
+      openPopover(anchor, `<div class="extension-action-popup-head"><span>${icon('puzzle')}</span><b>${escapeHtml(ext.name || 'Extension')} · Options</b><span class="grow"></span><button class="icon-btn" data-dismiss aria-label="Close extension options" title="Close">${icon('x')}</button></div><webview class="extension-action-frame" src="${escapeHtml(optionsUrl)}" partition="persist:vespera" allowpopups></webview>`, { className: 'popover extension-action-popover', label: `${ext.name || 'Extension'} options` });
+      return;
+    }
+    extensionPermissionsPopover(anchor, ext);
     return;
   }
-  if (!/^[a-p]{32}$/i.test(ext.id || '') || typeof ext.popup !== 'string' || ext.popup.split('/').some((part) => part === '..')) {
-    toast('This extension has an invalid toolbar popup path.', 'error');
-    return;
-  }
-  const popupPath = ext.popup.split('/').map((part) => encodeURIComponent(part)).join('/');
-  const popupUrl = `chrome-extension://${ext.id}/${popupPath}`;
   const popup = openPopover(anchor, `<div class="extension-action-popup-head"><span>${icon('puzzle')}</span><b>${escapeHtml(ext.name || 'Extension')}</b><span class="grow"></span><button class="icon-btn" data-dismiss aria-label="Close extension popup" title="Close">${icon('x')}</button></div><webview class="extension-action-frame" src="${escapeHtml(popupUrl)}" partition="persist:vespera" allowpopups></webview>`, { className: 'popover extension-action-popover', label: `${ext.name || 'Extension'} popup` });
   if (!popup) return;
   const frame = popup.el.querySelector('webview');
@@ -920,6 +941,28 @@ function persistSession() {
 }
 function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(persistSession, 150); }
 
+/**
+ * Check for a newer release shortly after startup — once per 12 hours, and
+ * only in the desktop app — so updates happen on their own when a release is
+ * published, without the user having to open anything.
+ */
+function scheduleUpdateCheck() {
+  if (!platform.isElectron || state.private) return;
+  const KEY = 'vespera.lastUpdateCheck';
+  let checkedAt = 0;
+  try { checkedAt = Number(localStorage.getItem(KEY)) || 0; } catch { /* storage errors are reported elsewhere */ }
+  if (Date.now() - checkedAt < 12 * 60 * 60 * 1000) return;
+  try { localStorage.setItem(KEY, String(Date.now())); } catch { /* ignore */ }
+  window.vespera.app.checkUpdate()
+    .then((result) => {
+      if (result?.ok && result.hasUpdate) {
+        toast(`Vespera ${result.latest} is available — open What's new to install it.`, 'info', 8000);
+        $('menu-update-flag')?.classList.remove('hidden');
+      }
+    })
+    .catch(() => { /* The next check (manual or on the next launch) retries. */ });
+}
+
 function boot() {
   Object.assign(bridge, {
     previewRestricted: () => previewRestricted,
@@ -1104,6 +1147,7 @@ function boot() {
     });
   }
   updateExtensionActions();
+  scheduleUpdateCheck();
   fetch('/api/health').then((r) => r.json()).then((health) => {
     previewRestricted = Boolean(health.previewRestricted); serviceVersion = health.version || '';
     omnibox?.refreshEngine();

@@ -183,7 +183,7 @@ body.tabs-inactive-minimal .vtab:not(.active):hover { opacity: 1; background: va
 
 /* Lightweight hover cards, anchored to the tab row and safe in both layouts. */
 .tab-hovercard {
-  position: fixed; z-index: 140; width: 276px; max-width: calc(100vw - 20px); max-height: calc(100dvh - 20px);
+  position: fixed; z-index: 140; width: 248px; max-width: calc(100vw - 20px); max-height: calc(100dvh - 20px);
   overflow: hidden; padding: 12px; border: 1px solid var(--border-strong); border-radius: 14px;
   color: var(--text); background: color-mix(in srgb, var(--surface) 94%, transparent);
   box-shadow: var(--shadow); backdrop-filter: blur(22px) saturate(1.16); pointer-events: none;
@@ -191,21 +191,21 @@ body.tabs-inactive-minimal .vtab:not(.active):hover { opacity: 1; background: va
 }
 .tab-hovercard.is-tooltip { width: 248px; padding: 9px 11px; border-radius: 11px; box-shadow: var(--shadow-soft); }
 .tab-hovercard-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.tab-hovercard-favicon { display: grid; place-items: center; flex: none; width: 30px; height: 30px; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; color: var(--accent); background: var(--surface-2); }
+.tab-hovercard-favicon { display: grid; place-items: center; flex: none; width: 26px; height: 26px; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; color: var(--accent); background: var(--surface-2); }
 .tab-hovercard-favicon img { width: 18px; height: 18px; object-fit: contain; }
 .tab-hovercard-favicon svg { width: 17px; height: 17px; }
 .tab-hovercard-copy { display: grid; gap: 1px; min-width: 0; }
 .tab-hovercard-copy strong, .tab-hovercard-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tab-hovercard-copy strong { font-size: 12px; font-weight: 680; }
 .tab-hovercard-copy span { color: var(--text-dim); font-size: 10.5px; }
-.tab-hovercard-preview { height: 142px; margin-top: 10px; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-2); }
+.tab-hovercard-preview { height: 112px; margin-top: 8px; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-2); }
 .tab-hovercard-preview > img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .tab-hovercard-placeholder { display: grid; place-items: center; align-content: center; gap: 7px; width: 100%; height: 100%; padding: 12px; color: var(--text-faint); text-align: center; font-size: 10px; line-height: 1.45; }
 .tab-hovercard-placeholder svg { width: 19px; height: 19px; color: var(--accent); }
-.tab-hovercard-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; margin-top: 10px; color: var(--text-dim); font-size: 10px; }
+.tab-hovercard-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; margin-top: 8px; color: var(--text-dim); font-size: 10px; }
 .tab-hovercard-state { flex: none; padding: 2px 7px; border-radius: 99px; background: var(--surface-2); }
 .tab-hovercard-memory { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
-.tab-hovercard-url { margin-top: 7px; overflow-wrap: anywhere; color: var(--text-faint); font-family: var(--font-mono); font-size: 9px; line-height: 1.45; }
+.tab-hovercard-url { margin-top: 6px; overflow-wrap: anywhere; color: var(--text-faint); font-family: var(--font-mono); font-size: 9px; line-height: 1.45; }
 .tab-hovercard.is-tooltip .tab-hovercard-favicon { width: 24px; height: 24px; }
 .tab-hovercard.is-tooltip .tab-hovercard-meta { margin-top: 6px; }
 .tab-hovercard.is-tooltip .tab-hovercard-url { margin-top: 4px; }
