@@ -253,6 +253,7 @@ jobs:
               --title "$TITLE" \
               --notes "$NOTES" \
               --target "$TARGET"
+          fi
 
       - name: Report publish failure details
         if: failure()
@@ -270,5 +271,4 @@ jobs:
               line="${line//$'\r'/'%0D'}"
               printf '::error::%s\n' "$line"
             done
-          fi
           fi
