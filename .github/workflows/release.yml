@@ -24,10 +24,10 @@ jobs:
           - os: windows-latest
             arch: x64
             bundles: msi,nsis
-          - os: macos-15
+          - os: macos-15-intel
             arch: x64
             bundles: dmg
-          - os: macos-15-arm64
+          - os: macos-15
             arch: arm64
             bundles: dmg
           - os: ubuntu-latest
