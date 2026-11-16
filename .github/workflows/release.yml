@@ -51,6 +51,11 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
       - name: Install Linux webview dependencies
         if: runner.os == 'Linux'
         run: |
@@ -67,11 +72,26 @@ jobs:
         run: npm run icons
 
       - name: Build with Tauri
-        run: npx tauri build --bundles ${{ matrix.bundles }}
+        run: npx tauri build --bundles ${{ matrix.bundles }} 2>&1 | tee /tmp/tauri-build.log
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Upload build log to Gist (on failure)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo "## Build log: ${{ matrix.os }} (${{ matrix.arch }})"
+            echo ""
+            echo '```'
+            tail -200 /tmp/tauri-build.log
+            echo '```'
+          } > /tmp/gist.md
+          gh gist create /tmp/gist.md --desc "vespera-build-failure-${{ matrix.os }}-${{ matrix.arch }}"
+
       - name: Upload installers
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: vespera-${{ matrix.os }}-${{ matrix.arch }}
