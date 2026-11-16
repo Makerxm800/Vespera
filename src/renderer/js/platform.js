@@ -175,16 +175,16 @@ export const platform = {
   },
   async setZoom(view, factor) {
     const f = this.inner(view);
-    if (f?.tagName === 'WEBVIEW') f.setZoomFactor(factor);
+    if (f?.tagName === 'WEBVIEW') { f.setZoomFactor?.(factor); return; }
     else if (view) {
       view.style.setProperty('--page-zoom', factor);
       if (f) { f.style.width = `${100 / factor}%`; f.style.height = `${100 / factor}%`; f.style.transform = `scale(${factor})`; }
       else { view.style.zoom = factor; }
     }
   },
-  find(view, text, opts = {}) { const f = this.inner(view); if (f?.tagName === 'WEBVIEW') { if (text) f.findInPage(text, opts); else f.stopFindInPage('clearSelection'); } },
-  stopFind(view) { const f = this.inner(view); if (f?.tagName === 'WEBVIEW') f.stopFindInPage('clearSelection'); },
-  print(view) { const f = this.inner(view); if (f?.tagName === 'WEBVIEW') f.print(); },
-  download(url) { const f = this.inner(viewOrCurrent()); if (f?.tagName === 'WEBVIEW') f.downloadURL(url); },
+  find(view, text, opts = {}) { const f = this.inner(view); if (f?.tagName === 'WEBVIEW') { if (text) f.findInPage?.(text, opts); else f.stopFindInPage?.('clearSelection'); } },
+  stopFind(view) { const f = this.inner(view); if (f?.tagName === 'WEBVIEW') f.stopFindInPage?.('clearSelection'); },
+  print(view) { const f = this.inner(view); if (f?.tagName === 'WEBVIEW') f.print?.(); },
+  download(url) { const f = this.inner(viewOrCurrent()); if (f?.tagName === 'WEBVIEW') f.downloadURL?.(url); },
 };
 function viewOrCurrent() { return document.querySelector('.web-frame:not(.hidden)'); }

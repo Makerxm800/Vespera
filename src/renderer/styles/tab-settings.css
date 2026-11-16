@@ -211,3 +211,11 @@ body.tabs-inactive-minimal .vtab:not(.active):hover { opacity: 1; background: va
 .tab-hovercard.is-tooltip .tab-hovercard-url { margin-top: 4px; }
 @keyframes tab-hover-in { from { opacity: 0; transform: translateY(-3px) scale(.985); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .tab-hovercard { animation: none; } }
+
+/* Smooth handoffs when the pointer moves between tabs: the card crossfades and slides. */
+.tab-hovercard.is-leaving { opacity: 0; transform: translateY(-3px) scale(.985); }
+.tab-hovercard.is-switching { animation: tab-hover-in .18s var(--ease) both; }
+@media (prefers-reduced-motion: reduce) {
+  .tab-hovercard.is-leaving { opacity: 0; transform: none; }
+  .tab-hovercard.is-switching { animation: none; }
+}

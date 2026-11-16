@@ -62,7 +62,7 @@ export function renderSettings(container, ctx) {
     ['appearance', 'palette', 'Appearance'], ['tabs', 'split', 'Tabs & groups'],
     ['search', 'search', 'Search & home'], ['browser', 'globe', 'Browser'],
     ['privacy', 'shield', 'Privacy'], ['extensions', 'puzzle', 'Extensions'],
-    ['downloads', 'download', 'Downloads'], ['account', 'user', 'Account'], ['about', 'info', 'About Vespera'],
+    ['downloads', 'download', 'Downloads'], ['updates', 'update', 'Updates'], ['account', 'user', 'Account'], ['about', 'info', 'About Vespera'],
   ];
   container.innerHTML = `<div class="page settings-page settings-layout">
     <header class="settings-heading"><div><span class="eyebrow">YOUR BROWSER, YOUR WAY</span><h1 class="page-title">Settings</h1><p class="page-sub">Make Vespera feel right for you. Changes apply immediately and stay on this device.</p></div><span class="chip chip-ok">${icon('check')} Saved on this device</span></header>
@@ -129,12 +129,15 @@ export function renderSettings(container, ctx) {
       <div class="setting-row"><div><div class="s-label">Site permissions</div><div class="s-desc" id="site-permissions-label">${window.vespera?.permissions ? 'Camera, microphone, location and notification choices you asked Vespera to remember.' : 'Available in the desktop app.'}</div></div><button class="btn" id="btn-reset-permissions" disabled>Reset choices</button></div>
       <div class="setting-row"><div><div class="s-label">Browsing history</div><div class="s-desc">Private windows never save history. Normal history can be synced to your account.</div></div><button class="btn btn-danger" id="btn-clear-history">${icon('trash')} Clear history</button></div>
     </section>
-    <section class="section" id="extensions"><h2>${icon('split')} Extensions</h2><div class="setting-row"><div><div class="s-label">Your included tools</div><div class="s-desc">Shields, Dark Pages, Reader View and Focus Mode. No account or store needed.</div></div><button class="btn" id="settings-extensions">Manage extensions ${icon('external')}</button></div></section>
+    <section class="section" id="extensions"><h2>${icon('split')} Extensions</h2><p class="settings-section-sub">Shields, Dark Pages, Reader View and Focus Mode ship with Vespera. Manage third-party extensions, pin them to the toolbar and review exactly what each one can access.</p><div class="setting-row"><div><div class="s-label">Your included tools</div><div class="s-desc">No account or store needed for the built-ins.</div></div><button class="btn" id="settings-extensions">Manage extensions ${icon('external')}</button></div>
+      ${toggleRow('extensions.developerMode', 'Developer mode', 'Load unpacked extension folders from this device. Each folder is still reviewed before it runs, and this local security setting is never synced.', s.extensions.developerMode, !window.vespera)}
+      <div class="setting-row"><div><div class="s-label">Pinned extensions</div><div class="s-desc" id="pinned-count-label">${(s.extensions.pinnedIds || []).length} pinned to the toolbar.</div></div><button class="btn" id="settings-pinned">Manage pinned</button></div></section>
     <section class="section" id="downloads"><h2>${icon('download')} Downloads</h2>
       ${toggleRow('askDownloadLocation', 'Ask where to save each file', 'Desktop downloads. When off, use the folder below or your system Downloads folder.', s.askDownloadLocation)}
       <div class="setting-row"><div><div class="s-label">Download folder</div><div class="s-desc" id="download-folder-label">${escapeHtml(s.downloadPath || 'System Downloads folder')}</div></div><button class="btn" id="choose-download-folder" ${!window.vespera ? 'disabled title="Available in the desktop app"' : ''}>Choose folder</button></div>
       <div class="setting-row"><div><div class="s-label">Downloaded files</div><div class="s-desc">${window.vespera ? 'See progress, open files, or reveal them in your file manager.' : 'Files are saved by the browser running this preview.'}</div></div><button class="btn" id="settings-downloads">Open downloads</button></div>
     </section>
+    <section class="section" id="updates"><h2>${icon('update')} Updates</h2><p class="settings-section-sub">Check for newer Vespera builds and install them right from the browser.</p><div class="card update-settings-card"><div class="row" style="gap:10px;flex-wrap:wrap"><div class="grow"><b>Vespera ${escapeHtml(ctx.version() || '0.1.8')}</b><div class="small muted" id="update-settings-status">Check the latest release on GitHub.</div></div><button class="btn btn-primary" id="settings-check-update" ${!window.vespera ? 'disabled title="Updates are installed by the desktop app"' : ''}>${icon('update')} Check for updates</button></div><div id="update-settings-detail"></div></div></section>
     <section class="section" id="account"><h2>${icon('user')} Account & sync</h2><div class="setting-row"><div><div class="s-label">${state.user ? escapeHtml(state.user.displayName) : 'Not signed in'}</div><div class="s-desc">Sync settings, bookmarks and history with your Vespera service.</div></div><button class="btn btn-primary" id="btn-account">${state.user ? 'Manage account' : 'Sign in'}</button></div>
       <div class="setting-row"><div><div class="s-label">Download a local backup</div><div class="s-desc">Export settings, bookmarks and browsing history as a JSON file. Passwords, session tokens and sign-in credentials are never included.</div></div><button class="btn" id="download-local-backup" ${state.private ? 'disabled title="Unavailable in private windows"' : ''}>${icon('download')} Save backup</button></div></section>
     <section class="section" id="about"><h2>${icon('info')} About Vespera</h2><div class="card"><div class="row"><div class="about-mark">${icon('sparkle')}</div><div class="grow"><b>Vespera Browser</b><div class="small muted">Version ${escapeHtml(ctx.version() || '0.1.8')} · ${window.vespera ? 'Chromium desktop' : 'Web preview'} · MIT licensed</div></div><div class="s-control"><button class="btn btn-sm" id="settings-updates">Release notes</button><button class="btn btn-sm" id="settings-welcome">Welcome & help</button></div></div><p class="small muted" style="margin-top:16px">No analytics. No telemetry. Settings are local-first; wallpaper images are never synced.</p></div></section>
@@ -415,6 +418,39 @@ export function renderSettings(container, ctx) {
     } catch (err) { ctx.toast(err.message || 'Could not open system settings.', 'error', 6000); }
   };
   container.querySelector('#settings-downloads').onclick = () => ctx.navigate('vespera://downloads');
+  container.querySelector('#settings-pinned').onclick = () => ctx.navigate('vespera://extensions#installed');
+  const updateStatus = container.querySelector('#update-settings-status');
+  const updateDetail = container.querySelector('#update-settings-detail');
+  container.querySelector('#settings-check-update').onclick = async () => {
+    const button = container.querySelector('#settings-check-update');
+    button.disabled = true;
+    updateStatus.textContent = 'Checking for newer builds…';
+    updateDetail.innerHTML = '';
+    try {
+      const result = await window.vespera.app.checkUpdate();
+      if (!result?.ok) {
+        updateStatus.textContent = 'Check failed';
+        updateDetail.innerHTML = `<p class="small muted">${escapeHtml(result?.message || 'Could not reach the update service.')} Try again in a moment.</p>`;
+        return;
+      }
+      if (result.hasUpdate) {
+        updateStatus.textContent = `Update available: Vespera ${result.latest}`;
+        updateDetail.innerHTML = `<p class="small muted">You’re on ${escapeHtml(result.current)}. ${escapeHtml(result.publishedAt ? 'Released ' + formatDate(result.publishedAt) : '')} Open the Updates page to download and install it.</p>`;
+        ctx.navigate('vespera://updates');
+      } else {
+        updateStatus.textContent = `You’re up to date · v${escapeHtml(result.latest || result.current)}`;
+        updateDetail.innerHTML = `<p class="small muted">No newer build is available right now.</p>`;
+      }
+    } catch (err) {
+      updateStatus.textContent = 'Check failed';
+      updateDetail.innerHTML = `<p class="small muted">${escapeHtml(err.message || 'Could not check for updates.')}</p>`;
+    } finally {
+      if (button.isConnected) button.disabled = false;
+    }
+  };
+  function formatDate(value) {
+    try { return new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); } catch { return ''; }
+  }
   container.querySelector('#settings-welcome').onclick = () => ctx.navigate('vespera://welcome');
   container.querySelector('#settings-updates').onclick = () => ctx.navigate('vespera://updates');
   container.querySelector('#choose-download-folder').onclick = async () => {

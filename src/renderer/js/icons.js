@@ -53,6 +53,8 @@ export const icons = {
   move: S('<path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/>'),
   puzzle: S('<path d="M9 3v3a2 2 0 01-2 2H4v4h3a2 2 0 012 2v3h4v-3a2 2 0 012-2h3V8h-3a2 2 0 01-2-2V3z"/><path d="M9 21h6v-3a2 2 0 012-2h3"/>'),
   pin: S('<path d="M16 3l5 5-4 1-3 5-3-3-5 3-1-1 3-5-3-3 5-3 1-4z"/><path d="M4 20l6-6"/>'),
+  inspect: S('<path d="M4 5h7v7H4z"/><path d="M13 12h7v7h-7z"/><path d="M10.5 8.5L15.5 13.5"/><path d="M8.5 4v1.5M5.5 5.5H4"/><path d="M15.5 12v1.5M18.5 13.5H17"/>'),
+  update: S('<path d="M20 12a8 8 0 11-2.34-5.66"/><path d="M20 4v5h-5"/><path d="M8 17l-3-3 3-3"/><path d="M5 14h7"/>'),
 };
 
 export function icon(name, cls = '') {

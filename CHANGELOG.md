@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.1.9
+
+### Extensions, in full control
+- The Extensions page is remade with clearer cards: turn extensions on or off, pin them to the toolbar, open their popup and remove them, all from one place.
+- Every installed extension now shows exactly what it can reach — **On all sites**, **On this site** or **No site access** — with a Details view listing its permissions and host access, like the site information Chrome shows.
+- New **Access on this site** panel: see which extensions can see and change information on the website in your active tab, split into those with full access and those that don’t need any.
+- The toolbar Extensions menu gains per-extension On/Off switches, pin buttons and a details popover.
+
+### Inspect any page
+- Right-click any page or any tab and choose **Inspect** to open the page inspector for that site — on every tab, not just the active one.
+
+### Tab previews for every tab
+- Hover cards show a page preview for all tabs: each tab’s snapshot is captured while it is the visible tab and reused whenever you hover it.
+- Moving the mouse between tabs now crossfades the card and slides it smoothly to the new tab instead of flickering away.
+
+### Updates from the browser
+- New **Check for updates** button on the Updates page, in Settings and in the browser menu. It compares your build with the latest GitHub release and downloads and installs the new version for your platform.
+
+### Settings & menu
+- Tab behavior toggles moved out of the browser menu into the **Tabs & groups** section, where they belong.
+- Settings gains an **Updates** section and a fuller Extensions section (developer mode, pinned count).
+
+Release: https://github.com/Makerxm800/Vespera/releases/tag/v0.1.9
+
 ## 0.1.8
 
 ### Groups that move and stay put
