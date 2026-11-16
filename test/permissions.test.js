@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const perms = require('../electron/permissions');
+const perms = require('../src/shared/permissions');
 
 test('fullscreen and clipboard copy work without prompting, even in private windows', () => {
   for (const privateMode of [false, true]) {

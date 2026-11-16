@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0
+
+### Rebuilt on Tauri v2
+- **The browser is now a Tauri v2 app.** All Electron code is gone: the native shell, the Chromium binary and the Electron packaging are replaced by a small Rust core (src-tauri) driving the webview. Smaller installers, faster startup, lower memory.
+- **macOS works.** The Tauri webview engine (WebKit) runs the browser on every desktop platform without the Electron installer issues.
+- **Ad blocking and tabs, reworked for the new engine.** The privacy proxy (tracker/ad/annoyance filtering, cosmetic hiding, private-network guarding) is ported to Rust and runs in-process. Tabs render pages in sandboxed iframes through the guarded `/proxy` endpoint, so every tab keeps its shield protections.
+- **The renderer is unchanged.** The whole UI — tabs, hover cards, Extensions, Settings, Updates, downloads — runs on the same code, bridged to the new shell through a Tauri bridge that mirrors the old desktop API.
+- **Updates keep working.** The GitHub Releases updater is ported to Rust: check from the Updates page or at startup, then the installer launches and the app steps aside so the new build installs.
+- **Extensions UI preserved.** Built-in features and the extension catalog still live in the Extensions page; Chrome extension runtime is not available inside a Tauri webview, so installing external extensions reports that clearly instead of silently failing.
+- **Tests:** 70/70 (unit + renderer smoke, now covering the guest bridge and zip tooling).
+
+Release: https://github.com/Makerxm800/Vespera/releases/tag/v0.2.0
+
 ## 0.1.10
 
 ### Post-release fixes

@@ -11,7 +11,7 @@ import { JSDOM } from 'jsdom';
 
 const html = readFileSync(fileURLToPath(new URL('../src/renderer/index.html', import.meta.url)), 'utf8');
 
-/** Fakes for the desktop (Electron) surface the renderer probes through window.vespera. */
+/** Fakes for the desktop (Tauri) surface the renderer probes through window.vespera. */
 const EXT_ALL = 'a'.repeat(32), EXT_SITE = 'b'.repeat(32), EXT_BARE = 'c'.repeat(32), EXT_NONE = 'd'.repeat(32);
 const FAKE_EXTENSIONS = [
   { id: EXT_ALL, name: 'All Sites Guard', version: '1.2.0', enabled: true, description: 'Guards every site.', permissions: ['storage', 'tabs'], hostPermissions: ['<all_urls>'], popup: true, options: '', actionTitle: 'All Sites Guard', icon: null },
@@ -59,6 +59,12 @@ async function boot() {
   window.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0);
   window.cancelAnimationFrame = (id) => clearTimeout(id);
   window.fetch = async () => ({ ok: true, status: 200, json: async () => ({ previewRestricted: false, version: '0.1.9' }) });
+  // The Tauri shell injects __TAURI_INTERNALS__; the renderer bridge turns it
+  // into window.vespera. The smoke test simulates the desktop the same way.
+  window.__TAURI_INTERNALS__ = {
+    invoke: async () => ({ ok: true }),
+    listen: async () => () => {},
+  };
   window.vespera = makeVespera();
 
   // Webviews in the real desktop expose these — give jsdom's elements the same
@@ -338,23 +344,24 @@ test('tab context menu offers Inspect for any tab', async () => {
   closePopovers();
 });
 
-test('tab hover shows a card, captures a preview, and follows the mouse to the next tab', async () => {
+test('tab hover shows a card and follows the mouse to the next tab', async () => {
   state.set('tabBehavior.tabHoverMode', 'preview');
   // A second website tab with its own host so the hovered titles differ.
   bridge.openTab('https://news.example.com/');
   await tick(60);
   const siteRows = [...document.querySelectorAll('#tabstrip .tab')].filter((row) => ['example.com', 'news.example.com'].includes(row.getAttribute('aria-label')));
   assert.ok(siteRows.length >= 2, 'need at least two website tabs');
-  // The active website tab is the one that was just captured a moment ago.
   pointer('pointerover', siteRows[siteRows.length - 1]);
   await tick(360);
   let card = document.querySelector('.tab-hovercard');
   assert.ok(card, 'hover card appears for the website tab');
   const firstTitle = card.querySelector('.tab-hovercard-copy strong').textContent;
-  // The snapshot captured while this tab was active is reused for the preview.
+  // The Tauri webview has no per-tab capturePage; the capture path must
+  // degrade gracefully and the card keeps working without a preview image.
   await tick(600);
   card = document.querySelector('.tab-hovercard');
-  assert.ok(card.querySelector('[data-hover-preview] img'), 'hover card shows the captured page preview');
+  assert.ok(card, 'hover card survives the unavailable page capture');
+  assert.ok(card.querySelector('.tab-hovercard-copy strong'), 'hover card still shows the tab title');
   pointer('pointerover', siteRows[0]);
   await tick(520); // hover delay + crossfade handoff
   card = document.querySelector('.tab-hovercard');

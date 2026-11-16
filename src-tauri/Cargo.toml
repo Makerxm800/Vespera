@@ -1,0 +1,33 @@
+[package]
+name = "vespera"
+version = "0.2.0"
+description = "Vespera — a privacy browser (Tauri v2 shell)"
+authors = ["Vespera Community"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "brotli", "stream", "blocking"] }
+regex = "1"
+tiny_http = "0.12"
+include_dir = "0.7"
+sysinfo = "0.33"
+url = "2"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
+panic = "abort"

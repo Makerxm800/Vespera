@@ -17,7 +17,15 @@ export function proxyUrl(url, docUrl = url) {
 }
 
 export const platform = {
+  // "Desktop app" — true for both the legacy Electron shell and the Tauri
+  // shell (window.vespera is exposed by either). Gates Inspect, extension
+  // installs, private windows and other desktop-only UI.
   get isElectron() { return typeof window.vespera === 'object' && window.vespera !== null; },
+  // True only when real Chromium <webview> frames exist. The Tauri shell is a
+  // desktop app but renders pages in sandboxed iframes through the proxy.
+  get hasWebview() {
+    return typeof window.process === 'object' && window.process !== null && typeof window.process?.versions?.electron === 'string';
+  },
   get isPrivate() { return Boolean(window.vespera?.window?.isPrivate); },
   minimize() { window.vespera?.window?.minimize(); },
   maximize() { window.vespera?.window?.maximize(); },
@@ -62,7 +70,7 @@ export const platform = {
     wrapper.className = 'web-frame';
     wrapper.dataset.tabId = tab.id;
     let frame;
-    if (this.isElectron) {
+    if (this.hasWebview) {
       frame = document.createElement('webview');
       frame.setAttribute('src', tab.url);
       frame.setAttribute('partition', this.isPrivate ? 'incognito' : 'persist:vespera');
