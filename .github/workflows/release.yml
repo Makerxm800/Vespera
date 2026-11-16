@@ -157,6 +157,9 @@ jobs:
       (inputs.artifact_run_id != '' || needs.build.result == 'success')))
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
     steps:
       - name: Check out release source
         uses: actions/checkout@v6
