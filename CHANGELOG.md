@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.10
+
+### Post-release fixes
+- **Hover previews are responsive again** — the hover reveal is faster with a shorter crossfade, and previews are captured on demand with a retry, so they appear automatically and reliably on every tab.
+- **Extensions without a popup no longer do nothing** — the toolbar action falls back from the popup to the extension's options page, then to its details popover, so every extension opens something useful.
+- **Capabilities per permissions** — each extension card now shows a line describing what its permissions and site access actually allow it to do, with a full **Capabilities** section in the details view.
+- **Tighter UI** — the hover card, page previews and extension cards are compacted so the Extensions tab and previews read better.
+- **Updates install automatically** — the browser checks for new releases at startup (menu badge included), and the Windows installer path quits the app after launch so the installer can replace the files.
+
+Release: https://github.com/Makerxm800/Vespera/releases/tag/v0.1.10
+
 ## 0.1.9
 
 ### Extensions, in full control

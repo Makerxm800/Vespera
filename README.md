@@ -5,7 +5,7 @@
 
 Im very sorry, i don't like using AI on my serious projects — i built Vespera by hand to see where the whole vibe-code experiment is actually going. It turned into a browser i use every day, so here it is. :P
 
-**Next release in preparation: v0.1.9** — the currently published installers are still [v0.1.7](https://github.com/Makerxm800/Vespera/releases/tag/v0.1.7). The release workflow builds Windows, macOS and Linux installers when the new `v*` tag is pushed after merge.
+**Latest release: v0.1.10** — installers for Windows, macOS and Linux are published on the GitHub Releases page. The release workflow builds all platforms when a new `v*` tag is pushed.
 
 ---
 
