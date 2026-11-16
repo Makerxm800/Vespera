@@ -7,7 +7,6 @@
 use crate::proxy::{ProxyEngine, STRIP_HEADERS};
 use include_dir::{include_dir, Dir};
 use serde_json::json;
-use std::io::Read;
 use std::sync::Arc;
 use tiny_http::{Header, Response, Server, StatusCode};
 

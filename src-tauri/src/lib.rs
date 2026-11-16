@@ -99,7 +99,7 @@ pub fn run() {
 
             let window_url = server_handle.url("/index.html");
             eprintln!("  Vespera UI → {window_url}");
-            let _ = WebviewWindowBuilder::new(&app_handle, "main", WebviewUrl::External(url::Url::parse(&window_url).unwrap()))
+            let _ = WebviewWindowBuilder::new(&app_handle, "main", WebviewUrl::External(&url::Url::parse(&window_url).unwrap()))
                 .title("Vespera")
                 .inner_size(1320.0, 860.0)
                 .min_inner_size(720.0, 500.0)
@@ -297,7 +297,7 @@ fn downloads_clear(state: tauri::State<AppState>, private: bool) -> Value {
 }
 
 #[tauri::command]
-async fn downloads_choose_folder(app: AppHandle, state: tauri::State<'_, AppState>) -> Value {
+async fn downloads_choose_folder(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<Value, String> {
     let (sender, receiver) = std::sync::mpsc::channel();
     app.dialog()
         .file()
@@ -307,22 +307,19 @@ async fn downloads_choose_folder(app: AppHandle, state: tauri::State<'_, AppStat
         });
     let selection = match tauri::async_runtime::spawn_blocking(move || receiver.recv()).await {
         Ok(Ok(selection)) => selection,
-        Ok(Err(e)) => return json!({ "ok": false, "message": e.to_string() }),
-        Err(e) => return json!({ "ok": false, "message": e.to_string() }),
+        Ok(Err(e)) => return Err(e.to_string()),
+        Err(e) => return Err(e.to_string()),
     };
     let Some(path) = selection else {
-        return json!({ "ok": false, "canceled": true });
+        return Ok(json!({ "ok": false, "canceled": true }));
     };
-    let path = match path.into_path() {
-        Ok(path) => path.to_string_lossy().into_owned(),
-        Err(e) => return json!({ "ok": false, "message": e.to_string() }),
-    };
+    let path = path.into_path().map_err(|e| e.to_string())?.to_string_lossy().into_owned();
     let mut guard = state.prefs.lock().unwrap();
     if let Some(obj) = guard.data.as_object_mut() {
         obj.insert("downloadPath".to_string(), Value::String(path.clone()));
     }
     let _ = guard.persist();
-    json!({ "ok": true, "path": path })
+    Ok(json!({ "ok": true, "path": path }))
 }
 
 #[tauri::command]

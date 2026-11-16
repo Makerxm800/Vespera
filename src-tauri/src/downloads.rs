@@ -148,7 +148,7 @@ impl DownloadManager {
             .collect()
     }
 
-    pub fn start(&self, url: &str, is_private: bool) -> Result<Value, String> {
+    pub fn start(&mut self, url: &str, is_private: bool) -> Result<Value, String> {
         let parsed = url::Url::parse(url)
             .map_err(|_| "Only HTTP and HTTPS files can be downloaded.".to_string())?;
         if parsed.scheme() != "http" && parsed.scheme() != "https" {
@@ -240,8 +240,8 @@ impl DownloadManager {
             })();
 
             let manager = {
-                let mut guard = managers().lock().unwrap();
-                guard.get(&records_path.to_string_lossy().to_string()).cloned()
+            let guard = managers().lock().unwrap();
+            guard.get(&records_path.to_string_lossy().to_string()).cloned()
             };
             let Some(manager) = manager else { return };
             let mut guard = manager.lock().unwrap();
