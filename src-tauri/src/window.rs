@@ -3,7 +3,7 @@
 use serde_json::json;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
-fn main_window<'a>(app: &'a AppHandle) -> Option<tauri::WebviewWindow<'a>> {
+fn main_window(app: &AppHandle) -> Option<tauri::WebviewWindow> {
     app.get_webview_window("main")
 }
 
@@ -59,10 +59,19 @@ pub fn inspect_tab(app: &AppHandle) -> Result<(), String> {
 /// Process memory for the memory display (the whole browser process, since the
 /// Tauri webview is a single engine).
 pub fn tab_memory() -> Result<u64, String> {
-    use sysinfo::{Pid, Process};
+    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
     let pid = Pid::from_u32(std::process::id());
-    let process = Process::new(pid);
-    Ok(process.memory())
+    let mut system = System::new();
+    let pids = [pid];
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&pids),
+        true,
+        ProcessRefreshKind::nothing().with_memory(),
+    );
+    system
+        .process(pid)
+        .map(|process| process.memory())
+        .ok_or_else(|| "Could not read Vespera's process memory.".to_string())
 }
 
 #[allow(dead_code)]

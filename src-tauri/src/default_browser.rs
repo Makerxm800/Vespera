@@ -159,7 +159,7 @@ pub fn status() -> serde_json::Value {
             "message": "macOS manages the default browser in System Settings → Desktop → Default Applications. Choose Vespera there to make it the default."
         });
     }
-    #[allow(unreachable_code)]
+    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
     json!({ "supported": false, "registered": false, "platform": platform, "message": "Default-browser registration is not available on this platform." })
 }
 

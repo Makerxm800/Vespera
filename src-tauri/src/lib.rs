@@ -22,7 +22,7 @@ use tauri_plugin_dialog::DialogExt;
 
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::Builder::default())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let app_handle = app.handle().clone();
 

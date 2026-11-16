@@ -8,7 +8,7 @@
 use crate::filters::FilterEngine;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
-use serde_json::json;
+use serde_json::{json, Value};
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -586,7 +586,7 @@ fn collapse_ws(s: &str) -> String {
     out
 }
 
-fn first_group(re: &Regex, text: &str) -> Option<&str> {
+fn first_group<'a>(re: &Regex, text: &'a str) -> Option<&'a str> {
     let caps = re.captures(text)?;
     Some(caps.get(1).unwrap().as_str())
 }

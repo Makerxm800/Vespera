@@ -8,7 +8,7 @@
 //! is a lookup plus a few regex tests.
 
 use regex::Regex;
-use std::collections::{HashMap, HashSet, HashSet as Set};
+use std::collections::{HashMap, HashSet as Set};
 use std::sync::Mutex;
 
 const RESOURCE_TYPES: [&str; 14] = [
