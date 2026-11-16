@@ -68,6 +68,28 @@ jobs:
         shell: bash
         run: cargo check --manifest-path src-tauri/Cargo.toml 2>&1 | tee cargo-check.log
 
+      - name: Report Rust diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          if [[ -f cargo-check.log ]]; then
+            while IFS= read -r line; do
+              case "$line" in
+                error:*|error\[*|*"--> "*|*"= note:"*|*"= help:"*)
+                  message="${line//'%'/'%25'}"
+                  message="${message//$'\r'/'%0D'}"
+                  printf '::error title=Rust compile detail::%s\n' "$message"
+                  ;;
+              esac
+            done < cargo-check.log
+            {
+              echo '### Rust compiler diagnostics'
+              echo '```text'
+              grep -E '^(error(\\[|:)|[[:space:]]+--> |[[:space:]]+= (note|help):)' cargo-check.log || true
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Upload compile log
         if: always()
         uses: actions/upload-artifact@v4
