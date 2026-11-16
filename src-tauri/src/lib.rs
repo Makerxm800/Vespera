@@ -99,7 +99,7 @@ pub fn run() {
 
             let window_url = server_handle.url("/index.html");
             eprintln!("  Vespera UI → {window_url}");
-            let _ = WebviewWindowBuilder::new(app_handle, "main", WebviewUrl::Url(url::Url::parse(&window_url).unwrap()))
+            let _ = WebviewWindowBuilder::new(app_handle, "main", WebviewUrl::External(url::Url::parse(&window_url).unwrap()))
                 .title("Vespera")
                 .inner_size(1320.0, 860.0)
                 .min_inner_size(720.0, 500.0)

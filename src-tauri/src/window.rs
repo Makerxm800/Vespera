@@ -16,12 +16,12 @@ pub fn minimize(app: &AppHandle) -> Result<(), String> {
 
 pub fn maximize(app: &AppHandle) -> Result<(), String> {
     let win = main_window(app).ok_or_else(|| "No main window.".to_string())?;
-    if win.is_maximized() {
-        win.unmaximize();
-        app.emit("window:maximized", false);
+    if win.is_maximized().map_err(|e| e.to_string())? {
+        win.unmaximize().map_err(|e| e.to_string())?;
+        app.emit("window:maximized", false).map_err(|e| e.to_string())?;
     } else {
-        win.maximize();
-        app.emit("window:maximized", true);
+        win.maximize().map_err(|e| e.to_string())?;
+        app.emit("window:maximized", true).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -35,9 +35,9 @@ pub fn close(app: &AppHandle) -> Result<(), String> {
 
 pub fn toggle_fullscreen(app: &AppHandle) -> Result<(), String> {
     let win = main_window(app).ok_or_else(|| "No main window.".to_string())?;
-    let next = !win.is_fullscreen();
-    win.set_fullscreen(next);
-    app.emit("browser:fullscreen", next);
+    let next = !win.is_fullscreen().map_err(|e| e.to_string())?;
+    win.set_fullscreen(next).map_err(|e| e.to_string())?;
+    app.emit("browser:fullscreen", next).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -45,7 +45,7 @@ pub fn toggle_fullscreen(app: &AppHandle) -> Result<(), String> {
 pub fn incognito(app: &AppHandle, base_url: &str) -> Result<(), String> {
     let url = format!("{base_url}?private=1");
     let target = url::Url::parse(&url).map_err(|e| format!("Invalid window URL: {e}"))?;
-    let _ = WebviewWindowBuilder::new(app, "private", WebviewUrl::Url(target))
+    let _ = WebviewWindowBuilder::new(app, "private", WebviewUrl::External(target))
         .title("Vespera — Private")
         .inner_size(1320.0, 860.0)
         .min_inner_size(720.0, 500.0)
