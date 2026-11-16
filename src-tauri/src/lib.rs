@@ -99,7 +99,7 @@ pub fn run() {
 
             let window_url = server_handle.url("/index.html");
             eprintln!("  Vespera UI → {window_url}");
-            let _ = WebviewWindowBuilder::new(app_handle, "main", WebviewUrl::External(url::Url::parse(&window_url).unwrap()))
+            let _ = WebviewWindowBuilder::new(&app_handle, "main", WebviewUrl::External(url::Url::parse(&window_url).unwrap()))
                 .title("Vespera")
                 .inner_size(1320.0, 860.0)
                 .min_inner_size(720.0, 500.0)
@@ -297,19 +297,32 @@ fn downloads_clear(state: tauri::State<AppState>, private: bool) -> Value {
 }
 
 #[tauri::command]
-fn downloads_choose_folder(app: AppHandle, state: tauri::State<AppState>) -> Value {
-    match app.dialog().file().set_title("Choose download folder").pick_folder() {
-        Ok(Some(path)) => {
-            let mut guard = state.prefs.lock().unwrap();
-            if let Some(obj) = guard.data.as_object_mut() {
-                obj.insert("downloadPath".to_string(), Value::String(path.clone()));
-            }
-            let _ = guard.persist();
-            json!({ "ok": true, "path": path })
-        }
-        Ok(None) => json!({ "ok": false, "canceled": true }),
-        Err(e) => json!({ "ok": false, "message": e.to_string() }),
+async fn downloads_choose_folder(app: AppHandle, state: tauri::State<'_, AppState>) -> Value {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    app.dialog()
+        .file()
+        .set_title("Choose download folder")
+        .pick_folder(move |selection| {
+            let _ = sender.send(selection);
+        });
+    let selection = match tauri::async_runtime::spawn_blocking(move || receiver.recv()).await {
+        Ok(Ok(selection)) => selection,
+        Ok(Err(e)) => return json!({ "ok": false, "message": e.to_string() }),
+        Err(e) => return json!({ "ok": false, "message": e.to_string() }),
+    };
+    let Some(path) = selection else {
+        return json!({ "ok": false, "canceled": true });
+    };
+    let path = match path.into_path() {
+        Ok(path) => path.to_string_lossy().into_owned(),
+        Err(e) => return json!({ "ok": false, "message": e.to_string() }),
+    };
+    let mut guard = state.prefs.lock().unwrap();
+    if let Some(obj) = guard.data.as_object_mut() {
+        obj.insert("downloadPath".to_string(), Value::String(path.clone()));
     }
+    let _ = guard.persist();
+    json!({ "ok": true, "path": path })
 }
 
 #[tauri::command]
