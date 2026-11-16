@@ -18,7 +18,7 @@ fn is_askable(permission: &str) -> bool {
 pub fn origin_of(url: &str) -> Option<String> {
     let u = url::Url::parse(url).ok()?;
     if u.scheme() == "http" || u.scheme() == "https" {
-        Some(u.origin().to_string())
+        Some(u.origin().ascii_serialization())
     } else {
         None
     }

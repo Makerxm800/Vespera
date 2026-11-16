@@ -119,7 +119,7 @@ impl ProxyEngine {
         if u.scheme() != "http" && u.scheme() != "https" {
             return Err("Only HTTP and HTTPS websites can be previewed.".to_string());
         }
-        if !u.username().is_empty() || !u.password().is_empty() {
+        if !u.username().is_empty() || u.password().is_some() {
             return Err("URLs containing credentials are not allowed.".to_string());
         }
         let host = u.host_str().unwrap_or("").to_lowercase();
