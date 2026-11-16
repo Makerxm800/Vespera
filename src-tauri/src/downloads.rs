@@ -6,7 +6,7 @@
 use serde_json::{json, Value};
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
@@ -240,7 +240,7 @@ impl DownloadManager {
             })();
 
             let manager = {
-                let mut guard = MANAGERS.lock().unwrap();
+                let mut guard = managers().lock().unwrap();
                 guard.get(&records_path.to_string_lossy().to_string()).cloned()
             };
             let Some(manager) = manager else { return };
@@ -261,7 +261,7 @@ impl DownloadManager {
                 }
                 let snapshot = entry.clone();
                 drop(guard);
-                manager.persist();
+                manager.lock().unwrap().persist();
                 let _ = emitter.emit("download:done", snapshot.to_json());
             }
         });
@@ -339,15 +339,18 @@ impl DownloadManager {
 
 /// Every live DownloadManager keyed by its records path, so background
 /// download threads can find the manager that owns a record.
-pub static MANAGERS: Mutex<std::collections::HashMap<String, Arc<Mutex<DownloadManager>>>> =
-    Mutex::new(std::collections::HashMap::new());
+static MANAGERS: OnceLock<Mutex<std::collections::HashMap<String, Arc<Mutex<DownloadManager>>>>> = OnceLock::new();
+
+fn managers() -> &'static Mutex<std::collections::HashMap<String, Arc<Mutex<DownloadManager>>>> {
+    MANAGERS.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+}
 
 pub fn register_manager(manager: Arc<Mutex<DownloadManager>>) {
     let key = manager
         .lock()
         .map(|m| m.records_path.to_string_lossy().to_string())
         .unwrap_or_default();
-    if let Ok(mut guard) = MANAGERS.lock() {
+    if let Ok(mut guard) = managers().lock() {
         guard.insert(key, manager);
     }
 }

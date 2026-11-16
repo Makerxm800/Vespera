@@ -27,9 +27,13 @@ impl ExtensionRegistry {
     pub fn list(&self, disabled_ids: &[String]) -> Vec<Value> {
         self.metadata
             .iter()
-            .filter(|m| !disabled_ids.contains(m.get("id").and_then(Value::as_str).unwrap_or("")))
+            .filter(|m| {
+                let id = m.get("id").and_then(Value::as_str).unwrap_or("");
+                !disabled_ids.iter().any(|disabled| disabled.as_str() == id)
+            })
             .map(|m| {
-                let enabled = !disabled_ids.contains(m.get("id").and_then(Value::as_str).unwrap_or(""));
+                let id = m.get("id").and_then(Value::as_str).unwrap_or("");
+                let enabled = !disabled_ids.iter().any(|disabled| disabled.as_str() == id);
                 let mut entry = m.clone();
                 entry["enabled"] = json!(enabled);
                 entry
