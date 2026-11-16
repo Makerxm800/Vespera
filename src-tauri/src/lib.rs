@@ -99,7 +99,7 @@ pub fn run() {
 
             let window_url = server_handle.url("/index.html");
             eprintln!("  Vespera UI → {window_url}");
-            let _ = WebviewWindowBuilder::new(&app_handle, "main", WebviewUrl::External(&url::Url::parse(&window_url).unwrap()))
+            let _ = WebviewWindowBuilder::new(&app_handle, "main", WebviewUrl::External(url::Url::parse(&window_url).unwrap()))
                 .title("Vespera")
                 .inner_size(1320.0, 860.0)
                 .min_inner_size(720.0, 500.0)
@@ -274,7 +274,7 @@ fn downloads_list(state: tauri::State<AppState>, private: bool) -> Value {
 
 #[tauri::command]
 fn downloads_start(state: tauri::State<AppState>, url: String, private: bool) -> Value {
-    let guard = state.downloads.lock().unwrap();
+    let mut guard = state.downloads.lock().unwrap();
     match guard.start(&url, private) {
         Ok(v) => v,
         Err(message) => json!({ "ok": false, "message": message }),
@@ -283,7 +283,7 @@ fn downloads_start(state: tauri::State<AppState>, url: String, private: bool) ->
 
 #[tauri::command]
 fn downloads_action(state: tauri::State<AppState>, action: String, id: String, private: bool) -> Value {
-    let guard = state.downloads.lock().unwrap();
+    let mut guard = state.downloads.lock().unwrap();
     match guard.action(&action, &id, private) {
         Ok(v) => v,
         Err(message) => json!({ "ok": false, "message": message }),

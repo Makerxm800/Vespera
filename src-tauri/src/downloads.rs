@@ -189,7 +189,6 @@ impl DownloadManager {
         let record_id = record.id.clone();
         let emitter = self.emitter.clone();
         let records_path = self.records_path.clone();
-        let downloads_dir = self.downloads_dir.clone();
         let record_name = record.name.clone();
         let record_at = record.at;
         let record_url = record.url.clone();
@@ -269,7 +268,7 @@ impl DownloadManager {
         Ok(json!({ "ok": true }))
     }
 
-    pub fn action(&self, action: &str, id: &str, is_private: bool) -> Result<Value, String> {
+    pub fn action(&mut self, action: &str, id: &str, is_private: bool) -> Result<Value, String> {
         let record = self
             .records
             .iter()

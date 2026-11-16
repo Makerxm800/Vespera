@@ -45,7 +45,7 @@ pub fn toggle_fullscreen(app: &AppHandle) -> Result<(), String> {
 pub fn incognito(app: &AppHandle, base_url: &str) -> Result<(), String> {
     let url = format!("{base_url}?private=1");
     let target = url::Url::parse(&url).map_err(|e| format!("Invalid window URL: {e}"))?;
-    let _ = WebviewWindowBuilder::new(app, "private", WebviewUrl::External(&target))
+    let _ = WebviewWindowBuilder::new(app, "private", WebviewUrl::External(target))
         .title("Vespera — Private")
         .inner_size(1320.0, 860.0)
         .min_inner_size(720.0, 500.0)
