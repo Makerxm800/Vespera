@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('vespera', {
     setDefaultBrowser: () => invoke('app:default-browser'),
     openDefaultBrowserSettings: () => invoke('app:default-browser-settings'),
     tabMemory: (contentsId) => invoke('tabs:memory', contentsId),
+    tabCapture: (contentsId, opts) => invoke('tabs:capture', contentsId, opts),
+    tabFocus: (contentsId) => invoke('tabs:focus', contentsId),
     checkUpdate: () => invoke('app:update:check'),
     installUpdate: (releaseInfo) => invoke('app:update:install', releaseInfo),
     inspectTab: (contentsId, x, y) => invoke('app:inspect-tab', contentsId, x, y),
