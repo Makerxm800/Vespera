@@ -10,6 +10,17 @@ on:
         description: Existing v* tag to build and publish; leave blank for build-only.
         required: false
         type: string
+      build_target:
+        description: Build all platforms or one platform for a faster diagnostic run.
+        required: false
+        type: choice
+        default: all
+        options:
+          - all
+          - linux
+          - windows
+          - macos-x64
+          - macos-arm64
 
 permissions:
   contents: write
@@ -17,6 +28,12 @@ permissions:
 jobs:
   build:
     name: Build on ${{ matrix.os }} (${{ matrix.arch }})
+    if: >-
+      github.event_name != 'workflow_dispatch' || inputs.build_target == 'all' ||
+      (inputs.build_target == 'linux' && matrix.os == 'ubuntu-latest') ||
+      (inputs.build_target == 'windows' && matrix.os == 'windows-latest') ||
+      (inputs.build_target == 'macos-x64' && matrix.os == 'macos-15') ||
+      (inputs.build_target == 'macos-arm64' && matrix.os == 'macos-15-arm64')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -25,10 +42,10 @@ jobs:
           - os: windows-latest
             arch: x64
             bundles: msi,nsis
-          - os: macos-13
+          - os: macos-15
             arch: x64
             bundles: dmg
-          - os: macos-14
+          - os: macos-15-arm64
             arch: arm64
             bundles: dmg
           - os: ubuntu-latest
@@ -75,6 +92,26 @@ jobs:
         run: npx tauri build --bundles "${{ matrix.bundles }}" 2>&1 | tee tauri-build.log
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Report build failure details
+        if: failure()
+        shell: bash
+        run: |
+          if [[ -s tauri-build.log ]]; then
+            {
+              echo '### Tauri build failure details'
+              echo '```text'
+              tail -n 100 tauri-build.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            grep -iE 'error:|failed|not found|no such file' tauri-build.log | tail -n 40 | while IFS= read -r line; do
+              line="${line//'%'/'%25'}"
+              line="${line//$'\r'/'%0D'}"
+              printf '::error::%s\n' "$line"
+            done
+          else
+            echo 'No Tauri build log was produced.' >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Collect installers
         if: success()
