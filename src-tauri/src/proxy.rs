@@ -66,7 +66,7 @@ impl ProxyEngine {
     /// Public-address check mirroring publicAddress() in the JS proxy.
     fn is_public_ip(addr: &str) -> bool {
         if let Ok(ip) = addr.parse::<std::net::Ipv4Addr>() {
-            let [a, b, c, _d] = ip.octets();
+            let [a, b, _c, _d] = ip.octets();
             return !(a == 0
                 || a == 10
                 || a == 127

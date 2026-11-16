@@ -112,7 +112,6 @@ impl CosmeticRule {
 /// patternToRegExpSource).
 fn pattern_to_regex_source(pattern: &str) -> (String, bool) {
     let mut src = String::new();
-    let mut anchored_start = false;
     let mut anchored_end = false;
     let mut domain_anchored = false;
 
@@ -122,7 +121,6 @@ fn pattern_to_regex_source(pattern: &str) -> (String, bool) {
         pat = rest;
         src.push_str("^[a-z][a-z0-9+.\\-]*://(?:[^/?#]*\\.)?");
     } else if let Some(rest) = pat.strip_prefix('|') {
-        anchored_start = true;
         pat = rest;
         src.push('^');
     }

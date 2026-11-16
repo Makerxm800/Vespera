@@ -7,7 +7,6 @@
 use crate::proxy::{ProxyEngine, STRIP_HEADERS};
 use include_dir::{include_dir, Dir};
 use serde_json::json;
-use std::io::Read;
 use std::sync::Arc;
 use tiny_http::{Header, Response, Server, StatusCode};
 
@@ -270,7 +269,7 @@ pub fn start(engine: Arc<ProxyEngine>, rules_snapshot: serde_json::Value, versio
     let server = loop {
         match Server::http(format!("127.0.0.1:{port}")) {
             Ok(server) => break server,
-            Err(e) if port < BASE_PORT + PORT_SPAN => {
+            Err(_) if port < BASE_PORT + PORT_SPAN => {
                 port += 1;
                 continue;
             }
