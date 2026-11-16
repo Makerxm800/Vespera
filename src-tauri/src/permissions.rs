@@ -70,8 +70,11 @@ pub fn decide(
         .and_then(|o| o.get(permission))
         .and_then(Value::as_str)
     {
-        if saved == "allow" || saved == "deny" {
-            return saved;
+        if saved == "allow" {
+            return "allow";
+        }
+        if saved == "deny" {
+            return "deny";
         }
     }
     if session_granted.contains(&format!("{origin}|{permission}")) {

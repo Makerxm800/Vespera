@@ -325,7 +325,7 @@ impl DownloadManager {
         Err("This download cannot be resumed. Please retry it.".to_string())
     }
 
-    pub fn clear(&self, is_private: bool) {
+    pub fn clear(&mut self, is_private: bool) {
         self.records
             .retain(|r| !(r.is_private == is_private && matches!(r.status.as_str(), "progressing" | "paused")));
         self.persist();
