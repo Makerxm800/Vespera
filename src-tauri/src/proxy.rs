@@ -9,6 +9,7 @@ use crate::filters::FilterEngine;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
 use serde_json::{json, Value};
+use std::net::ToSocketAddrs;
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -111,7 +112,7 @@ impl ProxyEngine {
         if allowed.is_empty() {
             return true;
         }
-        allowed.iter().any(|h| host == h || host.ends_with(&format!(".{h}")))
+        allowed.iter().any(|h| host == h.as_str() || host.ends_with(&format!(".{h}")))
     }
 
     fn validate_target(target: &str) -> Result<url::Url, String> {
@@ -124,7 +125,7 @@ impl ProxyEngine {
         }
         let host = u.host_str().unwrap_or("").to_lowercase();
         let allowed = Self::allowed_hosts();
-        if !allowed.is_empty() && !allowed.iter().any(|h| host == h || host.ends_with(&format!(".{h}"))) {
+        if !allowed.is_empty() && !allowed.iter().any(|h| host == h.as_str() || host.ends_with(&format!(".{h}"))) {
             return Err(format!(
                 "{host} is not reachable from this hosted preview. Open the original site in your browser, or use the desktop app for unrestricted browsing."
             ));
@@ -256,17 +257,15 @@ impl ProxyEngine {
     /// Full document rewrite (port of rewriteHtml).
     pub fn rewrite_html(&self, html: &str, page_url: &str, dark: bool, mask: u32, origin: &str) -> String {
         let extra = format!("&vp={mask}{}", if dark { "&vespera_dark=1" } else { "" });
-        let mut out = html
-            .replace_all(&base_tag_re(), "")
-            .replace_all(&meta_refresh_re(), "")
-            .to_string();
+        let without_base = base_tag_re().replace_all(html, "");
+        let mut out = meta_refresh_re().replace_all(&without_base, "").to_string();
 
         out = tag_re()
             .replace_all(&out, |caps: &regex::Captures| {
                 let name = caps.get(1).unwrap().as_str();
                 let attrs = caps.get(2).unwrap().as_str();
                 let attrs = integrity_re().replace_all(attrs, "");
-                let attrs = attr_re().replace_all(attrs, |c: &regex::Captures| {
+                let attrs = attr_re().replace_all(attrs.as_ref(), |c: &regex::Captures| {
                     let key = c.get(1).unwrap().as_str();
                     let quote = c.get(2).unwrap().as_str();
                     let value = c.get(3).unwrap().as_str();
@@ -293,7 +292,7 @@ impl ProxyEngine {
                         esc(&self.proxied(value, page_url, proxied_extra, rtype, page_url, mask, origin))
                     )
                 });
-                let attrs = srcset_re().replace_all(attrs, |c: &regex::Captures| {
+                let attrs = srcset_re().replace_all(attrs.as_ref(), |c: &regex::Captures| {
                     let quote = c.get(1).unwrap().as_str();
                     let value = c.get(2).unwrap().as_str();
                     let rewritten = value
