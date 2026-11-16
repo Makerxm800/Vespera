@@ -334,7 +334,7 @@ pub struct FilterEngine {
     pub stats: FilterStats,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, serde::Serialize)]
 pub struct FilterStats {
     pub total: usize,
     pub network: usize,
