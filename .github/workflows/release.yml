@@ -10,30 +10,12 @@ on:
         description: Existing v* tag to build and publish; leave blank for build-only.
         required: false
         type: string
-      build_target:
-        description: Build all platforms or one platform for a faster diagnostic run.
-        required: false
-        type: choice
-        default: all
-        options:
-          - all
-          - linux
-          - windows
-          - macos-x64
-          - macos-arm64
-
 permissions:
   contents: write
 
 jobs:
   build:
     name: Build on ${{ matrix.os }} (${{ matrix.arch }})
-    if: >-
-      github.event_name != 'workflow_dispatch' || inputs.build_target == 'all' ||
-      (inputs.build_target == 'linux' && matrix.os == 'ubuntu-latest') ||
-      (inputs.build_target == 'windows' && matrix.os == 'windows-latest') ||
-      (inputs.build_target == 'macos-x64' && matrix.os == 'macos-15') ||
-      (inputs.build_target == 'macos-arm64' && matrix.os == 'macos-15-arm64')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
