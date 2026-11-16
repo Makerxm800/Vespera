@@ -33,6 +33,9 @@ jobs:
   check:
     name: Rust core compiles
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -64,3 +67,17 @@ jobs:
           name: cargo-check-log
           path: /tmp/cargo-check.log
           if-no-files-found: ignore
+
+      - name: Report compile errors on the PR
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo '## ❌ Rust core compile errors'
+            echo ''
+            echo '```'
+            cat /tmp/cargo-check.log
+            echo '```'
+          } > /tmp/comment.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/comment.md
