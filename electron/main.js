@@ -22,6 +22,7 @@ if (!app.requestSingleInstanceLock()) { app.quit(); return; }
 app.on('second-instance', () => { const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : [...windows][0]; if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
 
 const windows = new Set();
+const tabPreviewCache = new Map(); // contentsId -> { dataUrl, ts }
 let mainWindow = null, serverHandle = null, downloadManager, extensionManager, updateManager, normalSession, privateSession;
 const prefsFile = path.join(app.getPath('userData'), 'preferences.json');
 let prefs = { shields: { enabled: true, blockTrackers: true, blockAds: true, blockAnnoyances: false, cleanLinks: true, httpsOnly: true, gpc: true }, allowlist: {}, askDownloadLocation: true, downloadPath: '', extensionPaths: [], disabledExtensionIds: [], extensionMetadata: [], sitePermissions: {} };
@@ -33,6 +34,20 @@ function isTrustedSender(event) { return windows.has(BrowserWindow.fromWebConten
 function handle(channel, fn) { ipcMain.handle(channel, (event, ...args) => { if (!isTrustedSender(event)) return { ok: false, message: 'Untrusted browser request.' }; try { return fn(event, ...args); } catch (err) { log.error(channel, err); return { ok: false, message: err.message }; } }); }
 function isPrivateEvent(event) { return Boolean(BrowserWindow.fromWebContents(event.sender)?.__vesperaPrivate); }
 function sendMenu(action) { BrowserWindow.getFocusedWindow()?.webContents.send('menu:action', action); }
+
+async function captureAndCachePreview(contents) {
+  if (!contents || contents.isDestroyed() || contents.getType() !== 'webview') return null;
+  try {
+    const image = await contents.capturePage();
+    if (image.isEmpty()) return tabPreviewCache.get(contents.id)?.dataUrl || null;
+    const jpeg = image.resize({ width: 280, quality: 'good' }).toJPEG(78);
+    const dataUrl = `data:image/jpeg;base64,${jpeg.toString('base64')}`;
+    tabPreviewCache.set(contents.id, { dataUrl, ts: Date.now() });
+    return dataUrl;
+  } catch {
+    return tabPreviewCache.get(contents.id)?.dataUrl || null;
+  }
+}
 
 function createWindow({ privateMode = false } = {}) {
   const win = new BrowserWindow({
@@ -169,6 +184,29 @@ function registerIpc() {
       return Number.isFinite(kilobytes) && kilobytes >= 0 ? { ok: true, bytes: Math.round(kilobytes * 1024) } : { ok: false };
     } catch { return { ok: false }; }
   });
+  handle('tabs:capture', async (event, contentsId, opts = {}) => {
+    const id = Number(contentsId);
+    if (!Number.isSafeInteger(id) || id < 1) return { ok: false };
+    const cached = tabPreviewCache.get(id);
+    if (!opts?.force && cached && Date.now() - cached.ts < 1500) {
+      return { ok: true, dataUrl: cached.dataUrl };
+    }
+    const guest = webContents.fromId(id);
+    if (!guest || guest.isDestroyed() || guest.getType() !== 'webview' || guest.hostWebContents !== event.sender) {
+      return cached ? { ok: true, dataUrl: cached.dataUrl } : { ok: false };
+    }
+    const dataUrl = await captureAndCachePreview(guest);
+    return dataUrl ? { ok: true, dataUrl } : { ok: false };
+  });
+  handle('tabs:focus', (event, contentsId) => {
+    const id = Number(contentsId);
+    const guest = Number.isSafeInteger(id) && id > 0 ? webContents.fromId(id) : null;
+    if (guest && !guest.isDestroyed() && guest.getType() === 'webview' && guest.hostWebContents === event.sender) {
+      guest.focus();
+      return { ok: true };
+    }
+    return { ok: false };
+  });
   handle('permissions:list', (event) => isPrivateEvent(event) ? [] : permissions.summarize(prefs.sitePermissions));
   handle('permissions:reset', (event) => { if (!isPrivateEvent(event)) { permissions.reset(prefs.sitePermissions); persistPrefs(); } return { ok: true }; });
   handle('extensions:list', (event) => isPrivateEvent(event) ? [] : extensionManager.list());
@@ -244,6 +282,21 @@ function protectSessions(pu) {
 function wireWebContents() {
   app.on('web-contents-created', (_e, contents) => {
     if (contents.getType() === 'webview') {
+      // Ensure single-key page shortcuts (YouTube Space, F, M, J, K, L, arrows) always reach the site
+      if (typeof contents.setIgnoreMenuShortcuts === 'function') contents.setIgnoreMenuShortcuts(true);
+
+      contents.once('destroyed', () => {
+        tabPreviewCache.delete(contents.id);
+      });
+
+      contents.on('did-finish-load', () => {
+        setTimeout(() => captureAndCachePreview(contents), 350);
+      });
+
+      contents.on('did-navigate-in-page', () => {
+        setTimeout(() => captureAndCachePreview(contents), 450);
+      });
+
       contents.setWindowOpenHandler(({ url, disposition }) => {
         // Web contents never create an unmanaged BrowserWindow. Only regular
         // web URLs may be opened programmatically; local files are accepted
@@ -268,8 +321,11 @@ function wireWebContents() {
       contents.on('will-redirect', blockRemoteFileNavigation);
       contents.on('will-frame-navigate', (event) => blockRemoteFileNavigation(event, event.url));
       contents.on('before-input-event', (event, input) => {
-        if (input.type === 'mouseDown' && String(input.button).toLowerCase() === 'middle') {
-          contents.__vesperaMiddleClickAt = Date.now();
+        if (input.type === 'mouseDown') {
+          if (!contents.isDestroyed() && !contents.isFocused()) contents.focus();
+          if (String(input.button).toLowerCase() === 'middle') {
+            contents.__vesperaMiddleClickAt = Date.now();
+          }
           return;
         }
         if (input.type !== 'keyDown') return;
@@ -300,7 +356,7 @@ function wireWebContents() {
         else if (key === 'f6' || (alt && key === 'd')) action = 'focus-address';
         else if (key === 'f5') action = 'reload';
         else if (key === 'f11') action = 'fullscreen';
-        if (!action) return; // Site-specific keys, including YouTube's F, stay with the page.
+        if (!action) return; // Site-specific keys, including YouTube's Space, F, M, J, K, L, stay with the page.
         event.preventDefault();
         contents.hostWebContents?.send('browser:shortcut', action);
       });
@@ -345,7 +401,6 @@ function wireWebContents() {
       });
     }
   });
-
 }
 
 app.whenReady().then(async () => {
