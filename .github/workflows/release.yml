@@ -201,9 +201,9 @@ jobs:
           if [[ -n "$ARTIFACT_RUN_ID" ]]; then
             RUN_INFO="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ARTIFACT_RUN_ID")"
             BUILD_SHA="$(jq -r '.head_sha' <<< "$RUN_INFO")"
-            BUILD_BRANCH="$(jq -r '.head_branch' <<< "$RUN_INFO")"
-            if [[ "$(jq -r '.status' <<< "$RUN_INFO")" != "completed" || "$(jq -r '.conclusion' <<< "$RUN_INFO")" != "success" || "$BUILD_BRANCH" != "$PUSH_REF_NAME" ]]; then
-              echo "Artifact run $ARTIFACT_RUN_ID is not a successful build from this branch." >&2
+            BUILD_WORKFLOW="$(jq -r '.workflow_id' <<< "$RUN_INFO")"
+            if [[ "$(jq -r '.status' <<< "$RUN_INFO")" != "completed" || "$(jq -r '.conclusion' <<< "$RUN_INFO")" != "success" || "$BUILD_WORKFLOW" != "410695000" ]]; then
+              echo "Artifact run $ARTIFACT_RUN_ID is not a successful Vespera release build." >&2
               exit 1
             fi
             if ! git merge-base --is-ancestor "$BUILD_SHA" "$TARGET"; then
