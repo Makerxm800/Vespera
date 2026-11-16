@@ -76,6 +76,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: List bundle output (diagnostic)
+        if: always()
+        run: |
+          echo "=== Bundle directory tree ==="
+          find src-tauri/target/release/bundle -type f 2>/dev/null | head -50 || echo "no bundle dir"
+          echo "=== dist collection ==="
+
+      - name: Collect installers
+        if: success()
+        run: |
+          mkdir -p dist
+          find src-tauri/target/release/bundle -type f \
+            \( -name "*.msi" -o -name "*.exe" -o -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" \) \
+            -exec cp {} dist/ \; 2>/dev/null || true
+          ls -la dist/
+
       - name: Upload build log to Gist (on failure)
         if: failure()
         env:
@@ -88,19 +104,14 @@ jobs:
             tail -200 /tmp/tauri-build.log
             echo '```'
           } > /tmp/gist.md
-          gh gist create /tmp/gist.md --desc "vespera-build-failure-${{ matrix.os }}-${{ matrix.arch }}"
+          gh gist create /tmp/gist.md --desc "vespera-build-failure-${{ matrix.os }}-${{ matrix.arch }}" || echo "gist upload skipped"
 
       - name: Upload installers
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: vespera-${{ matrix.os }}-${{ matrix.arch }}
-          path: |
-            src-tauri/target/release/bundle/msi/*.msi
-            src-tauri/target/release/bundle/nsis/*.exe
-            src-tauri/target/release/bundle/dmg/*.dmg
-            src-tauri/target/release/bundle/deb/*.deb
-            src-tauri/target/release/bundle/appimage/*.AppImage
+          path: dist/*
           if-no-files-found: error
 
   publish:
@@ -118,6 +129,9 @@ jobs:
         with:
           path: installers
 
+      - name: List downloaded installers
+        run: find installers -type f | sort
+
       - name: Publish to GitHub Releases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -127,9 +141,14 @@ jobs:
           # Release notes: the top version section of the changelog.
           NOTES="$(awk '/^## /{n++} n==1' CHANGELOG.md)"
           [ -z "$NOTES" ] && NOTES="Vespera $TAG"
+          # Collect all installer files (artifacts may be nested in subdirs).
+          FILES=$(find installers -type f \
+            \( -name "*.msi" -o -name "*.exe" -o -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" \) \
+            | tr '\n' ' ')
+          [ -z "$FILES" ] && { echo "No installers found"; exit 1; }
           gh release create "$TAG" \
             --title "Vespera $TAG" \
             --notes "$NOTES" \
             --target "$SHA" \
-            installers/*/* \
-            || gh release upload "$TAG" installers/*/*
+            $FILES \
+            || gh release upload "$TAG" $FILES
