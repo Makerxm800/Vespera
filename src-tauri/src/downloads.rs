@@ -209,10 +209,15 @@ impl DownloadManager {
                     .map_err(|e| format!("Could not write the file. ({e})"))?;
                 let mut received = 0u64;
                 let mut last_emit = now_ms();
-                while let Some(chunk) = resp.chunk().map_err(|e| format!("Download interrupted. ({e})"))? {
-                    use std::io::Write;
-                    file.write_all(&chunk).map_err(|e| format!("Could not write the file. ({e})"))?;
-                    received += chunk.len() as u64;
+                let mut buffer = [0u8; 32 * 1024];
+                loop {
+                    use std::io::{Read, Write};
+                    let count = resp.read(&mut buffer).map_err(|e| format!("Download interrupted. ({e})"))?;
+                    if count == 0 {
+                        break;
+                    }
+                    file.write_all(&buffer[..count]).map_err(|e| format!("Could not write the file. ({e})"))?;
+                    received += count as u64;
                     if now_ms() - last_emit > 400 {
                         last_emit = now_ms();
                         let entry = DownloadRecord {
@@ -236,7 +241,7 @@ impl DownloadManager {
 
             let manager = {
                 let mut guard = MANAGERS.lock().unwrap();
-                guard.get(&records_path).cloned()
+                guard.get(&records_path.to_string_lossy().to_string()).cloned()
             };
             let Some(manager) = manager else { return };
             let mut guard = manager.lock().unwrap();
