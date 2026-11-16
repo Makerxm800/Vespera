@@ -55,4 +55,12 @@ jobs:
         run: npm ci
 
       - name: Compile the Tauri core
-        run: cargo check --manifest-path src-tauri/Cargo.toml
+        run: cargo check --manifest-path src-tauri/Cargo.toml 2>&1 | tee /tmp/cargo-check.log
+
+      - name: Upload compile log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-check-log
+          path: /tmp/cargo-check.log
+          if-no-files-found: ignore
