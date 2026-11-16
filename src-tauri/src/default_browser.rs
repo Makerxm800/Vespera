@@ -39,10 +39,10 @@ fn windows_register() -> Result<bool, String> {
     let prog_id = "Vespera";
     for scheme in ["http", "https"] {
         let steps = [
-            format!(r"reg add "HKCU\Software\Classes\{prog_id}" /v "" /t REG_SZ /d "Vespera" /f"),
-            format!(r"reg add "HKCU\Software\Classes\{prog_id}\shell\open\command" /v "" /t REG_SZ /d "{command}" /f"),
-            format!(r"reg add "HKCU\Software\Classes\{prog_id}\DefaultIcon" /v "" /t REG_SZ /d "{icon}" /f"),
-            format!(r"reg add "HKCU\Software\Microsoft\Windows\Shell\Associations\URLAssociations\{scheme}\UserChoice" /v ProgId /t REG_SZ /d {prog_id} /f"),
+            format!(r#"reg add "HKCU\Software\Classes\{prog_id}" /v "" /t REG_SZ /d "Vespera" /f"#),
+            format!(r#"reg add "HKCU\Software\Classes\{prog_id}\shell\open\command" /v "" /t REG_SZ /d "{command}" /f"#),
+            format!(r#"reg add "HKCU\Software\Classes\{prog_id}\DefaultIcon" /v "" /t REG_SZ /d "{icon}" /f"#),
+            format!(r#"reg add "HKCU\Software\Microsoft\Windows\Shell\Associations\URLAssociations\{scheme}\UserChoice" /v ProgId /t REG_SZ /d {prog_id} /f"#),
         ];
         for step in steps {
             let mut parts: Vec<&str> = step.split_whitespace().collect();
