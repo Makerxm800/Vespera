@@ -180,13 +180,13 @@ impl ProxyEngine {
         if resp.content_length().unwrap_or(0) > MAX_BYTES as u64 {
             return Err("This resource is too large for the web preview (20 MB limit).".to_string());
         }
+        let header_map = resp.headers().clone();
         let body = resp
             .bytes()
             .map_err(|e| format!("Could not read the website response. ({e})"))?;
         if body.len() > MAX_BYTES {
             return Err("This resource is too large for the web preview (20 MB limit).".to_string());
         }
-        let header_map = resp.headers().clone();
         Ok(FetchResult {
             status,
             headers: header_map,
