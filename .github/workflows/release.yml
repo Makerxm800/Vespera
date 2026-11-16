@@ -76,12 +76,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: List bundle output (diagnostic)
+      - name: List bundle output
         if: always()
         run: |
-          echo "=== Bundle directory tree ==="
-          find src-tauri/target/release/bundle -type f 2>/dev/null | head -50 || echo "no bundle dir"
-          echo "=== dist collection ==="
+          echo "=== Bundle tree ===" >> "$GITHUB_STEP_SUMMARY"
+          find src-tauri/target/release/bundle -type f 2>/dev/null >> "$GITHUB_STEP_SUMMARY" || echo "no bundle dir" >> "$GITHUB_STEP_SUMMARY"
+          cat "$GITHUB_STEP_SUMMARY"
 
       - name: Collect installers
         if: success()
@@ -92,19 +92,17 @@ jobs:
             -exec cp {} dist/ \; 2>/dev/null || true
           ls -la dist/
 
-      - name: Upload build log to Gist (on failure)
+      - name: Report failure summary
         if: failure()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           {
-            echo "## Build log: ${{ matrix.os }} (${{ matrix.arch }})"
+            echo "## ❌ Build failed: ${{ matrix.os }} (${{ matrix.arch }})"
             echo ""
             echo '```'
-            tail -200 /tmp/tauri-build.log
+            tail -150 /tmp/tauri-build.log
             echo '```'
-          } > /tmp/gist.md
-          gh gist create /tmp/gist.md --desc "vespera-build-failure-${{ matrix.os }}-${{ matrix.arch }}" || echo "gist upload skipped"
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat "$GITHUB_STEP_SUMMARY"
 
       - name: Upload installers
         if: success()
