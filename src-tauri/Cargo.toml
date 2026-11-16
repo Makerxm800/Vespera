@@ -1,6 +1,6 @@
 [package]
 name = "vespera"
-version = "0.2.0"
+version = "0.2.1"
 description = "Vespera — a privacy browser (Tauri v2 shell)"
 authors = ["Vespera Community"]
 license = "MIT"
@@ -29,5 +29,5 @@ custom-protocol = ["tauri/custom-protocol"]
 codegen-units = 1
 lto = true
 opt-level = "s"
-strip = true
+# Do not set `strip = true`: Cargo's strip tool breaks Windows/MSVC releases.
 panic = "abort"
