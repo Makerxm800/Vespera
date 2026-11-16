@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const log = require('./logger');
 const { DownloadManager } = require('./downloads');
 const { installExtensions } = require('./extensions');
+const { createUpdateManager } = require('./update');
 const permissions = require('./permissions');
 
 app.setName('Vespera');
@@ -21,7 +22,7 @@ if (!app.requestSingleInstanceLock()) { app.quit(); return; }
 app.on('second-instance', () => { const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : [...windows][0]; if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
 
 const windows = new Set();
-let mainWindow = null, serverHandle = null, downloadManager, extensionManager, normalSession, privateSession;
+let mainWindow = null, serverHandle = null, downloadManager, extensionManager, updateManager, normalSession, privateSession;
 const prefsFile = path.join(app.getPath('userData'), 'preferences.json');
 let prefs = { shields: { enabled: true, blockTrackers: true, blockAds: true, blockAnnoyances: false, cleanLinks: true, httpsOnly: true, gpc: true }, allowlist: {}, askDownloadLocation: true, downloadPath: '', extensionPaths: [], disabledExtensionIds: [], extensionMetadata: [], sitePermissions: {} };
 try { const saved = JSON.parse(fs.readFileSync(prefsFile, 'utf8')); if (saved && typeof saved === 'object') prefs = { ...prefs, ...saved, shields: { ...prefs.shields, ...(saved.shields || {}) } }; } catch { /* First launch. */ }
@@ -105,6 +106,22 @@ function registerIpc() {
   handle('app:read-log', () => log.readTail(400));
   handle('app:log-path', () => log.getLogFile());
   handle('app:open-logs', async () => { const error = await shell.openPath(log.getLogDir()); return { ok: !error, path: log.getLogDir(), message: error }; });
+  handle('app:update:check', () => updateManager.check());
+  handle('app:update:install', (event, releaseInfo) => updateManager.install(releaseInfo));
+  handle('app:inspect-tab', (event, contentsId, x, y) => {
+    // Open the page inspector for any tab's site, right-click or keyboard.
+    const id = Number(contentsId);
+    const contents = Number.isSafeInteger(id) && id > 0 ? webContents.fromId(id) : null;
+    if (!contents || contents.getType() !== 'webview') return { ok: false, message: 'That tab has no web page to inspect.' };
+    try {
+      if (Number.isFinite(x) && Number.isFinite(y)) contents.inspectElement(Math.round(x), Math.round(y));
+      else contents.openDevTools({ mode: 'detach' });
+      return { ok: true };
+    } catch (err) {
+      log.error('Inspect failed', err);
+      return { ok: false, message: err.message || 'The page inspector could not be opened.' };
+    }
+  });
   handle('app:default-browser-status', () => {
     if (!app.isPackaged) return { supported: false, registered: false, platform: process.platform, message: 'Install a Vespera release build to register it with your operating system.' };
     let http = false, https = false;
@@ -323,8 +340,7 @@ function wireWebContents() {
         );
         if (params.isEditable) template.push({ role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' });
         else if (params.selectionText) template.push({ role: 'copy' }, { type: 'separator' }, { label: 'Search with Startpage', click: () => contents.hostWebContents?.send('browser:search-selection', params.selectionText) });
-        template.push({ label: 'Back', enabled: contents.canGoBack(), click: () => contents.goBack() }, { label: 'Forward', enabled: contents.canGoForward(), click: () => contents.goForward() }, { label: 'Reload', click: () => contents.reload() }, { type: 'separator' }, { label: 'Copy page address', click: () => require('electron').clipboard.writeText(contents.getURL()) });
-        if (!app.isPackaged) template.push({ type: 'separator' }, { label: 'Inspect page', click: () => contents.inspectElement(params.x, params.y) });
+        template.push({ label: 'Back', enabled: contents.canGoBack(), click: () => contents.goBack() }, { label: 'Forward', enabled: contents.canGoForward(), click: () => contents.goForward() }, { label: 'Reload', click: () => contents.reload() }, { type: 'separator' }, { label: 'Copy page address', click: () => require('electron').clipboard.writeText(contents.getURL()) }, { type: 'separator' }, { label: 'Inspect', click: () => contents.inspectElement(params.x, params.y) });
         Menu.buildFromTemplate(template).popup({ window: win });
       });
     }
@@ -346,6 +362,7 @@ app.whenReady().then(async () => {
   app.userAgentFallback = chromeUA;
   downloadManager = new DownloadManager(() => prefs, () => [...windows], log);
   extensionManager = installExtensions(normalSession, () => prefs, persistPrefs, () => BrowserWindow.getFocusedWindow() || mainWindow, log);
+  updateManager = createUpdateManager(log);
   let pu = null;
   const puPromise = import('../src/shared/privacy-utils.mjs').then((m) => { pu = m; }).catch((err) => { log.error('Privacy utilities unavailable; network filtering is disabled', err); });
   // Wire privacy + IPC and show the window immediately; don't wait on the

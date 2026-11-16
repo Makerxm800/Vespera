@@ -23,6 +23,103 @@ export const BUILTIN_EXTENSIONS = [
 ];
 
 /**
+ * Site-access helpers shared by the Extensions page and the toolbar menu.
+ * Chrome reports an extension's reach as "On all sites", "On this site" or
+ * no site access, based on its host permissions and content-script matches.
+ */
+
+/** Hostname of a tab URL, or '' for non-web pages. */
+export function hostFromUrl(url) {
+  try {
+    const parsed = new URL(String(url || ''));
+    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.hostname.toLowerCase() : '';
+  } catch { return ''; }
+}
+
+/**
+ * Minimal Chrome match-pattern check for the schemes extensions actually use
+ * (http/https, plus file: for unpacked dev extensions). Supports "*", exact
+ * hosts, "*.example.com" subdomain wildcards and path suffixes.
+ */
+export function matchPattern(pattern, host) {
+  const raw = String(pattern || '').trim();
+  if (!raw || !host) return false;
+  if (raw === '<all_urls>') return true;
+  let value = raw;
+  let path = '/';
+  const schemeIdx = value.indexOf('://');
+  if (schemeIdx === -1) return false;
+  const scheme = value.slice(0, schemeIdx).toLowerCase();
+  // "*" is the match-pattern wildcard for http/https.
+  if (!['*', 'http', 'https', 'file', 'ftp'].includes(scheme)) return false;
+  value = value.slice(schemeIdx + 3);
+  const slash = value.indexOf('/');
+  if (slash !== -1) { path = value.slice(slash); value = value.slice(0, slash); }
+  if (scheme === 'file') return host === 'localhost' || host === '';
+  let patternHost = value.toLowerCase();
+  if (patternHost === '*') return true;
+  if (patternHost.startsWith('*.')) patternHost = patternHost.slice(2);
+  if (patternHost !== host && !host.endsWith('.' + patternHost)) return false;
+  if (!path || path === '/') return true;
+  // Path matching: a trailing * matches any suffix; otherwise exact prefix.
+  if (path.endsWith('*')) return true;
+  return path === '/' || host !== ''; // Host-only patterns cover the whole origin.
+}
+
+/**
+ * Classify one extension's reach for a given site.
+ * level: 'all' (On all sites) | 'site' (On this site) | 'none'.
+ */
+export function extensionSiteAccess(ext, host = '') {
+  const patterns = Array.isArray(ext?.hostPermissions) ? ext.hostPermissions : [];
+  const enabled = Boolean(ext?.enabled);
+  const all = patterns.some((p) => ['<all_urls>', '*://*/*', 'http://*/*', 'https://*/*'].includes(String(p).trim()));
+  const onSite = !all && patterns.some((p) => matchPattern(p, host));
+  if (!enabled) return { level: 'none', enabled: false, all: false, onSite: false, access: 'Disabled' };
+  if (all) return { level: 'all', enabled: true, all: true, onSite: true, access: 'On all sites' };
+  if (onSite) return { level: 'site', enabled: true, all: false, onSite: true, access: 'On this site' };
+  return { level: 'none', enabled: true, all: false, onSite: false, access: 'No site access' };
+}
+
+/**
+ * Human-readable capabilities an extension's declared permissions grant it.
+ * The UI uses this to show what each extension can actually do — extensions
+ * differ in what they know how to do, so the list reflects their real tools.
+ */
+export function extensionCapabilities(ext) {
+  const permissions = new Set(Array.isArray(ext?.permissions) ? ext.permissions : []);
+  const hostPermissions = Array.isArray(ext?.hostPermissions) ? ext.hostPermissions : [];
+  const all = hostPermissions.some((p) => ['<all_urls>', '*://*/*'].includes(String(p).trim()));
+  const out = [];
+  if (permissions.has('storage') || permissions.has('unlimitedStorage')) out.push('Saves data on this device');
+  if (permissions.has('tabs')) out.push('Sees your open tabs');
+  if (permissions.has('activeTab')) out.push('Acts only when you use the site');
+  if (permissions.has('scripting') || permissions.has('scriptingPrivate')) out.push('Runs scripts on pages');
+  if (permissions.has('notifications')) out.push('Can send you notifications');
+  if (permissions.has('clipboardRead') || permissions.has('clipboardWrite')) out.push('Can read or write the clipboard');
+  if (permissions.has('downloads')) out.push('Can save files for you');
+  if (permissions.has('bookmarks')) out.push('Can see and change bookmarks');
+  if (permissions.has('history')) out.push('Can see browsing history');
+  if (permissions.has('alarms')) out.push('Runs on a schedule');
+  if (permissions.has('contextMenus')) out.push('Adds menu items');
+  if (permissions.has('idle')) out.push('Knows when you are away');
+  if (all) out.push('Sees and changes every website');
+  else if (hostPermissions.length) out.push('Sees and changes the sites it is granted');
+  if (!out.length) out.push('Runs in the background without extra tools');
+  return out;
+}
+
+/** Plain-language summary of what an extension needs to run. */
+export function extensionNeedsSummary(ext, host = '') {
+  const permissions = Array.isArray(ext?.permissions) ? ext.permissions : [];
+  const access = extensionSiteAccess(ext, host);
+  const parts = [];
+  if (permissions.length) parts.push(`${permissions.length} permission${permissions.length === 1 ? '' : 's'} declared`);
+  parts.push(access.access);
+  return parts.join(' · ');
+}
+
+/**
  * Curated catalog: trusted, popular extensions users most often want.
  * Each entry links to the developer's official download/store page — Vespera
  * never hosts or repackages anyone's code. The user downloads the package and

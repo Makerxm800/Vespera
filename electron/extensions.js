@@ -133,14 +133,28 @@ function iconDataUrl(root, manifest) {
   return null;
 }
 
-function popupPath(manifest) {
-  const raw = manifest?.action?.default_popup || manifest?.browser_action?.default_popup || '';
+/**
+ * Safely normalize a manifest page path (popup or options page): relative to
+ * the extension root, no absolute/remote URLs, no traversal.
+ */
+function pagePath(raw) {
   if (typeof raw !== 'string' || !raw.trim()) return '';
   const value = raw.trim().replace(/\\/g, '/');
   let decoded;
   try { decoded = decodeURIComponent(value); } catch { return ''; }
   if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(value) || decoded.split('/').includes('..')) return '';
   return value.replace(/^\/+/, '').slice(0, 500);
+}
+function popupPath(manifest) {
+  const raw = manifest?.action?.default_popup || manifest?.browser_action?.default_popup || '';
+  return pagePath(raw);
+}
+/** Options page path (options_page or options_ui), for popup-less extensions. */
+function optionsPath(manifest) {
+  const entry = manifest?.options_ui && typeof manifest.options_ui === 'object'
+    ? manifest.options_ui
+    : { page: manifest?.options_page };
+  return pagePath(entry?.page || '');
 }
 
 function extensionDetails(extension, enabled = true) {
@@ -158,6 +172,7 @@ function extensionDetails(extension, enabled = true) {
     hostPermissions: values([...(Array.isArray(manifest.host_permissions) ? manifest.host_permissions : []), ...contentMatches]),
     icon: extension?.path ? iconDataUrl(extension.path, manifest) : null,
     popup: popupPath(manifest),
+    options: optionsPath(manifest),
     actionTitle: String(action.default_title || manifest.name || extension?.name || 'Extension').slice(0, 120),
     enabled: Boolean(enabled),
   };

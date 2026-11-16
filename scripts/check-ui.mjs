@@ -200,7 +200,7 @@ try {
     await menu('settings'); assert.equal(await page.locator('.settings-layout').count(), 1);
     assert.equal(await page.locator('.settings-layer').count(), 0);
     assert.match(await page.locator('.settings-layout .settings-nav a.active').textContent(), /Appearance/);
-    assert.equal(await page.locator('.settings-layout .settings-nav a').count(), 9);
+    assert.equal(await page.locator('.settings-layout .settings-nav a').count(), 10);
     const navBox = await page.locator('.settings-layout .settings-nav').boundingBox();
     assert.ok(navBox.height < 450, 'section navigation hugs its links instead of filling an oversized empty box');
     await page.locator('.settings-layout .settings-nav [data-section="browser"]').click();
@@ -564,6 +564,34 @@ try {
     await menu('updates'); await page.waitForSelector('.updates-page');
     assert.ok((await page.locator('.updates-page').textContent()).includes(appVersion), 'release notes identify the current package version');
     assert.match(await page.locator('.updates-page a[href*="releases"]').first().getAttribute('href'), /github\.com\/Makerxm800\/Vespera\/releases/);
+  });
+  await step('extensions page gains an access panel; updates page gains a working update button', async () => {
+    await go('vespera://extensions'); await page.waitForSelector('.extensions-page');
+    assert.ok(await page.locator('.settings-nav [data-section="access"]').count(), 'the Extensions nav gains an Access section');
+    assert.ok(await page.locator('#ext-access').count(), 'the Access panel is rendered');
+    assert.match(await page.locator('#ext-access').textContent(), /Open a website to see its extension access/, 'the access panel explains itself before a site is open');
+    assert.ok(await page.locator('#ext-external .empty').count(), 'installed list shows its empty state in the web preview');
+    await go('vespera://updates'); await page.waitForSelector('.updates-page');
+    assert.ok(await page.locator('#update-check').count(), 'the updates page has a check-for-updates button');
+    assert.equal(await page.locator('#update-check').isDisabled(), true, 'the web preview cannot install desktop builds');
+    await go('vespera://settings#updates'); await page.waitForSelector('#settings-check-update');
+    assert.equal(await page.locator('#settings-check-update').isDisabled(), true, 'settings exposes the same update button');
+  });
+  await step('tab controls live in Settings, the menu offers updates and right-click inspect', async () => {
+    await page.locator('#btn-menu').click();
+    assert.equal(await page.locator('.browser-menu [data-pref]').count(), 0, 'tab toggles are no longer menu switches');
+    assert.match(await page.locator('.browser-menu').textContent(), /Check for updates/);
+    assert.match(await page.locator('.browser-menu').textContent(), /Tab settings/);
+    await page.keyboard.press('Escape');
+    await go(fixtureUrl); await page.waitForFunction(() => document.querySelector('#tabstrip .tab.active .title')?.textContent === 'Fixture Home');
+    await page.locator('#tabstrip .tab.active').click({ button: 'right' });
+    await page.waitForSelector('.tab-actions-menu');
+    assert.match(await page.locator('.tab-actions-menu').textContent(), /Inspect/);
+    await page.keyboard.press('Escape');
+    await page.locator('#content').click({ button: 'right' });
+    await page.waitForSelector('.context-menu');
+    assert.match(await page.locator('.context-menu').textContent(), /Inspect/, 'the page context menu offers Inspect');
+    await page.keyboard.press('Escape');
   });
   await step('session restores the active tab after a real reload', async () => {
     await go('vespera://history'); await page.waitForTimeout(250); const count = await page.locator('#tabstrip .tab').count();
