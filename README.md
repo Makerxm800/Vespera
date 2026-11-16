@@ -1,11 +1,11 @@
 # Vespera Browser 🚀
 
-> **A community-first Chromium browser built for privacy, speed and a calm interface.**
-> Real Chromium core · Twilight UI · zero telemetry · local-first accounts + sync · community-voted roadmap.
+> **A community-first privacy browser built for speed and a calm interface.**
+> Tauri v2 shell · Twilight UI · zero telemetry · local-first accounts + sync · community-voted roadmap.
 
 Im very sorry, i don't like using AI on my serious projects — i built Vespera by hand to see where the whole vibe-code experiment is actually going. It turned into a browser i use every day, so here it is. :P
 
-**Latest release: v0.1.10** — installers for Windows, macOS and Linux are published on the GitHub Releases page. The release workflow builds all platforms when a new `v*` tag is pushed.
+**Latest release: v0.2.0** — installers for Windows, macOS and Linux are published on the GitHub Releases page. The release workflow builds all platforms when a new `v*` tag is pushed.
 
 ---
 
@@ -53,7 +53,6 @@ double-click it — exactly like any other browser:
 | Platform | File to download | How to install |
 |---|---|---|
 | 🪟 Windows 10/11 | `Vespera-Setup-<v>.exe` | Double-click → install → open from Start Menu |
-| 🪟 Windows (portable) | `Vespera-Portable-<v>.exe` | Double-click and browse — no install |
 | 🍎 macOS (Apple Silicon) | `Vespera-<v>-mac-arm64.dmg` | Open → drag Vespera to Applications |
 | 🍎 macOS (Intel) | `Vespera-<v>-mac-x64.dmg` | Open → drag Vespera to Applications |
 | 🐧 Linux | `Vespera-<v>-linux-x86_64.AppImage` | Double-click (allow "execute" on first run) |
@@ -63,8 +62,8 @@ double-click it — exactly like any other browser:
 <summary><b>First-run notes</b> (unsigned builds)</summary>
 
 - **Windows SmartScreen** can show "Windows protected your PC" for an
-  unsigned or unfamiliar publisher. This is not caused by Electron's
-  `app.asar` archive; removing that file will not remove the warning. A trusted
+  unsigned or unfamiliar publisher. This is not caused by the app's
+  packaging; removing files will not remove the warning. A trusted
   Authenticode signature and publisher reputation are needed to reduce it.
   Only install builds downloaded from the official Releases page. If Windows
   reports a specific malware/threat name instead, do not run the installer.
@@ -118,14 +117,14 @@ status, errors with stack traces):
 ## 🛠️ Build from source (for developers)
 
 ```bash
-# 1. Install (pulls Electron + the Chromium core)
+# 1. Install (Node dependencies for the UI and the Tauri CLI)
 npm install
 
-# 2. Run the desktop browser  (real Chromium webviews)
-npm start
+# 2. Run the desktop browser (needs the Rust toolchain)
+npm start            # = tauri dev
 
 # …or run the web preview of the same UI (browser-in-browser demo)
-npm run preview   # then open http://localhost:4600
+npm run preview     # then open http://localhost:4600
 
 # Run the unit/service test suite
 npm test
@@ -133,18 +132,21 @@ npm test
 # Run real Chromium UI checks (after npx playwright install chromium)
 npm run test:ui
 
-# Build installers for your current platform (output in dist/)
+# Build installers for your current platform (Tauri bundles in src-tauri/target)
 npm run dist
 ```
 
-**Requirements:** Node.js 20+ and npm. That's it.
-**Published release: 0.1.7. Next release candidate: 0.1.8** — follow [RELEASING.md](RELEASING.md) to merge and tag the prepared release.
+**Requirements:** Node.js 20+, npm, and the Rust toolchain (`rustup`).
+On Linux you also need the webview development packages (see the release
+workflow: `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`,
+`librsvg2-dev`, `libjavascriptcoregtk-4.1-dev`). **Published release: v0.2.0**
+— follow [RELEASING.md](RELEASING.md) to merge and tag a release.
 
 ### Live web preview / installable app
 
 `npm run preview` serves the same browser UI at `http://localhost:4600`. In a hosted preview, Vespera runs directly in the browser: tabs, Home, right-click menus, the full Settings page, downloads, extensions and customization work without installing the desktop shell. The web app includes a manifest and app-shell cache, so supported browsers can offer **Install Vespera as an app** from the Vespera menu. Open **What's new** (`vespera://updates`) for build notes and the published Releases link.
 
-The preview proxy is intentionally limited: some sites block embedding or are unreachable from the host environment. Use **Open original** for those sites. The Electron desktop app remains the full Chromium runtime.
+The preview proxy is intentionally limited: some sites block embedding or are unreachable from the host environment. Use **Open original** for those sites. The desktop app uses the same proxy engine for every tab, so sites behave consistently whether you run the installed app or the web preview.
 
 ---
 
@@ -170,33 +172,42 @@ The preview proxy is intentionally limited: some sites block embedding or are un
 
 ```
 Vespera/
-├── electron/           Real Chromium shell
-│   ├── main.js         Window, downloads, incognito, service boot
-│   ├── client-hints.js Client hint headers so sites see a real Chrome
-│   ├── webview-preload.js  Identity patch for embedded pages (Google sign-in)
-│   ├── privacy.js      Network blocking, GPC/DNT, link cleaning, cosmetic filters
-│   └── preload.js      contextIsolation bridge
+├── src-tauri/          The Tauri v2 shell (Rust)
+│   ├── src/
+│   │   ├── main.rs / lib.rs       App setup, IPC commands, window creation
+│   │   ├── server.rs               Local UI + /proxy + /api server (127.0.0.1)
+│   │   ├── proxy.rs                Preview proxy: fetch, rewrite, block, guest bridge
+│   │   ├── filters.rs              EasyList-subset filter engine (ported from JS)
+│   │   ├── update.rs               GitHub Releases updater
+│   │   ├── downloads.rs            Background download manager
+│   │   ├── extensions.rs           Local extension registry
+│   │   ├── permissions.rs          Site permission policy
+│   │   ├── prefs.rs / logs.rs / window.rs / default_browser.rs
+│   ├── assets/         Generated blocklists + extension catalog
+│   └── icons/          Generated app icons
 ├── src/
 │   ├── shared/         Privacy + tab logic shared by every layer
 │   │   ├── filter-engine.js    EasyList-subset matcher (optimized core)
 │   │   ├── blocklists.js       Bundled tracker/ad/annoyance lists
+│   │   ├── guest-bridge.js     Bridge script injected into proxied pages
+│   │   ├── permissions.js      Site permission policy (pure functions)
+│   │   ├── extensions.mjs      Built-in extensions + store catalog
 │   │   ├── tab-order.mjs       Pure drag-and-drop ordering (unit tested)
 │   │   └── privacy-utils.mjs   Link cleaning, search engines, omnibox logic
 │   └── renderer/       The Vespera chrome UI (vanilla ESM, zero frameworks)
 │       ├── styles/     Twilight design system (tokens, chrome, pages)
-│       └── js/         Tabs, omnibox, shields, palette, state, Settings page + all pages
-├── server/             Bundled local service (zero dependencies)
+│       └── js/         Tabs, omnibox, shields, palette, state, tauri-bridge, Settings + all pages
+├── server/             Local service for the web preview (zero dependencies)
 │   ├── routes/         Accounts, sync, community voting API
 │   └── lib/            Auth (scrypt+HMAC), atomic JSON store, preview proxy
 ├── scripts/            Icon generator, UI checks, friendly postinstall
-├── electron-builder.yml            Installer config (win/mac/linux)
-├── .github/workflows/release.yml   Automated multi-OS build & release
+├── .github/workflows/release.yml   Automated multi-OS Tauri build & release
 └── test/               Unit/service tests: engine semantics, auth, store, tab ordering
 ```
 
 * **Accounts** — scrypt-hashed passwords, HMAC-signed stateless tokens, rate limiting. Nothing leaves your machine.
 * **Sync** — per-user collections (settings, bookmarks, history) with last-write-wins merging; works against any Vespera service URL.
-* **Zero runtime dependencies** in the service layer — the only dependency is Electron itself.
+* **A small native core.** The browser UI is plain ESM with zero frameworks; the only runtime dependency is the Tauri webview on each platform.
 
 ---
 

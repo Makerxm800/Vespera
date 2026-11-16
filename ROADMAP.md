@@ -38,7 +38,7 @@ Statuses: `open` → `planned` → `in-progress` → `shipped`.
 - [x] Status tracking (moderators): open → planned → in-progress → shipped
 
 ### Platform
-- [x] Real Chromium desktop app (Electron 33) with `<webview>` page isolation
+- [x] Desktop app on Tauri v2 (Rust core + system webview) with sandboxed iframe page isolation
 - [x] Accounts: register / login / profile / sign-out-everywhere (scrypt + HMAC tokens)
 - [x] Sync: settings, bookmarks, history — per-user, last-write-wins
 - [x] Session restore (tabs come back after relaunch)

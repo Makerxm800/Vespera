@@ -1,5 +1,5 @@
 /** Vespera state — settings, bookmarks, history; local-first with account sync. */
-import * as api from './api.js';
+import * as api from './api.jsx';
 import { applyWallpaper } from './wallpaper.js';
 import { SEARCH_ENGINES } from '../../shared/privacy-utils.mjs';
 

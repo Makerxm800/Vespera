@@ -11,6 +11,10 @@ release/
 release-*/
 build-*/
 
+# Tauri / Rust build output
+src-tauri/target/
+src-tauri/gen/
+
 # Local service data — never commit accounts or the signing secret
 data/
 

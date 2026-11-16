@@ -1,7 +1,7 @@
 /** Community page — the Vespera feature-request voting board (roadmap item 4). */
 import { icon } from '../icons.js';
 import { state } from '../state.js';
-import * as api from '../../js/api.js';
+import * as api from '../../js/api.jsx';
 import { escapeHtml, toast } from '../toasts.js';
 
 const STATUS_CHIP = {

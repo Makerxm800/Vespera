@@ -19,7 +19,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
 
-const BUILD = path.resolve(__dirname, '..', 'build');
+const BUILD = path.resolve(__dirname, '..', 'src-tauri', 'icons');
 
 /* ============================== PNG encoder ============================== */
 
@@ -224,23 +224,24 @@ function buildIcns(master) {
 /* ================================= Main ================================= */
 
 function main() {
-  fs.mkdirSync(path.join(BUILD, 'icons'), { recursive: true });
+  fs.mkdirSync(BUILD, { recursive: true });
   console.log('Rendering Vespera icon set…');
 
   const master = render(1024);
   fs.writeFileSync(path.join(BUILD, 'icon.png'), encodePng(1024, 1024, master));
-  console.log('  build/icon.png            1024×1024');
+  console.log('  src-tauri/icons/icon.png  1024×1024');
 
   fs.writeFileSync(path.join(BUILD, 'icon.ico'), buildIco(master));
-  console.log('  build/icon.ico            16–256 (Windows)');
+  console.log('  src-tauri/icons/icon.ico  16–256 (Windows)');
 
   fs.writeFileSync(path.join(BUILD, 'icon.icns'), buildIcns(master));
-  console.log('  build/icon.icns           128–1024@2x (macOS)');
+  console.log('  src-tauri/icons/icon.icns 128–1024@2x (macOS)');
 
-  for (const s of [256, 512]) {
-    fs.writeFileSync(path.join(BUILD, 'icons', `${s}x${s}.png`), encodePng(s, s, render(s)));
+  for (const s of [32, 128, 256, 512]) {
+    fs.writeFileSync(path.join(BUILD, `${s}x${s}.png`), encodePng(s, s, render(s)));
+    if (s === 256) fs.writeFileSync(path.join(BUILD, '128x128@2x.png'), encodePng(s, s, render(s)));
   }
-  console.log('  build/icons/256x256.png   512x512.png (Linux)');
+  console.log('  src-tauri/icons/32x32.png 128x128.png 256x256.png 512x512.png (Linux + Tauri)');
   console.log('Done.');
 }
 

@@ -12,7 +12,7 @@ import { classifyInput, buildSearchUrl, isInternal, internalPageKey, INTERNAL_PA
 import { closePopover, openPopover } from './popover.js';
 import { confirmAction } from './dialog.js';
 import { initDownloads, downloadUrl, downloads, downloadAction, formatBytes } from './downloads.js';
-import * as api from './api.js';
+import * as api from './api.jsx';
 import { renderWelcome } from './pages/welcome.js';
 import { renderNewtab } from './pages/newtab.js';
 import { renderPrivate } from './pages/private.js';
