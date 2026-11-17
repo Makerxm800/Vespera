@@ -170,7 +170,7 @@ jobs:
       - name: Download installer artifacts
         uses: actions/download-artifact@v8
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.inputs.artifact_run_id || github.run_id }}
           path: installers
           pattern: vespera-*
@@ -178,7 +178,7 @@ jobs:
 
       - name: Publish installers
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.event.inputs.release_tag }}
           PUSH_REF_NAME: ${{ github.ref_name }}
           ARTIFACT_RUN_ID: ${{ github.event.inputs.artifact_run_id }}
