@@ -1,222 +1,176 @@
-# Vespera Browser 🚀
+# Vespera
 
-> **A community-first privacy browser built for speed and a calm interface.**
-> Tauri v2 shell · Twilight UI · zero telemetry · local-first accounts + sync · community-voted roadmap.
+**A community-shaped desktop browser with built-in privacy controls.** Vespera pairs a Rust/Tauri desktop shell with a lightweight browser interface, a local service layer, and the webview provided by your operating system.
 
-Im very sorry, i don't like using AI on my serious projects — i built Vespera by hand to see where the whole vibe-code experiment is actually going. It turned into a browser i use every day, so here it is. :P
+- **Platforms:** Windows x64, macOS Intel and Apple silicon, and Linux x86_64
+- **Privacy:** built-in tracker and ad filtering, tracking-link cleanup, HTTPS upgrades, and Global Privacy Control / Do Not Track headers
+- **Interface:** horizontal or vertical tabs, tab groups, keyboard navigation, themes, accent colors, and custom wallpapers
+- **Project:** open source under the MIT license; feature requests and community voting are built into the browser
 
-**Latest release: v0.2.1** — installers for Windows, macOS and Linux are published on the GitHub Releases page. The release workflow builds all platforms when a new `v*` tag is pushed.
-
----
-
-## ✨ What's new in 0.1.8
-
-* **Reorder whole tab groups** — drag groups in the horizontal strip or vertical sidebar; long lists auto-scroll, and group order is restored with your session.
-* **Right-click group actions** — edit group names/colors, add a tab, collapse, ungroup or close without an ellipsis button.
-* **Saved groups** — names, colors, membership, order and collapsed state persist with the tab session. Group names appear once in their header, not as repeated tags on every tab.
-* **A personal wallpaper gallery** — add multiple custom images, switch between them, remove individual wallpapers and tune the active image. Previous custom wallpapers remain available.
-* **A cleaner left sidebar** — Settings remains in the browser menu and on Ctrl+comma; per-site privacy settings remain in the site-information panel.
-* **Focused audio controls** — tabs playing audio, or already muted, keep their mute toggle; the existing indicator/hide preferences are unchanged.
-
-Full details in [CHANGELOG.md](CHANGELOG.md) and in-app at **`vespera://updates`**.
+> Release notes live in [CHANGELOG.md](CHANGELOG.md). Get published installers from the [GitHub Releases page](https://github.com/Makerxm800/Vespera/releases).
 
 ---
 
-## ✨ Why Vespera
+## Contents
 
-* **🔒 Privacy by default** — no telemetry, no data harvesting, no usage profiles. Your browsing belongs to you.
-* **⚡ Fast and light** — no background tracking pipelines; your CPU goes to the page you are reading.
-* **🎨 Built the way you want** — dark/light/system themes, four accent colors (or your own), wallpapers with zoom/position/blur tuning, horizontal or vertical tabs, collapsible sidebar.
-* **🌐 Open source** — inspect it, verify it, contribute to it.
+- [What Vespera includes](#what-vespera-includes)
+- [Download and install](#download-and-install)
+- [Privacy and data](#privacy-and-data)
+- [Keyboard shortcuts](#keyboard-shortcuts)
+- [Build and run from source](#build-and-run-from-source)
+- [How the project is organized](#how-the-project-is-organized)
+- [Contribute](#contribute)
+- [License](#license)
 
-### How it compares
+## What Vespera includes
 
-| | Vespera | Chrome / mainstream |
+### Privacy controls
+
+- A bundled EasyList-subset filter engine blocks supported tracker, advertising, and annoyance rules.
+- Tracking parameters such as common campaign IDs are removed from links before navigation.
+- Requests use HTTPS upgrades where applicable and send Global Privacy Control (GPC) and Do Not Track (DNT) signals.
+- The site-information and Privacy Hub interfaces expose per-site controls and protection activity.
+- Vespera is designed without telemetry collection. Normal browsing still makes requests to the websites you choose to visit; privacy features do not make browsing anonymous or replace a VPN.
+
+### Browser workspace
+
+- Reorder tabs, use horizontal or vertical tab layouts, and organize related tabs into colored groups.
+- Restore your session, reopen recently closed tabs, and manage bookmarks, history, and downloads.
+- Use the command palette, keyboard shortcuts, and unified address/search bar to move around quickly.
+- Customize light, dark, or system appearance, accent colors, density, and wallpaper.
+- Open private windows for a separate in-memory browsing session.
+- Inspect application logs from **View logs** or `vespera://logs` when troubleshooting.
+
+### Accounts, sync, and community
+
+- The Account page provides account/profile controls and sync for settings, bookmarks, and history through the Vespera service configured for that installation.
+- The Community page provides a feature-request board with voting, comments, and status tracking.
+- Account, sync, and community functions are optional. Data needed for a feature is sent to its configured service when you use that feature; read the policy for the service you connect to, especially for self-hosted deployments.
+
+### Extension compatibility
+
+Vespera includes an Extensions page and a catalog/management interface, but its Tauri system-webview does **not** provide Chromium's `chrome-extension://` runtime or extension APIs. Chrome extensions therefore cannot execute in the current desktop build. The app reports this limitation rather than claiming an extension was installed when it cannot run.
+
+## Download and install
+
+Choose the installer that matches your computer from the [Releases page](https://github.com/Makerxm800/Vespera/releases). Download only from the official Vespera repository.
+
+| System | Release asset | Install |
 |---|---|---|
-| Telemetry | **Zero, permanently (no switch to turn on)** | Constant usage & crash reporting |
-| Trackers & ads | **Blocked out of the box** | Allowed (it's the business model) |
-| Tracking links (`utm_*`, `fbclid`, `gclid`) | **Stripped automatically** | Kept and profiled |
-| Vertical tabs, tab groups, command palette | **Built in** | Extensions or nothing |
-| Feature roadmap | **Voted in-app by the community** | Decided in a boardroom |
-| Sync accounts | **Your own server, scrypt-hashed passwords** | Corporate identity lock-in |
-| Global Privacy Control + DNT | **Sent on every request** | Off by default |
-| Per-site Shields | **One click, live counters** | Buried settings |
+| Windows 10/11, x64 | `.exe` setup wizard or `.msi` package | Run the installer and follow its prompts. |
+| macOS, Apple silicon | ARM64 `.dmg` | Open the disk image and drag Vespera to Applications. |
+| macOS, Intel | x64 `.dmg` | Open the disk image and drag Vespera to Applications. |
+| Linux, x86_64 | `.AppImage` or Debian/Ubuntu `.deb` | Run the AppImage, or install the `.deb` with your package manager. |
 
----
+### First launch and installer warnings
 
-## 📥 Download & install — no commands needed
+Current builds may be unsigned. Windows SmartScreen or macOS Gatekeeper can therefore warn that the publisher is not recognized. Verify that the installer came from the official Releases page before proceeding. Do **not** run a file if your operating system identifies a specific malware threat. Code signing and macOS notarization are separate release-engineering tasks; see [RELEASING.md](RELEASING.md).
 
-Grab the installer for your machine from the
-**[Releases page](https://github.com/Makerxm800/Vespera/releases)** and
-double-click it — exactly like any other browser:
+On Linux, the desktop webview and graphics libraries must be available on the system. If the app does not open, check the distribution's WebKitGTK and GTK package requirements and consult the build workflow for the current dependency list.
 
-| Platform | File to download | How to install |
-|---|---|---|
-| 🪟 Windows 10/11 | `Vespera-Setup-<v>.exe` | Double-click → install → open from Start Menu |
-| 🍎 macOS (Apple Silicon) | `Vespera-<v>-mac-arm64.dmg` | Open → drag Vespera to Applications |
-| 🍎 macOS (Intel) | `Vespera-<v>-mac-x64.dmg` | Open → drag Vespera to Applications |
-| 🐧 Linux | `Vespera-<v>-linux-x86_64.AppImage` | Double-click (allow "execute" on first run) |
-| 🐧 Debian/Ubuntu | `Vespera-<v>-linux-amd64.deb` | Double-click the package |
+## Privacy and data
 
-<details>
-<summary><b>First-run notes</b> (unsigned builds)</summary>
+Vespera's privacy design combines local browser controls with optional service features:
 
-- **Windows SmartScreen** can show "Windows protected your PC" for an
-  unsigned or unfamiliar publisher. This is not caused by the app's
-  packaging; removing files will not remove the warning. A trusted
-  Authenticode signature and publisher reputation are needed to reduce it.
-  Only install builds downloaded from the official Releases page. If Windows
-  reports a specific malware/threat name instead, do not run the installer.
-- **macOS Gatekeeper** may say the app is from an unidentified developer →
-  **right-click the app → Open → Open**. (Signing + notarization is planned —
-  see [RELEASING.md](RELEASING.md).)
-</details>
+- Browser settings, bookmarks, history, and session state are kept in the local application profile unless you choose to sync them.
+- Built-in filtering, link cleanup, and request privacy headers run as browser features; they do not prevent a visited website from seeing the request needed to load that site.
+- Signing in and using sync sends the account and selected sync data to the Vespera service configured for the app. Community posts, votes, and comments are likewise service features.
+- The project does not add product telemetry. This is not a promise that websites, operating systems, or a service you choose to use collect no information.
 
-The Windows installer is a **classic step-by-step wizard**: Welcome →
-choose folder → Install → **Finish with a "Run Vespera" checkbox** — tick it
-and the browser launches right away.
+For a self-hosted service, review its deployment, access-control, backup, and retention settings before using real account data.
 
-### Everyday shortcuts
+## Keyboard shortcuts
 
 | Action | Shortcut |
 |---|---|
-| Settings page | `Ctrl+,` |
-| Command palette | `Ctrl+K` |
-| New tab / close tab / reopen closed | `Ctrl+T` / `Ctrl+W` / `Ctrl+Shift+T` |
-| Switch to tab 1–9 | `Ctrl+1` … `Ctrl+9` |
-| Move the current tab | `Ctrl+Shift+PageUp` / `PageDown`, or `Shift+←/→` |
+| New tab | `Ctrl+T` |
+| Close tab | `Ctrl+W` |
+| Reopen closed tab | `Ctrl+Shift+T` |
+| Switch to tabs 1–9 | `Ctrl+1` … `Ctrl+9` |
 | Find in page | `Ctrl+F` |
-| Bookmarks bar / History | `Ctrl+Shift+B` / `Ctrl+H` |
-| Hide the sidebar | browser menu → **Hide sidebar** |
-| Toggle the Shields panel | click the shield in the toolbar |
+| Bookmark the current page | `Ctrl+D` |
+| Open the command palette | `Ctrl+K` |
+| Open Settings | `Ctrl+,` |
+| Show or hide the bookmarks bar | `Ctrl+Shift+B` |
+| Open History | `Ctrl+H` |
+| Open a private window | `Ctrl+Shift+N` |
 
-### 🩺 If something goes wrong — read the logs
+Shortcuts can vary by operating system and may be intercepted by the page or webview. The browser menu and command palette provide alternate ways to reach common actions.
 
-Vespera keeps a full log of everything it does (startup steps, service
-status, errors with stack traces):
+## Build and run from source
 
-- **Inside the app:** menu (⋮) → **View logs**, or type `vespera://logs`
-  in the address bar.
-- **On disk:** `%APPDATA%\vespera-browser\logs\vespera.log` on Windows,
-  `~/Library/Application Support/vespera-browser/logs/vespera.log` on macOS,
-  `~/.config/vespera-browser/logs/vespera.log` on Linux.
-- If the app can't start at all, it shows a dialog that includes the exact
-  log path — attach that file when reporting a problem.
+### Requirements
 
-### 🗑️ Uninstalling — leaves nothing behind
+- Node.js 22 (the release workflow uses Node.js 22) and npm
+- Rust stable via [rustup](https://rustup.rs/)
+- Native build tools required by Tauri for your operating system
+- On Linux, the WebKitGTK, GTK, Ayatana app-indicator, and librsvg development packages listed in `.github/workflows/release.yml`
 
-- **Windows:** Settings → Apps → Installed apps → **Vespera → Uninstall**
-  (or Start Menu → Vespera → Uninstall). The uninstaller removes the program,
-  its Start Menu/Desktop shortcuts, **all registry entries**, and — since
-  v0.1.1 — all local Vespera data too (accounts, history, settings).
-- **macOS:** drag Vespera from Applications to the Trash.
-- **Linux:** delete the `.AppImage` file, or `sudo apt remove vespera` for the `.deb`.
-
----
-
-## 🛠️ Build from source (for developers)
+### Common commands
 
 ```bash
-# 1. Install (Node dependencies for the UI and the Tauri CLI)
-npm install
+# Install the JavaScript dependencies
+npm ci
 
-# 2. Run the desktop browser (needs the Rust toolchain)
-npm start            # = tauri dev
+# Run the desktop app in development (requires the Rust toolchain)
+npm start
 
-# …or run the web preview of the same UI (browser-in-browser demo)
-npm run preview     # then open http://localhost:4600
-
-# Run the unit/service test suite
+# Run the unit and service tests
 npm test
 
-# Run real Chromium UI checks (after npx playwright install chromium)
+# Run the browser UI checks (install Playwright Chromium first)
+npx playwright install chromium
 npm run test:ui
 
-# Build installers for your current platform (Tauri bundles in src-tauri/target)
+# Serve the browser interface and local service in a web browser
+npm run preview
+# Open http://localhost:4600
+
+# Build installers for the current operating system
 npm run dist
 ```
 
-**Requirements:** Node.js 20+, npm, and the Rust toolchain (`rustup`).
-On Linux you also need the webview development packages (see the release
-workflow: `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`,
-`librsvg2-dev`, `libjavascriptcoregtk-4.1-dev`). **Published release: v0.2.1**
-— follow [RELEASING.md](RELEASING.md) to merge and tag a release.
+Platform-specific bundle scripts are also available as `npm run dist:win`, `npm run dist:mac`, and `npm run dist:linux`. A native build generally needs to run on its target OS; the release workflow uses separate hosted runners for Windows, macOS Intel, macOS ARM64, and Ubuntu.
 
-### Live web preview / installable app
+### Troubleshooting
 
-`npm run preview` serves the same browser UI at `http://localhost:4600`. In a hosted preview, Vespera runs directly in the browser: tabs, Home, right-click menus, the full Settings page, downloads, extensions and customization work without installing the desktop shell. The web app includes a manifest and app-shell cache, so supported browsers can offer **Install Vespera as an app** from the Vespera menu. Open **What's new** (`vespera://updates`) for build notes and the published Releases link.
+- **The desktop app fails during startup:** open **View logs** from the browser menu, or navigate to `vespera://logs`. The log viewer includes the recorded application events and errors.
+- **The app cannot open:** verify the required system webview and native libraries are installed. On Linux, install the development/runtime packages for WebKitGTK and GTK appropriate to your distribution.
+- **The page is blank in web preview:** some websites block embedding or cannot be reached through the preview proxy. Use the page's **Open original** action when available.
+- **An installer warning appears:** see [First launch and installer warnings](#first-launch-and-installer-warnings); only use releases downloaded from the official repository.
 
-The preview proxy is intentionally limited: some sites block embedding or are unreachable from the host environment. Use **Open original** for those sites. The desktop app uses the same proxy engine for every tab, so sites behave consistently whether you run the installed app or the web preview.
+## How the project is organized
 
----
-
-## 🗺️ Roadmap — shipped in this build
-
-- [x] **Core privacy engine** — EasyList-subset filter engine with precompiled regexes and domain-bucketed matching (50k matches in milliseconds), tracking-parameter stripping, HTTPS upgrades, strict referrer policy, GPC/DNT headers.
-- [x] **Twilight design system** — dark/light themes, four accent colors, glass panels, animated starfield, horizontal **or** vertical tabs, collapsible sidebar, unified omnibox with smart suggestions, command palette (`Ctrl+K`), full keyboard control.
-- [x] **Built-in tracker and ad blocking** — bundled tracker/ad/annoyance blocklists enforced at the network layer, live per-site shield counters, one-click site allowlist, Privacy Hub with real statistics.
-- [x] **Community feature voting** — in-app board: post ideas, upvote/downvote, comment, track statuses (open → planned → in-progress → shipped).
-- [x] **Tab groups with colors** — drag-to-group, group rename, tinted tabs, context-menu join/leave.
-- [x] **Extension compatibility layer** — install from a Chrome Web Store link, a `.zip`/`.crx` package or an unpacked folder, with permissions reviewed before anything loads.
-
-### What's next (vote on these in `vespera://community`!)
-
-- [ ] End-to-end encrypted sync (passphrase-derived keys)
-- [ ] Split view (two pages, one tab)
-- [ ] Reader mode with typography controls
-- [ ] Per-group tab suspension to save memory
-
----
-
-## 🏗️ Architecture (for the curious)
-
-```
-Vespera/
-├── src-tauri/          The Tauri v2 shell (Rust)
-│   ├── src/
-│   │   ├── main.rs / lib.rs       App setup, IPC commands, window creation
-│   │   ├── server.rs               Local UI + /proxy + /api server (127.0.0.1)
-│   │   ├── proxy.rs                Preview proxy: fetch, rewrite, block, guest bridge
-│   │   ├── filters.rs              EasyList-subset filter engine (ported from JS)
-│   │   ├── update.rs               GitHub Releases updater
-│   │   ├── downloads.rs            Background download manager
-│   │   ├── extensions.rs           Local extension registry
-│   │   ├── permissions.rs          Site permission policy
-│   │   ├── prefs.rs / logs.rs / window.rs / default_browser.rs
-│   ├── assets/         Generated blocklists + extension catalog
-│   └── icons/          Generated app icons
-├── src/
-│   ├── shared/         Privacy + tab logic shared by every layer
-│   │   ├── filter-engine.js    EasyList-subset matcher (optimized core)
-│   │   ├── blocklists.js       Bundled tracker/ad/annoyance lists
-│   │   ├── guest-bridge.js     Bridge script injected into proxied pages
-│   │   ├── permissions.js      Site permission policy (pure functions)
-│   │   ├── extensions.mjs      Built-in extensions + store catalog
-│   │   ├── tab-order.mjs       Pure drag-and-drop ordering (unit tested)
-│   │   └── privacy-utils.mjs   Link cleaning, search engines, omnibox logic
-│   └── renderer/       The Vespera chrome UI (vanilla ESM, zero frameworks)
-│       ├── styles/     Twilight design system (tokens, chrome, pages)
-│       └── js/         Tabs, omnibox, shields, palette, state, tauri-bridge, Settings + all pages
-├── server/             Local service for the web preview (zero dependencies)
-│   ├── routes/         Accounts, sync, community voting API
-│   └── lib/            Auth (scrypt+HMAC), atomic JSON store, preview proxy
-├── scripts/            Icon generator, UI checks, friendly postinstall
-├── .github/workflows/release.yml   Automated multi-OS Tauri build & release
-└── test/               Unit/service tests: engine semantics, auth, store, tab ordering
+```text
+src/
+  renderer/       Browser chrome, pages, styles, and UI state
+  shared/         Tab, privacy, filtering, and other shared browser logic
+src-tauri/
+  src/            Rust desktop shell, webview proxy, filters, settings, logs,
+                  downloads, update checks, and extension capability reporting
+  assets/         Bundled filter data and extension catalog data
+server/
+  server.js       Local service used by the web preview and desktop app
+  routes/         Account, sync, and community APIs
+  lib/            Authentication, storage, request routing, and proxy helpers
+scripts/          Icon generation and development checks
+test/             JavaScript unit and service tests
+.github/workflows/ Multi-platform validation and release builds
 ```
 
-* **Accounts** — scrypt-hashed passwords, HMAC-signed stateless tokens, rate limiting. Nothing leaves your machine.
-* **Sync** — per-user collections (settings, bookmarks, history) with last-write-wins merging; works against any Vespera service URL.
-* **A small native core.** The browser UI is plain ESM with zero frameworks; the only runtime dependency is the Tauri webview on each platform.
+The UI is written as native browser modules rather than using a large frontend framework. Tauri provides the desktop window and operating-system webview; Rust hosts the desktop capabilities and local service integration.
 
----
+## Contribute
 
-## 🤝 Get Involved
+Bug reports, documentation improvements, and focused pull requests are welcome. For feature ideas, use the in-app community board at `vespera://community` when it is available. Before opening a pull request:
 
-Vespera is shaped by its users. Whether you want to write code, submit bug reports, or pitch new features, your voice matters here — literally: launch the browser, open **`vespera://community`**, and vote.
+1. Describe the user problem and the behavior your change addresses.
+2. Keep changes focused and avoid including generated installer/build output.
+3. Run `npm test`; for UI changes, also run `npm run test:ui` after installing Playwright Chromium.
+4. Update [CHANGELOG.md](CHANGELOG.md) when a change is intended for a release.
 
-Drop a star ⭐ to support the project, open an issue, and let's build a better internet together!
+See [ROADMAP.md](ROADMAP.md) for the project's current direction and [RELEASING.md](RELEASING.md) for maintainer release steps.
 
----
+## License
 
-*MIT licensed. Zero telemetry — that's not a setting, it's a pledge.* ✨
+Vespera is released under the [MIT License](LICENSE).

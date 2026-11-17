@@ -1,57 +1,60 @@
 # Releasing Vespera
 
-Cutting a release builds real desktop installers for **Windows**, **macOS** and
-**Linux** and publishes them on the GitHub Releases page — fully automated.
+Vespera's GitHub Actions workflow builds native installers for Windows, macOS Intel, macOS Apple silicon, and Ubuntu, then attaches them to a GitHub Release. The workflow is `.github/workflows/release.yml`.
 
-## Steps
+## Before a release
 
-1. **Bump the version** in `package.json`, the top-level `package-lock.json` entries and `src-tauri/Cargo.toml`. Update `CHANGELOG.md` with the new release notes.
-2. **Commit & merge** the change to `main`.
-3. **Tag and push** the matching `vX.Y.Z` tag; for example:
+1. Update the version in `package.json`, the root entries in `package-lock.json`, and `src-tauri/Cargo.toml` so they agree.
+2. Add the user-facing release notes under a new version heading in `CHANGELOG.md`.
+3. Run `npm test` and review the diff. For renderer changes, also run the UI checks with Playwright Chromium installed.
+4. Merge the release commit to `main` before tagging it.
 
-   ```bash
-   git tag v0.2.1
-   git push origin v0.2.1
-   ```
+The release workflow checks that the tag version matches `package.json` and uses the first release section in `CHANGELOG.md` as the GitHub release notes.
 
-4. Done. GitHub Actions (`.github/workflows/release.yml`) then:
-   - runs the unit/service tests and Chromium UI checks,
-   - builds the Tauri bundles on native runners:
-     - `windows-latest` → `Vespera-Setup-<v>.exe` (NSIS) + `Vespera-<v>-x64.msi`
-     - `macos-14` → `Vespera-<v>-mac-arm64.dmg` · `macos-13` → `Vespera-<v>-mac-x64.dmg`
-     - `ubuntu-latest` → `Vespera-<v>-linux-x86_64.AppImage` + `Vespera-<v>-linux-amd64.deb`
-   - publishes **Release v<x.y.z>** with all installers attached.
+## Publish by tag (normal path)
 
-Watch progress at **Actions → Build & Release** on the repo.
+Create and push a version tag from the merged release commit:
 
-## Testing or retrying a build manually
+```bash
+git switch main
+git pull --ff-only
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
 
-Run **Actions → Build & publish Vespera → Run workflow** manually from `main`.
-Leave `release_tag` blank to build installers and upload them as run artifacts
-without publishing a release. To rebuild and publish an existing `v*` tag,
-enter it in `release_tag` (for example, `v0.2.1`); the workflow checks out that
-tag's source and attaches the installers to its GitHub Release.
+Pushing a `v*` tag starts the full release workflow. The matrix runs on native hosted runners:
 
-## Code signing (optional)
+| Runner | Target | Bundles |
+|---|---|---|
+| `windows-latest` | Windows x64 | MSI and NSIS installer |
+| `macos-15-intel` | macOS Intel x64 | DMG |
+| `macos-15` | macOS Apple silicon ARM64 | DMG |
+| `ubuntu-latest` | Linux x86_64 | DEB and AppImage |
 
-The builds are currently **unsigned**. Windows SmartScreen checks the
-Authenticode signature and publisher reputation; macOS Gatekeeper checks
-signing and notarization. Neither warning is caused by how the app is
-packaged, so removing files will not fix them. A new Windows signature can
-still need time to build reputation, so signing helps but cannot guarantee
-that SmartScreen stops warning immediately.
+Each job runs `npm ci`, the Node test suite, icon generation, and the Tauri build. The publish job verifies that all four matrix builds succeeded and that all expected installer types are present before creating or updating the release.
 
-- **Windows**: use a trusted code-signing certificate and configure
-  `bundle.windows.signing` in `src-tauri/tauri.conf.json`. Never put the
-  certificate or its password in source control or chat.
-- **macOS**: enroll in Apple Developer and configure `bundle.macOS.signing`
-  in `src-tauri/tauri.conf.json` (identity + provisioning profile), plus
-  notarization through Tauri's bundler options.
+## Retry or promote existing build artifacts
+
+To run the workflow manually, open **Actions → Build and publish Vespera → Run workflow** and select the release branch/ref.
+
+- Leave `artifact_run_id` blank to build installers again. If `release_tag` is also blank, this is build-only; installers are saved as workflow artifacts.
+- To publish an already-successful build without rebuilding, set `release_tag` (for example, `v0.2.1`) and `artifact_run_id` to the successful build-only run ID. The workflow verifies that the run came from this release workflow, that its commit is in the selected source history, and that all four unexpired platform artifacts exist before uploading.
+
+The workflow declares `contents: write` and `actions: read`. Repository or organization Actions policies must allow the workflow token to write repository contents and create releases. If release creation fails with **HTTP 403: Resource not accessible by integration**, check the repository's **Settings → Actions → General → Workflow permissions** and any organization-level policy. Do not rebuild the macOS targets solely to retry a release upload if the verified installer artifacts are still available.
+
+## Code signing
+
+Current builds may be unsigned. Signing is optional for packaging but improves publisher verification:
+
+- **Windows:** configure an Authenticode certificate for Tauri's Windows bundler. Keep the certificate and password in protected repository secrets, never in source control or chat.
+- **macOS:** configure an Apple Developer signing identity and provisioning profile, then notarize the DMG/app with Apple's service.
+
+Signing does not guarantee that SmartScreen or Gatekeeper warnings disappear immediately; publisher reputation and platform policy also matter.
 
 ## Icons
 
-App icons are generated deterministically (no design tools needed):
+The app icons are generated by the repository script:
 
 ```bash
-npm run icons   # → src-tauri/icons/icon.{png,ico,icns}, src-tauri/icons/{32,128,256,512}x*.png
+npm run icons
 ```
