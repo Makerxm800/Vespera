@@ -5,18 +5,18 @@
 
 Im very sorry, i don't like using AI on my serious projects — i built Vespera by hand to see where the whole vibe-code experiment is actually going. It turned into a browser i use every day, so here it is. :P
 
-**Latest release: v0.2.1** — installers for Windows, macOS and Linux are published on the GitHub Releases page. The release workflow builds all platforms when a new `v*` tag is pushed.
+**Latest release: v0.2.2** — installers for Windows, macOS and Linux are published on the GitHub Releases page. The release workflow builds all platforms when a new `v*` tag is pushed.
 
 ---
 
-## ✨ What's new in 0.1.8
+## ✨ What's new in 0.2.2
 
-* **Reorder whole tab groups** — drag groups in the horizontal strip or vertical sidebar; long lists auto-scroll, and group order is restored with your session.
-* **Right-click group actions** — edit group names/colors, add a tab, collapse, ungroup or close without an ellipsis button.
-* **Saved groups** — names, colors, membership, order and collapsed state persist with the tab session. Group names appear once in their header, not as repeated tags on every tab.
-* **A personal wallpaper gallery** — add multiple custom images, switch between them, remove individual wallpapers and tune the active image. Previous custom wallpapers remain available.
-* **A cleaner left sidebar** — Settings remains in the browser menu and on Ctrl+comma; per-site privacy settings remain in the site-information panel.
-* **Focused audio controls** — tabs playing audio, or already muted, keep their mute toggle; the existing indicator/hide preferences are unchanged.
+* **A profile button in the toolbar** — one click opens your account, sync, a private window and account settings. Turn it off in Settings if you'd rather not see it.
+* **A "What's new" slideshow after every update**, plus a **See what's new** button on the Updates page.
+* **Faster, lighter startup** — only the tab you left open loads at startup, and Memory saver puts tabs you haven't used for a while to sleep (they wake when you click them). Both have switches and timing in Settings.
+* **Goes easy on slower machines** — blur and background animation turn off automatically, with a **Reduce visual effects** setting to override it.
+* **"Check for updates" fixed** — it now recognizes the installer files named by the Tauri bundler (for example `Vespera_0.2.2_x64-setup.exe`), so the latest GitHub release downloads and starts correctly.
+* **An honest Extensions page** — it says plainly that Chrome extensions can't run in this version, hides the install buttons that can't work, and keeps the built-in tools (Shields, Dark Pages, Reader View, Focus Mode) front and center.
 
 Full details in [CHANGELOG.md](CHANGELOG.md) and in-app at **`vespera://updates`**.
 
@@ -52,11 +52,11 @@ double-click it — exactly like any other browser:
 
 | Platform | File to download | How to install |
 |---|---|---|
-| 🪟 Windows 10/11 | `Vespera-Setup-<v>.exe` | Double-click → install → open from Start Menu |
-| 🍎 macOS (Apple Silicon) | `Vespera-<v>-mac-arm64.dmg` | Open → drag Vespera to Applications |
-| 🍎 macOS (Intel) | `Vespera-<v>-mac-x64.dmg` | Open → drag Vespera to Applications |
-| 🐧 Linux | `Vespera-<v>-linux-x86_64.AppImage` | Double-click (allow "execute" on first run) |
-| 🐧 Debian/Ubuntu | `Vespera-<v>-linux-amd64.deb` | Double-click the package |
+| 🪟 Windows 10/11 | `Vespera_<v>_x64-setup.exe` (or `Vespera_<v>_x64_en-US.msi`) | Double-click → install → open from Start Menu |
+| 🍎 macOS (Apple Silicon) | `Vespera_<v>_aarch64.dmg` | Open → drag Vespera to Applications |
+| 🍎 macOS (Intel) | `Vespera_<v>_x64.dmg` | Open → drag Vespera to Applications |
+| 🐧 Linux | `Vespera_<v>_amd64.AppImage` | Double-click (allow "execute" on first run) |
+| 🐧 Debian/Ubuntu | `Vespera_<v>_amd64.deb` | Double-click the package |
 
 <details>
 <summary><b>First-run notes</b> (unsigned builds)</summary>
@@ -139,7 +139,7 @@ npm run dist
 **Requirements:** Node.js 20+, npm, and the Rust toolchain (`rustup`).
 On Linux you also need the webview development packages (see the release
 workflow: `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`,
-`librsvg2-dev`, `libjavascriptcoregtk-4.1-dev`). **Published release: v0.2.1**
+`librsvg2-dev`, `libjavascriptcoregtk-4.1-dev`). **Published release: v0.2.2**
 — follow [RELEASING.md](RELEASING.md) to merge and tag a release.
 
 ### Live web preview / installable app
@@ -157,7 +157,7 @@ The preview proxy is intentionally limited: some sites block embedding or are un
 - [x] **Built-in tracker and ad blocking** — bundled tracker/ad/annoyance blocklists enforced at the network layer, live per-site shield counters, one-click site allowlist, Privacy Hub with real statistics.
 - [x] **Community feature voting** — in-app board: post ideas, upvote/downvote, comment, track statuses (open → planned → in-progress → shipped).
 - [x] **Tab groups with colors** — drag-to-group, group rename, tinted tabs, context-menu join/leave.
-- [x] **Extension compatibility layer** — install from a Chrome Web Store link, a `.zip`/`.crx` package or an unpacked folder, with permissions reviewed before anything loads.
+- [x] **Extension manager** — permission review before anything loads, pinning, per-site access and built-in tools. Since 0.2.2 the desktop shell (no Chromium extension runtime) says so plainly and keeps installs off; the web preview keeps the full manager.
 
 ### What's next (vote on these in `vespera://community`!)
 

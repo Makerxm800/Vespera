@@ -13,6 +13,13 @@ use std::fs;
 use std::path::PathBuf;
 
 fn main() {
+    // Embed the Windows resources: application manifest (Common-Controls v6 —
+    // required because the dialog stack imports TaskDialogIndirect from
+    // comctl32 v6), icon and version info. Without this call the exe has no
+    // manifest, Windows loads comctl32 v5, and the app dies at startup with
+    // "The procedure entry point TaskDialogIndirect could not be located".
+    tauri_build::build();
+
     println!("cargo:rerun-if-changed=../src/shared/guest-bridge.js");
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));

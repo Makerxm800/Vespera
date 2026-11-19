@@ -10,16 +10,16 @@ Cutting a release builds real desktop installers for **Windows**, **macOS** and
 3. **Tag and push** the matching `vX.Y.Z` tag; for example:
 
    ```bash
-   git tag v0.2.1
-   git push origin v0.2.1
+   git tag v0.2.2
+   git push origin v0.2.2
    ```
 
 4. Done. GitHub Actions (`.github/workflows/release.yml`) then:
    - runs the unit/service tests and Chromium UI checks,
    - builds the Tauri bundles on native runners:
-     - `windows-latest` → `Vespera-Setup-<v>.exe` (NSIS) + `Vespera-<v>-x64.msi`
-     - `macos-14` → `Vespera-<v>-mac-arm64.dmg` · `macos-13` → `Vespera-<v>-mac-x64.dmg`
-     - `ubuntu-latest` → `Vespera-<v>-linux-x86_64.AppImage` + `Vespera-<v>-linux-amd64.deb`
+     - `windows-latest` → `Vespera_<v>_x64-setup.exe` (NSIS) + `Vespera_<v>_x64_en-US.msi`
+     - `macos-15` → `Vespera_<v>_aarch64.dmg` · `macos-15-intel` → `Vespera_<v>_x64.dmg`
+     - `ubuntu-latest` → `Vespera_<v>_amd64.AppImage` + `Vespera_<v>_amd64.deb`
    - publishes **Release v<x.y.z>** with all installers attached.
 
 Watch progress at **Actions → Build & Release** on the repo.
@@ -29,7 +29,7 @@ Watch progress at **Actions → Build & Release** on the repo.
 Run **Actions → Build & publish Vespera → Run workflow** manually from `main`.
 Leave `release_tag` blank to build installers and upload them as run artifacts
 without publishing a release. To rebuild and publish an existing `v*` tag,
-enter it in `release_tag` (for example, `v0.2.1`); the workflow checks out that
+enter it in `release_tag` (for example, `v0.2.2`); the workflow checks out that
 tag's source and attaches the installers to its GitHub Release.
 
 ## Code signing (optional)
