@@ -1169,3 +1169,42 @@ body.rail-hidden .main-row .sidebar { display: none; }
 @media (max-width: 800px) { .extension-toolbar-action { width: 27px; height: 27px; padding: 3px; } }
 @media (max-width: 560px) { .extension-actions { gap: 0; } .extension-toolbar-action { width: 25px; } }
 @media (prefers-reduced-motion: reduce) { .extension-toolbar-action { transition: none; } }
+
+/* ---------- Profile button + menu ---------- */
+.profile-btn[hidden] { display: none; }
+.profile-avatar { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #1b1500; font: 700 12px/1 var(--font); }
+.profile-avatar svg { width: 15px; height: 15px; }
+.profile-avatar.large { width: 56px; height: 56px; font-size: 22px; margin-bottom: 10px; }
+.profile-avatar.guest { background: var(--surface-3); color: var(--text-dim); }
+.profile-avatar.guest svg { width: 26px; height: 26px; }
+.profile-menu { width: 288px; }
+.profile-card { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; padding: 18px 14px 16px; margin: 4px 4px 8px; border-radius: var(--r-md); background: var(--surface-2); }
+.profile-card b { font-size: 15px; }
+
+/* ---------- What's new ---------- */
+dialog.whats-new { width: min(520px, calc(100vw - 32px)); padding: 20px; border: 1px solid var(--border-strong); border-radius: var(--r-xl); background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+dialog.whats-new::backdrop { background: rgba(5, 7, 18, .62); }
+.wn-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.wn-head h2 { flex: 1; margin: 0; font-size: 17px; }
+.wn-mark svg { width: 20px; height: 20px; color: var(--accent); }
+.wn-art { height: 200px; border-radius: var(--r-lg); display: grid; place-items: center; border: 1px solid var(--border); background: radial-gradient(260px 150px at 50% 30%, color-mix(in srgb, var(--accent) 28%, transparent), transparent 70%), linear-gradient(180deg, var(--surface-3), var(--bg-2)); }
+.wn-art-icon svg { width: 72px; height: 72px; color: var(--accent); }
+.wn-title { text-align: center; margin: 18px 0 6px; font-size: 18px; }
+.wn-body { text-align: center; margin: 0 auto; max-width: 36em; color: var(--text-dim); min-height: 4.8em; }
+.wn-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; }
+.wn-dots { display: flex; gap: 7px; }
+.wn-dot { width: 8px; height: 8px; border-radius: 8px; border: 0; padding: 0; background: var(--border-strong); cursor: pointer; transition: width .2s var(--ease), background .2s var(--ease); }
+.wn-dot.on { width: 22px; background: var(--accent); }
+.wn-actions { display: flex; gap: 8px; }
+
+/* ---------- Sleeping tabs + lighter effects ---------- */
+.tab.sleeping, .vtab.sleeping { opacity: .6; }
+html[data-effects="lite"] .starfield, html[data-effects="lite"] .starfield i, html[data-effects="lite"] .nt-wallpaper, html[data-effects="lite"] .menu-update-flag { animation: none !important; }
+html[data-effects="lite"] .starfield { display: none; }
+html[data-effects="lite"] * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+
+/* ---------- Extensions: plain-language notice ---------- */
+.extension-notice { display: flex; gap: 14px; align-items: flex-start; margin: 14px 0; padding: 16px 18px; border-radius: var(--r-lg); border: 1px solid var(--border-strong); background: var(--surface-2); }
+.extension-notice > svg { width: 22px; height: 22px; flex: none; margin-top: 2px; color: var(--accent); }
+.extension-notice b { display: block; margin-bottom: 4px; }
+.extension-notice p { margin: 0; color: var(--text-dim); max-width: 46em; }

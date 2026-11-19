@@ -33,7 +33,7 @@ export function renderNewtab(container, ctx) {
   }
   tick();
   let lastSecond = Math.floor(Date.now() / 1000);
-  const timer = setInterval(() => { const second = Math.floor(Date.now() / 1000); if (second !== lastSecond) { lastSecond = second; tick(); } }, 250);
+  const timer = setInterval(() => { if (document.hidden) return; const second = Math.floor(Date.now() / 1000); if (second !== lastSecond) { lastSecond = second; tick(); } }, 250);
   const syncStats = () => { container.querySelector('#nt-blocked').textContent = (state.stats.trackers + state.stats.ads).toLocaleString(); };
   syncStats(); const off = bus.on('stats', syncStats);
   const form = container.querySelector('#nt-search');

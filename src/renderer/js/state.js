@@ -29,6 +29,10 @@ export const DEFAULT_SETTINGS = {
   railHidden: false,             // hide the icon rail so pages get the full width
   homepage: 'vespera://newtab',
   showBookmarksBar: false,
+  showProfileButton: true,       // toolbar profile / account button
+  memorySaver: true,             // put tabs you haven't used for a while to sleep
+  memorySaverMinutes: 15,
+  reduceEffects: 'auto',         // auto | on | off — turns off blur and background animation
   shields: {
     enabled: true,
     blockTrackers: true,

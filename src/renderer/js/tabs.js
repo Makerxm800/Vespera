@@ -630,7 +630,7 @@ export class TabManager {
     const pinnedControl = tab.pinned
       ? (vertical ? '<span class="pin-marker" aria-label="Pinned">•</span>' : tabMoreHtml(tab.id))
       : '';
-    return `<div class="${cls} ${tab.id === this.activeId ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${group ? 'grouped' : ''}" data-id="${escapeHtml(tab.id)}" data-group-id="${escapeHtml(tab.groupId || '')}" ${group ? `data-group-color="${group.color}" style="--tab-group-color:${group.color}"` : ''} draggable="true" role="tab" tabindex="${tab.id === this.activeId ? 0 : -1}" aria-selected="${tab.id === this.activeId}" aria-label="${escapeHtml(tab.title)}" title="${escapeHtml(tooltip)}">
+    return `<div class="${cls} ${tab.id === this.activeId ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${tab.sleeping ? 'sleeping' : ''} ${group ? 'grouped' : ''}" data-id="${escapeHtml(tab.id)}" data-group-id="${escapeHtml(tab.groupId || '')}" ${group ? `data-group-color="${group.color}" style="--tab-group-color:${group.color}"` : ''} draggable="true" role="tab" tabindex="${tab.id === this.activeId ? 0 : -1}" aria-selected="${tab.id === this.activeId}" aria-label="${escapeHtml(tab.title)}" title="${escapeHtml(tooltip)}">
       <div class="favicon">${this.faviconHtml(tab)}</div>
       <div class="title">${escapeHtml(tab.title)}</div>
       ${pinnedControl}
@@ -737,6 +737,7 @@ export class TabManager {
       const group = showGroups ? this.getGroup(tab.groupId) : null;
       row.classList.toggle('active', active);
       row.classList.toggle('pinned', tab.pinned);
+      row.classList.toggle('sleeping', Boolean(tab.sleeping));
       row.classList.toggle('grouped', Boolean(group));
       row.dataset.groupId = tab.groupId || '';
       if (group) row.dataset.groupColor = group.color;

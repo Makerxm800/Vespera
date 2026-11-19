@@ -48,6 +48,25 @@ that SmartScreen stops warning immediately.
   in `src-tauri/tauri.conf.json` (identity + provisioning profile), plus
   notarization through Tauri's bundler options.
 
+### Getting rid of the Windows "Windows protected your PC" screen
+
+That blue SmartScreen window appears because the installer has no trusted
+signature, not because anything is wrong with the files. It cannot be removed
+by changing code. The options, from easiest to hardest:
+
+1. **Sign with SignPath Foundation** (free for open-source projects): apply at
+   signpath.org/foundation, then add their signing step to `release.yml`.
+2. **Sign with Azure Artifact Signing** (formerly Trusted Signing, a paid
+   monthly service) or a standard/EV code-signing certificate, and set
+   `bundle.windows` signing in `src-tauri/tauri.conf.json`.
+3. **Publish through winget or the Microsoft Store**, which have their own
+   trust paths.
+
+Until the app is signed, people can click **More info**, then **Run anyway**.
+Updates started from inside Vespera download the installer themselves, so
+they are not marked as "downloaded from the internet" the way a browser
+download is.
+
 ## Icons
 
 App icons are generated deterministically (no design tools needed):

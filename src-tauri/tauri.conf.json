@@ -17,6 +17,10 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "Vespera Community",
+    "copyright": "Copyright (c) 2026 Vespera Community",
+    "shortDescription": "Vespera, a private browser",
+    "longDescription": "Vespera is a free, open-source privacy browser with built-in tracker and ad blocking, vertical tabs and no telemetry.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

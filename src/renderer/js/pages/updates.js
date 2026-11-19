@@ -1,9 +1,14 @@
 /** Release notes for the running build, plus a working check-for-updates button. */
 import { icon } from '../icons.js';
 import { escapeHtml } from '../toasts.js';
+import { showWhatsNew } from '../whats-new.js';
 
 const RELEASES = 'https://github.com/Makerxm800/Vespera/releases';
 const NOTES = [
+  ['A profile button in the toolbar', 'Sign in to sync, jump to your account, or open a private window from one menu. You can hide it in Settings.'],
+  ['Lighter on your PC', 'Memory saver puts tabs you haven’t used for a while to sleep, only the tab you left open loads at startup, and blur and background animation ease off on slower computers.'],
+  ['Updates find the right installer', 'Check for updates now recognizes the installer names produced by the current build, so the latest GitHub release downloads and starts correctly.'],
+  ['A clearer Extensions page', 'The page now says plainly what this version can run, and the install buttons only appear where they work.'],
   ['Extensions, pinned and in control', 'The Extensions page is remade: pin extensions to the toolbar or turn them off right from each card, see exactly what every extension can access — "On all sites", "On this site" or no site access — and open a per-extension permissions view. A new Access panel shows which extensions can act on the website in your active tab.'],
   ['Inspect any tab', 'Right-click any page — or any tab — and choose Inspect to open the page inspector for that site, on every tab.'],
   ['Tab previews for every tab', 'Hover cards now show a page preview for all tabs, captured while each tab is active, and crossfade smoothly as you move the mouse between tabs.'],
@@ -27,6 +32,7 @@ export function renderUpdates(container, ctx) {
         <div class="update-actions">
           <button class="btn btn-primary" id="update-check" ${!desktop ? 'disabled title="Updates are installed by the desktop app"' : ''}>${icon('update')} Check for updates</button>
           <button class="btn hidden" id="update-install">${icon('download')} Download &amp; install</button>
+          <button class="btn btn-ghost" id="update-whatsnew">${icon('sparkle')} See what’s new</button>
           <a class="btn btn-ghost" href="${RELEASES}" target="_blank" rel="noopener noreferrer">${icon('external')} Open Releases</a>
         </div>
         <div id="update-detail" class="update-detail"></div>
@@ -77,6 +83,7 @@ export function renderUpdates(container, ctx) {
     }
   };
 
+  container.querySelector('#update-whatsnew').onclick = () => showWhatsNew({ version });
   checkButton.onclick = runCheck;
   installButton.onclick = async () => {
     if (!release?.hasUpdate) return;

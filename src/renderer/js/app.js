@@ -27,6 +27,8 @@ import { extensionSiteAccess } from '../../shared/extensions.mjs';
 import { renderReader, renderSearch, renderNotFound } from './pages/tools.js';
 import { renderUpdates } from './pages/updates.js';
 import { bridge } from './app-bridge.js';
+import { initProfileMenu } from './profile-menu.js';
+import { maybeShowWhatsNew } from './whats-new.js';
 
 const PAGE_RENDERERS = {
   'vespera://newtab': renderNewtab, 'vespera://private': renderPrivate, 'vespera://welcome': renderWelcome,
@@ -82,6 +84,33 @@ function openSettingsPage(section = '', tab = tabs?.active) {
   if (tab.url === route || (!section && tab.url.split('#')[0] === 'vespera://settings')) return;
   navigate(route, { tab });
 }
+/** A sleeping tab keeps its place, title and history but frees the page it was showing. */
+function wakeTab(tab) {
+  if (!tab?.sleeping) return;
+  tab.sleeping = false;
+  openInTab(tab, tab.url, { push: false });
+  tabs.update(tab);
+}
+function sleepIdleTabs() {
+  const s = state.settings;
+  if (s.memorySaver === false || !tabs) return;
+  const now = Date.now(), limit = Math.max(1, Number(s.memorySaverMinutes) || 15) * 60000;
+  const active = tabs.active;
+  if (active) active.lastActiveAt = now;
+  for (const tab of tabs.tabs) {
+    if (tab === active || tab.sleeping || tab._internal || !tab.view || tab.audible || tab.loading) continue;
+    if (!tab.lastActiveAt) { tab.lastActiveAt = now; continue; }
+    if (now - tab.lastActiveAt < limit) continue;
+    disposeView(tab); tab.sleeping = true; tabs.update(tab);
+  }
+}
+/** Blur and background animation cost real CPU/GPU time; ease off on slower computers or when asked. */
+function applyEffectsMode() {
+  const mode = state.settings.reduceEffects || 'auto';
+  let slow = false;
+  try { slow = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4 || matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { /* keep full effects */ }
+  document.documentElement.dataset.effects = mode === 'on' || (mode === 'auto' && slow) ? 'lite' : 'full';
+}
 function disposeView(tab) {
   clearTimeout(tab.loadTimer);
   try { tab.pageCleanup?.(); } catch (err) { diagnostic(err.message); }
@@ -95,6 +124,7 @@ function openInTab(tab, url, { push = true } = {}) {
   // omnibox/search path deliberately keeps file: disabled.
   url = safeTabUrl(url, { allowFile: platform.isElectron });
   if (!url) return;
+  tab.sleeping = false;
   closePopover(); closeFind();
   disposeView(tab);
   if (push) {
@@ -193,6 +223,8 @@ function renderInternalPage(page, url, tab) {
 
 function updateChromeFor(tab) {
   if (!tab || tabs.active !== tab) return;
+  tab.lastActiveAt = Date.now();
+  if (tab.sleeping) { wakeTab(tab); return; }
   omnibox?.setUrl(tab.url, tab._internal);
   updateShieldBadge(tab);
   $('btn-back').disabled = tab.entryIndex <= 0;
@@ -329,6 +361,7 @@ function goForward(tab = tabs.active) {
 }
 function reload(tab = tabs.active) {
   if (!tab) return;
+  if (tab.sleeping) { wakeTab(tab); return; }
   closeFind();
   if (tab._internal) { renderInternalPage(tab.view, tab.url, tab); toast('Page refreshed', 'ok', 1400); return; }
   tab.view?.querySelector('.load-error')?.remove(); tab.error = null; tab.loading = true;
@@ -1036,6 +1069,10 @@ function boot() {
   $('btn-shields').onclick = (e) => toggleShields(e.currentTarget, tabs.active, { onNavigate: navigate, onReload: () => reload() });
   $('site-info').onclick = (e) => showSiteInfoMenu(e.currentTarget, tabs.active);
   $('btn-downloads').onclick = (e) => showRecentDownloadsMenu(e.currentTarget);
+  initProfileMenu({ navigate: (target) => navigate(target), refreshChrome: () => updateChromeFor(tabs.active) });
+  applyEffectsMode(); bus.on('settings', applyEffectsMode);
+  setInterval(sleepIdleTabs, 60000);
+  Promise.resolve(window.vespera?.app?.version?.()).then((v) => { const version = typeof v === 'string' ? v : v?.version; if (version) maybeShowWhatsNew(version); }).catch(() => {});
   $('content').addEventListener('wheel', (e) => {
     if (!e.ctrlKey || !tabs.active || e.deltaY === 0) return;
     e.preventDefault(); setZoom(e.deltaY < 0 ? .1 : -.1);
@@ -1087,7 +1124,12 @@ function boot() {
         }));
         for (const [index, t] of session.tabs.slice(0, 60).entries()) if (safeTabUrl(t.url, { allowFile: platform.isElectron })) tabs.add(t.url, { title: t.title, pinned: t.pinned, muted: t.muted, groupId: t.groupId, index, activate: false });
         tabs.pruneGroups();
-        if (tabs.tabs.length) { tabs.activate(tabs.tabs[Math.max(0, Math.min(session.activeIndex || 0, tabs.tabs.length - 1))].id); restored = true; }
+        if (tabs.tabs.length) {
+          const keep = tabs.tabs[Math.max(0, Math.min(session.activeIndex || 0, tabs.tabs.length - 1))];
+          // Only the tab you left open loads at startup; the rest wake when you click them.
+          for (const t of tabs.tabs) if (t !== keep && !t._internal && t.view) { disposeView(t); t.sleeping = true; t.lastActiveAt = Date.now(); }
+          tabs.activate(keep.id); restored = true;
+        }
       }
     } catch { diagnostic('Could not restore the previous session.'); }
   }

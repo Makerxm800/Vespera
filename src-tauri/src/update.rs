@@ -47,7 +47,7 @@ fn pick_asset(release: &Value) -> Option<(String, String)> {
         }
         None
     };
-    if std::env::consts::OS == "windows" {
+    let exact = if std::env::consts::OS == "windows" {
         find(&[format!("Vespera-Setup-{version}.exe"), format!("Vespera-Portable-{version}.exe")])
     } else if std::env::consts::OS == "macos" {
         let arch = if std::env::consts::ARCH == "aarch64" { "arm64" } else { "x64" };
@@ -57,7 +57,38 @@ fn pick_asset(release: &Value) -> Option<(String, String)> {
             format!("Vespera-{version}-linux-x86_64.AppImage"),
             format!("Vespera-{version}-linux-amd64.deb"),
         ])
+    };
+    if exact.is_some() {
+        return exact;
     }
+    // The Tauri bundler names files like `Vespera_0.2.2_x64-setup.exe`, so also match by
+    // file type and CPU architecture. That keeps updates working whatever the file is called.
+    let os = std::env::consts::OS;
+    let arm = std::env::consts::ARCH == "aarch64";
+    let arch_tokens: &[&str] = if arm { &["arm64", "aarch64"] } else { &["x64", "x86_64", "amd64"] };
+    let wanted: &[&str] = if os == "windows" {
+        &["-setup.exe"]
+    } else if os == "macos" {
+        &[".dmg"]
+    } else {
+        &[".appimage", ".deb"]
+    };
+    for suffix in wanted {
+        for asset in assets {
+            let name = asset.get("name").and_then(Value::as_str).unwrap_or("");
+            let lower = name.to_lowercase();
+            if !lower.ends_with(suffix) {
+                continue;
+            }
+            if os != "windows" && !arch_tokens.iter().any(|token| lower.contains(token)) {
+                continue;
+            }
+            if let Some(url) = asset.get("browser_download_url").and_then(Value::as_str) {
+                return Some((name.to_string(), url.to_string()));
+            }
+        }
+    }
+    None
 }
 
 pub fn check(app: &AppHandle) -> Value {

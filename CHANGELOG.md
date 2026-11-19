@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.2
+
+- New: a profile button in the toolbar with a menu for your account, sync, a private window and account settings. Turn it off in Settings.
+- New: a "What's new" slideshow after an update, and a "See what's new" button on the Updates page.
+- Faster: only the tab you left open loads at startup, and Memory saver puts tabs you haven't used for a while to sleep (they wake when you click them). Settings has the switch and the timing.
+- Lighter: blur and background animation turn off automatically on slower computers, with a "Reduce visual effects" setting to control it.
+- Fixed: "Check for updates" now recognizes installer files named by the Tauri bundler (for example `Vespera_0.2.2_x64-setup.exe`), so the latest GitHub release downloads and starts correctly.
+- Improved: the Extensions page says plainly that Chrome extensions can't run in this version, hides the install buttons that can't work, and keeps the built-in tools front and center.
+- Improved: installer metadata (publisher, description, copyright) is filled in.
+
 ## 0.2.1
 
 ### Windows and release fixes

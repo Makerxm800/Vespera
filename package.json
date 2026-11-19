@@ -1,6 +1,6 @@
 {
   "name": "vespera-browser",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Vespera — a next-gen, community-first privacy browser engineered for absolute privacy and superior performance. Tauri v2 shell.",
   "type": "commonjs",
   "scripts": {
