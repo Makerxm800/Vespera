@@ -77,3 +77,15 @@ test('server responds on the resolved port', async () => {
   assert.equal(body.app, 'vespera');
   await close(s.server);
 });
+
+test('web preview serves imported .jsx modules with a browser-valid JavaScript MIME type', async () => {
+  const s = await createServer({ port: 0, host: '127.0.0.1', maxPortRetries: 5 });
+  try {
+    const res = await fetch(`http://127.0.0.1:${s.port}/js/api.jsx`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type') || '', /^text\/javascript\b/i);
+    assert.match(await res.text(), /export function getToken\(/);
+  } finally {
+    await close(s.server);
+  }
+});
