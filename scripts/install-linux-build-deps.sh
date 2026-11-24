@@ -50,3 +50,6 @@ if ! install_packages; then
   refresh_indexes
   install_packages
 fi
+
+# apt runs as root; hand the cache back so actions/cache can archive it.
+sudo chown -R "$(id -u):$(id -g)" "$cache_root"

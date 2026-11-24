@@ -71,9 +71,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/vespera-apt-cache
-          key: vespera-apt-24.04-${{ hashFiles('scripts/install-linux-build-deps.sh') }}-${{ steps.apt-cache-day.outputs.day }}
+          key: vespera-apt-24.04-${{ runner.arch }}-${{ hashFiles('scripts/install-linux-build-deps.sh') }}-${{ steps.apt-cache-day.outputs.day }}
           restore-keys: |
-            vespera-apt-24.04-${{ hashFiles('scripts/install-linux-build-deps.sh') }}-
+            vespera-apt-24.04-${{ runner.arch }}-
 
       - name: Install Linux webview dependencies
         if: runner.os == 'Linux'
