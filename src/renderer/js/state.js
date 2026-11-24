@@ -41,7 +41,6 @@ export const DEFAULT_SETTINGS = {
     cleanLinks: true,
     httpsOnly: true,
     gpc: true,                   // Global Privacy Control + DNT headers
-    antiFingerprint: true,
   },
   allowlist: {},                 // hostname -> true (shields off for that site)
   wallpaper: { type: 'builtin', id: 'twilight' },
@@ -102,6 +101,8 @@ class Emitter {
 export const bus = new Emitter();
 
 const initialSettings = load(SETTINGS_KEY, DEFAULT_SETTINGS);
+initialSettings.shields = { ...DEFAULT_SETTINGS.shields, ...(initialSettings.shields || {}) };
+delete initialSettings.shields.antiFingerprint; // Older builds stored a protection toggle that was not implemented.
 initialSettings.tabBehavior = normalizedTabBehavior(initialSettings.tabBehavior);
 
 export const state = {
@@ -117,8 +118,10 @@ export const state = {
     if (!SEARCH_ENGINES[this.settings.searchEngine]) this.settings.searchEngine = 'startpage';
     const extensions = { ...DEFAULT_SETTINGS.extensions, ...(this.settings.extensions || {}) };
     extensions.pinnedIds = [...new Set((Array.isArray(extensions.pinnedIds) ? extensions.pinnedIds : []).filter((id) => typeof id === 'string' && id.length <= 128))];
+    const shields = { ...DEFAULT_SETTINGS.shields, ...(this.settings.shields || {}) };
+    delete shields.antiFingerprint;
     const merged = { ...DEFAULT_SETTINGS, ...this.settings,
-      shields: { ...DEFAULT_SETTINGS.shields, ...(this.settings.shields || {}) },
+      shields,
       extensions,
       tabBehavior: normalizedTabBehavior(this.settings.tabBehavior),
       allowlist: { ...(this.settings.allowlist || {}) },

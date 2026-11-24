@@ -21,9 +21,8 @@ export function renderWelcome(container, ctx) {
         <div class="hero-kicker">${icon('sparkle')} A calmer corner of the internet</div>
         <h1>Welcome to <span class="grad">Vespera.</span><br>The web, on your terms.</h1>
         <p class="hero-sub">
-          Vespera is a community-first Chromium browser: zero telemetry, built-in tracker
-          and ad blocking, tracking-link cleanup, and a sleek interface that stays out of your way.
-          Different from Chrome and every other browser — on purpose.
+          Vespera is a free, open-source desktop browser built on your system’s web engine: no usage telemetry,
+          built-in tracker and ad blocking, tracking-link cleanup, and a calm interface that stays out of your way.
         </p>
         <div class="hero-actions">
           <button class="btn btn-primary" id="w-start">${icon('sparkle')} Start exploring</button>
@@ -38,12 +37,12 @@ export function renderWelcome(container, ctx) {
           <div class="feature-card">
             <div class="f-icon">${icon('eyeOff')}</div>
             <h3>Zero telemetry, forever</h3>
-            <p>No usage pings, no crash-phone-home, no hidden analytics. Vespera never talks to anyone about you.</p>
+            <p>No usage analytics or telemetry. If you choose to sign in, settings, bookmarks and history sync with the Vespera service; sync is not end-to-end encrypted in this release.</p>
           </div>
           <div class="feature-card">
             <div class="f-icon">${icon('shield')}</div>
             <h3>Trackers &amp; ads blocked</h3>
-            <p>A curated, bundled blocklist kills known trackers, ad networks and fingerprinting scripts before they load.</p>
+            <p>Bundled rules block matching known tracker and ad requests, including some fingerprinting scripts. Vespera does not randomize browser fingerprint signals, and no blocklist catches everything.</p>
           </div>
           <div class="feature-card">
             <div class="f-icon">${icon('link')}</div>

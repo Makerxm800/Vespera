@@ -273,10 +273,60 @@ fn downloads_list(state: tauri::State<AppState>, private: bool) -> Value {
 }
 
 #[tauri::command]
-fn downloads_start(state: tauri::State<AppState>, url: String, private: bool) -> Value {
+async fn downloads_start(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    url: String,
+    private: bool,
+    options: Option<Value>,
+) -> Value {
+    match url::Url::parse(&url) {
+        Ok(parsed) if parsed.scheme() == "http" || parsed.scheme() == "https" => {},
+        _ => return json!({ "ok": false, "message": "Only HTTP and HTTPS files can be downloaded." }),
+    }
+    let requested_name = options.as_ref().and_then(|value| value.get("name"))
+        .and_then(Value::as_str).map(str::to_string);
+    let filename = downloads::suggested_filename(&url, requested_name.as_deref());
+    let (ask_location, folder) = {
+        let prefs = state.prefs.lock().unwrap();
+        let configured_ask = prefs.data.get("askDownloadLocation").and_then(Value::as_bool).unwrap_or(true);
+        let ask = options.as_ref().and_then(|value| value.get("askLocation")).and_then(Value::as_bool).unwrap_or(configured_ask);
+        let folder = match options.as_ref().and_then(|value| value.get("folder")) {
+            Some(Value::String(path)) if !path.trim().is_empty() => Some(std::path::PathBuf::from(path)),
+            Some(_) => None,
+            None => prefs.data.get("downloadPath").and_then(Value::as_str)
+                .filter(|path| !path.trim().is_empty())
+                .map(std::path::PathBuf::from),
+        };
+        (ask, folder)
+    };
+
+    let target_path = if ask_location {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        app.dialog()
+            .file()
+            .set_title("Save downloaded file")
+            .set_file_name(filename.clone())
+            .save_file(move |selection| {
+                let _ = sender.send(selection);
+            });
+        let selection = match tauri::async_runtime::spawn_blocking(move || receiver.recv()).await {
+            Ok(Ok(selection)) => selection,
+            Ok(Err(error)) => return json!({ "ok": false, "message": error.to_string() }),
+            Err(error) => return json!({ "ok": false, "message": error.to_string() }),
+        };
+        let Some(selection) = selection else { return json!({ "ok": false, "canceled": true }); };
+        match selection.into_path() {
+            Ok(path) => Some(path),
+            Err(error) => return json!({ "ok": false, "message": error.to_string() }),
+        }
+    } else {
+        folder.filter(|path| path.is_dir()).map(|path| path.join(&filename))
+    };
+
     let mut guard = state.downloads.lock().unwrap();
-    match guard.start(&url, private) {
-        Ok(v) => v,
+    match guard.start(&url, private, target_path) {
+        Ok(value) => value,
         Err(message) => json!({ "ok": false, "message": message }),
     }
 }
@@ -318,7 +368,9 @@ async fn downloads_choose_folder(app: AppHandle, state: tauri::State<'_, AppStat
     if let Some(obj) = guard.data.as_object_mut() {
         obj.insert("downloadPath".to_string(), Value::String(path.clone()));
     }
-    let _ = guard.persist();
+    guard.persist().map_err(|e| e.to_string())?;
+    drop(guard);
+    state.downloads.lock().unwrap().set_folder(std::path::PathBuf::from(&path));
     Ok(json!({ "ok": true, "path": path }))
 }
 

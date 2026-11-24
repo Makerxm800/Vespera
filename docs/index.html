@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101322">
+  <meta name="description" content="Vespera is a free, open-source desktop browser with built-in tracker and ad blocking, flexible tabs, and no usage telemetry.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Vespera — the web, on your terms">
+  <meta property="og:description" content="A free, open-source browser with built-in privacy tools, flexible tabs, and no usage telemetry.">
+  <title>Vespera — the web, on your terms</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --night: #0b0e18;
+      --surface: #111625;
+      --surface-raised: #171e30;
+      --ink: #f1f2fa;
+      --muted: #b2b8ca;
+      --dim: #8991a8;
+      --line: rgba(222, 228, 247, .13);
+      --gold: #f2bc55;
+      --gold-ink: #201707;
+      --mint: #88dec3;
+      --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+      --sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font: 16px/1.65 var(--sans);
+      color: var(--ink);
+      background: var(--night);
+      scroll-behavior: smooth;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      min-width: 320px;
+      margin: 0;
+      background:
+        radial-gradient(900px 520px at 78% -12%, rgba(115, 88, 170, .22), transparent 69%),
+        radial-gradient(640px 420px at 9% 6%, rgba(242, 188, 85, .09), transparent 72%),
+        var(--night);
+    }
+    a { color: inherit; }
+    a:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; border-radius: 6px; }
+    .wrap { width: min(1120px, calc(100% - 48px)); margin-inline: auto; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 24px 0; }
+    .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; font-weight: 720; letter-spacing: .02em; }
+    .brand-mark { width: 30px; height: 30px; fill: var(--gold); filter: drop-shadow(0 0 12px rgba(242, 188, 85, .35)); }
+    .nav { display: flex; align-items: center; gap: 26px; color: var(--muted); font-size: .92rem; }
+    .nav a { text-decoration: none; }
+    .nav a:hover, .footer-links a:hover { color: var(--gold); }
+    .nav .nav-cta { color: var(--ink); padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px; }
+    .hero { display: grid; grid-template-columns: minmax(0, .95fr) minmax(360px, 1.05fr); align-items: center; gap: clamp(42px, 7vw, 86px); padding: 68px 0 96px; }
+    .eyebrow { margin: 0 0 18px; color: var(--gold); font-size: .76rem; font-weight: 760; letter-spacing: .16em; text-transform: uppercase; }
+    h1, h2 { font-family: var(--serif); font-weight: 400; letter-spacing: -.025em; }
+    h1 { max-width: 680px; margin: 0; font-size: clamp(3rem, 6.5vw, 5.35rem); line-height: 1.01; }
+    .lede { max-width: 600px; margin: 24px 0 0; color: var(--muted); font-size: clamp(1.05rem, 1.5vw, 1.2rem); }
+    .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 30px; }
+    .button { display: inline-flex; min-height: 48px; align-items: center; justify-content: center; gap: 9px; padding: 11px 19px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink); font-weight: 680; text-decoration: none; transition: transform .16s ease, background .16s ease, border-color .16s ease; }
+    .button:hover { transform: translateY(-2px); background: rgba(255,255,255,.06); border-color: rgba(242,188,85,.45); }
+    .button-primary { border-color: var(--gold); background: var(--gold); color: var(--gold-ink); }
+    .button-primary:hover { background: #ffd27a; border-color: #ffd27a; }
+    .hero-note { margin: 15px 0 0; color: var(--dim); font-size: .84rem; }
+    .hero-note a { text-underline-offset: 3px; }
+    .browser-art { position: relative; padding: 16px; border: 1px solid rgba(224, 230, 250, .16); border-radius: 22px; background: linear-gradient(145deg, rgba(38, 42, 68, .92), rgba(17, 22, 37, .96)); box-shadow: 0 36px 110px rgba(0,0,0,.42), 0 0 0 1px rgba(0,0,0,.12); transform: rotate(1.1deg); }
+    .browser-art::before { position: absolute; z-index: -1; inset: 16% -11% -16% 23%; border-radius: 50%; background: rgba(107, 79, 159, .18); content: ""; filter: blur(42px); }
+    .browser-frame { overflow: hidden; border: 1px solid rgba(229, 233, 250, .1); border-radius: 13px; background: #0f1424; }
+    .browser-tabs { display: flex; align-items: center; gap: 6px; padding: 9px 10px 0; background: #0b0f1b; }
+    .fake-tab { display: flex; width: 142px; min-width: 0; align-items: center; gap: 8px; padding: 8px 11px; border-radius: 9px 9px 0 0; color: var(--dim); font-size: .72rem; }
+    .fake-tab.active { background: #151b2c; color: var(--ink); }
+    .fake-tab-dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--gold); }
+    .fake-tab:nth-child(2) .fake-tab-dot { background: #8d9de4; }
+    .fake-tab:nth-child(3) .fake-tab-dot { background: #76c6a7; }
+    .browser-toolbar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-block: 1px solid rgba(229,233,250,.08); background: #151b2c; }
+    .traffic { display: flex; gap: 5px; }
+    .traffic i { width: 6px; height: 6px; border-radius: 50%; background: #626b83; }
+    .address { display: flex; min-width: 0; flex: 1; align-items: center; gap: 8px; padding: 7px 12px; border: 1px solid rgba(229,233,250,.1); border-radius: 999px; background: #0e1422; color: #c3c9da; font-size: .7rem; }
+    .address-lock { color: var(--mint); }
+    .shield-badge { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; padding: 6px 9px; border: 1px solid rgba(136,222,195,.28); border-radius: 999px; background: rgba(136,222,195,.08); color: var(--mint); font-size: .65rem; font-weight: 700; }
+    .shield-badge svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+    .mock-page { position: relative; display: grid; min-height: 290px; place-content: center; overflow: hidden; padding: 26px; text-align: center; background: radial-gradient(ellipse at 50% 30%, rgba(117,91,165,.26), transparent 58%), linear-gradient(160deg,#1a1e38,#111625 75%); }
+    .mock-star { width: 37px; height: 37px; margin: 0 auto 17px; fill: var(--gold); opacity: .92; }
+    .mock-page h2 { margin: 0; font-size: clamp(1.8rem, 4vw, 2.5rem); }
+    .mock-page p { margin: 9px 0 0; color: #aeb5c8; font-size: .84rem; }
+    .mock-search { width: min(330px, 100%); margin: 24px auto 0; padding: 10px 16px; border: 1px solid rgba(231,235,250,.13); border-radius: 999px; color: #9aa3bb; background: rgba(11,15,27,.65); text-align: left; font-size: .72rem; }
+    .art-caption { margin: 10px 2px 0; color: var(--dim); font-size: .72rem; text-align: right; }
+    .proof-row { display: flex; flex-wrap: wrap; gap: 11px; margin-top: 30px; }
+    .proof { display: inline-flex; align-items: center; gap: 7px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: .78rem; }
+    .proof svg { width: 14px; height: 14px; color: var(--mint); }
+    .section { padding: 78px 0; border-top: 1px solid var(--line); }
+    .section-heading { max-width: 700px; margin-bottom: 34px; }
+    .section-heading h2 { margin: 0; font-size: clamp(2.2rem, 4vw, 3.25rem); line-height: 1.08; }
+    .section-heading p { margin: 15px 0 0; color: var(--muted); }
+    .feature-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .feature { min-height: 205px; padding: 23px; border: 1px solid var(--line); border-radius: 15px; background: linear-gradient(145deg, rgba(25,31,49,.86), rgba(17,22,37,.74)); }
+    .feature-mark { display: grid; width: 38px; height: 38px; place-items: center; margin-bottom: 18px; border: 1px solid rgba(242,188,85,.22); border-radius: 11px; background: rgba(242,188,85,.08); color: var(--gold); }
+    .feature-mark svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .feature h3 { margin: 0; font-size: 1rem; }
+    .feature p { margin: 8px 0 0; color: var(--muted); font-size: .9rem; }
+    .truth-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .truth-card { padding: clamp(23px, 4vw, 34px); border: 1px solid var(--line); border-radius: 17px; background: rgba(17,22,37,.82); }
+    .truth-card h3 { margin: 0 0 11px; font-size: 1.03rem; }
+    .truth-card p, .truth-card li { color: var(--muted); font-size: .92rem; }
+    .truth-card p:last-child { margin-bottom: 0; }
+    .truth-card ul { margin: 12px 0 0; padding-left: 20px; }
+    .truth-card li + li { margin-top: 8px; }
+    .callout { margin-top: 16px; padding: 15px 17px; border-left: 3px solid var(--gold); border-radius: 0 10px 10px 0; background: rgba(242,188,85,.07); color: #d8d5c9; font-size: .88rem; }
+    .download-section { padding-bottom: 86px; }
+    .download-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .download-card { display: flex; min-height: 220px; flex-direction: column; padding: 22px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); }
+    .download-card h3 { margin: 0; font-size: 1.04rem; }
+    .download-card p { margin: 7px 0 12px; color: var(--muted); font-size: .86rem; }
+    .asset-link { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); color: #d8dced; text-decoration: none; font-size: .82rem; }
+    .asset-link:hover { color: var(--gold); }
+    .asset-link code { color: inherit; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .75rem; overflow-wrap: anywhere; }
+    .asset-link span { flex: 0 0 auto; color: var(--dim); }
+    .release-link { margin-top: auto; padding-top: 15px; color: var(--gold); font-size: .85rem; text-underline-offset: 3px; }
+    .install-note { margin-top: 20px; padding: 18px 20px; border: 1px solid var(--line); border-radius: 13px; background: rgba(17,22,37,.6); color: var(--muted); font-size: .88rem; }
+    .install-note strong { color: var(--ink); }
+    .footer { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 28px 0 42px; border-top: 1px solid var(--line); color: var(--dim); font-size: .82rem; }
+    .footer-brand { max-width: 430px; }
+    .footer-brand p { margin: 8px 0 0; }
+    .footer-links { display: flex; flex-wrap: wrap; gap: 10px 19px; }
+    .footer-links a { color: var(--muted); text-underline-offset: 3px; }
+    @media (max-width: 900px) {
+      .hero { grid-template-columns: 1fr; gap: 48px; padding-top: 48px; }
+      .hero-copy { max-width: 720px; }
+      .browser-art { width: min(100%, 620px); margin-inline: auto; }
+    }
+    @media (max-width: 700px) {
+      .wrap { width: min(100% - 32px, 600px); }
+      .topbar { padding: 18px 0; }
+      .nav { gap: 13px; font-size: .83rem; }
+      .nav a:nth-child(2), .nav a:nth-child(3) { display: none; }
+      .hero { padding: 42px 0 68px; }
+      .mock-page { min-height: 235px; }
+      .feature-grid, .download-grid, .truth-grid { grid-template-columns: 1fr; }
+      .feature { min-height: 0; }
+      .download-card { min-height: 0; }
+      .section { padding: 60px 0; }
+    }
+    @media (max-width: 420px) {
+      .wrap { width: calc(100% - 28px); }
+      .nav { gap: 10px; }
+      .nav a:nth-child(1) { display: none; }
+      .hero-actions .button { width: 100%; }
+      .browser-art { padding: 9px; border-radius: 17px; }
+      .fake-tab { width: 105px; padding-inline: 8px; }
+      .fake-tab:last-child { display: none; }
+      .shield-badge { padding: 6px; font-size: 0; }
+      .shield-badge svg { width: 15px; height: 15px; }
+      .mock-page { min-height: 210px; padding: 20px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      :root { scroll-behavior: auto; }
+      *, *::before, *::after { transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="Vespera home">
+        <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1C12.8 7.5 16.5 11.2 23 12 16.5 12.8 12.8 16.5 12 23 11.2 16.5 7.5 12.8 1 12 7.5 11.2 11.2 7.5 12 1Z"/></svg>
+        <span>Vespera</span>
+      </a>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="#features">Features</a>
+        <a href="#privacy">Privacy</a>
+        <a href="#download">Downloads</a>
+        <a href="https://github.com/Makerxm800/Vespera">Source</a>
+        <a class="nav-cta" href="https://github.com/Makerxm800/Vespera/releases/latest">Get Vespera</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow">Free · open source · MIT licensed</p>
+          <h1 id="hero-title">The web,<br>on your terms.</h1>
+          <p class="lede">Vespera is a desktop browser with built-in tracker and ad blocking, flexible tabs, and no usage telemetry. A quieter, more personal place to browse — without pretending one tool can stop every kind of tracking.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="https://github.com/Makerxm800/Vespera/releases/latest">
+              <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></svg>
+              Download Vespera
+            </a>
+            <a class="button" href="https://github.com/Makerxm800/Vespera">Explore the source</a>
+          </div>
+          <p class="hero-note">Choose the installer for your system on the official <a href="https://github.com/Makerxm800/Vespera/releases/latest">GitHub release page</a>.</p>
+          <div class="proof-row" aria-label="Vespera highlights">
+            <span class="proof"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7 10 17l-5-5"/><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z"/></svg>No usage telemetry</span>
+            <span class="proof"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16M4 12h16M4 19h16"/></svg>Windows · macOS · Linux</span>
+            <span class="proof"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20M5 5l14 14M19 5 5 19"/></svg>Open source</span>
+          </div>
+        </div>
+
+        <figure class="browser-art" aria-label="Decorative illustration of the Vespera browser interface">
+          <div class="browser-frame" aria-hidden="true">
+            <div class="browser-tabs">
+              <div class="fake-tab active"><i class="fake-tab-dot"></i><span>New tab</span></div>
+              <div class="fake-tab"><i class="fake-tab-dot"></i><span>Reading list</span></div>
+              <div class="fake-tab"><i class="fake-tab-dot"></i><span>Research</span></div>
+            </div>
+            <div class="browser-toolbar">
+              <span class="traffic"><i></i><i></i><i></i></span>
+              <div class="address"><span class="address-lock">◈</span><span>Search or enter an address</span></div>
+              <span class="shield-badge"><svg viewBox="0 0 24 24"><path d="M12 3 20 6v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg>Shields</span>
+            </div>
+            <div class="mock-page">
+              <svg class="mock-star" viewBox="0 0 24 24"><path d="M12 1C12.8 7.5 16.5 11.2 23 12 16.5 12.8 12.8 16.5 12 23 11.2 16.5 7.5 12.8 1 12 7.5 11.2 11.2 7.5 12 1Z"/></svg>
+              <h2>A little more quiet.</h2>
+              <p>Your browser. Your choices.</p>
+              <div class="mock-search">Search the web or type a URL</div>
+            </div>
+          </div>
+          <figcaption class="art-caption">Interface illustration · not a live browser control</figcaption>
+        </figure>
+      </section>
+
+      <section class="section" id="features" aria-labelledby="features-title">
+        <div class="section-heading">
+          <p class="eyebrow">Made for everyday browsing</p>
+          <h2 id="features-title">Privacy tools that say what they do.</h2>
+          <p>Vespera is designed to be useful without making absolute promises about online privacy.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature">
+            <span class="feature-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 6v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg></span>
+            <h3>Block known trackers and ads</h3>
+            <p>Bundled filter lists stop matching requests before they load. See real blocked-request counts in the browser and make per-site exceptions.</p>
+          </article>
+          <article class="feature">
+            <span class="feature-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h7"/><path d="m17 15 3 3 3-3"/><path d="M20 18V9"/></svg></span>
+            <h3>Less tracking in the address bar</h3>
+            <p>Vespera can remove common tracking parameters, prefer HTTPS, and send Global Privacy Control and Do Not Track signals. Sites decide whether to honor those signals.</p>
+          </article>
+          <article class="feature">
+            <span class="feature-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M8 4v5"/></svg></span>
+            <h3>Tabs that fit your workflow</h3>
+            <p>Choose a horizontal strip or vertical sidebar, group related tabs, pin favorites, and bring back tabs from your last session.</p>
+          </article>
+          <article class="feature">
+            <span class="feature-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="8"/></svg></span>
+            <h3>A browser that feels like yours</h3>
+            <p>Pick a theme and accent, tune a wallpaper, and adjust tab behavior, motion, and reading preferences in Settings.</p>
+          </article>
+          <article class="feature">
+            <span class="feature-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span>
+            <h3>Useful tools included</h3>
+            <p>Reader View, Dark Pages, Focus Mode, downloads, and a privacy hub are built in — no extension store or account required.</p>
+          </article>
+          <article class="feature">
+            <span class="feature-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M5 8h14M5 16h14"/><circle cx="12" cy="12" r="9"/></svg></span>
+            <h3>Open source, community-led</h3>
+            <p>Read the code, report a bug, or help shape the roadmap. Vespera is distributed under the MIT License.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="privacy" aria-labelledby="privacy-title">
+        <div class="section-heading">
+          <p class="eyebrow">Clear about the boundaries</p>
+          <h2 id="privacy-title">Protection is not invisibility.</h2>
+          <p>Here is what the current desktop build does — and what it does not claim to do.</p>
+        </div>
+        <div class="truth-grid">
+          <article class="truth-card">
+            <h3>What Vespera does</h3>
+            <ul>
+              <li>Blocks requests that match its bundled tracker and ad rules; no list catches every tracker.</li>
+              <li>Supports common tracking-link cleanup, HTTPS upgrades, and GPC/DNT signals.</li>
+              <li>Does not include usage analytics or telemetry in the app.</li>
+              <li>Keeps ordinary settings, bookmarks, and history on your device unless you choose account sync.</li>
+            </ul>
+          </article>
+          <article class="truth-card">
+            <h3>What Vespera does not promise</h3>
+            <ul>
+              <li>It does not currently spoof or randomize browser fingerprinting signals.</li>
+              <li>GPC and DNT are requests to websites, not enforcement.</li>
+              <li>The current desktop build does not run Chrome extensions.</li>
+              <li>Private windows reduce saved local activity; websites, networks, and internet providers may still identify you.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="callout"><strong>Optional sync:</strong> when you sign in, Vespera syncs settings, bookmarks, and history with the Vespera service. Sync is not end-to-end encrypted in this release. Do not sync information you do not want stored by that service.</div>
+        <div class="callout"><strong>System web engine:</strong> the desktop app uses the platform webview instead of bundling a single browser engine: Chromium-based WebView2 on Windows, WKWebView on macOS, and WebKitGTK on Linux. The system webview does not provide a Chrome extension runtime in this release.</div>
+      </section>
+
+      <section class="section download-section" id="download" aria-labelledby="download-title">
+        <div class="section-heading">
+          <p class="eyebrow">Official releases</p>
+          <h2 id="download-title">Choose your build.</h2>
+          <p>Downloads are hosted on GitHub. Each link opens the latest release so you can review its notes and select the file that matches your system.</p>
+        </div>
+        <div class="download-grid">
+          <article class="download-card">
+            <h3>Windows · x64</h3>
+            <p>Current releases include both a setup wizard and an MSI installer.</p>
+            <a class="asset-link" href="https://github.com/Makerxm800/Vespera/releases/latest"><code>Vespera_&lt;version&gt;_x64-setup.exe</code><span>Setup</span></a>
+            <a class="asset-link" href="https://github.com/Makerxm800/Vespera/releases/latest"><code>Vespera_&lt;version&gt;_x64_en-US.msi</code><span>MSI</span></a>
+            <a class="release-link" href="https://github.com/Makerxm800/Vespera/releases/latest">View latest Windows release →</a>
+          </article>
+          <article class="download-card">
+            <h3>macOS</h3>
+            <p>Choose the disk image for your Mac processor.</p>
+            <a class="asset-link" href="https://github.com/Makerxm800/Vespera/releases/latest"><code>Vespera_&lt;version&gt;_aarch64.dmg</code><span>Apple silicon</span></a>
+            <a class="asset-link" href="https://github.com/Makerxm800/Vespera/releases/latest"><code>Vespera_&lt;version&gt;_x64.dmg</code><span>Intel</span></a>
+            <a class="release-link" href="https://github.com/Makerxm800/Vespera/releases/latest">View latest macOS release →</a>
+          </article>
+          <article class="download-card">
+            <h3>Linux · x86_64</h3>
+            <p>Choose AppImage or a Debian package.</p>
+            <a class="asset-link" href="https://github.com/Makerxm800/Vespera/releases/latest"><code>Vespera_&lt;version&gt;_amd64.AppImage</code><span>AppImage</span></a>
+            <a class="asset-link" href="https://github.com/Makerxm800/Vespera/releases/latest"><code>Vespera_&lt;version&gt;_amd64.deb</code><span>Debian</span></a>
+            <a class="release-link" href="https://github.com/Makerxm800/Vespera/releases/latest">View latest Linux release →</a>
+          </article>
+        </div>
+        <div class="install-note"><strong>First launch:</strong> current builds are unsigned. Windows SmartScreen or macOS Gatekeeper may show a warning. Only install builds from the official Vespera Releases page; if your security software reports a specific threat, do not run that file. macOS may require right-clicking the app and choosing Open.</div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-brand">
+        <a class="brand" href="#top"><svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1C12.8 7.5 16.5 11.2 23 12 16.5 12.8 12.8 16.5 12 23 11.2 16.5 7.5 12.8 1 12 7.5 11.2 11.2 7.5 12 1Z"/></svg><span>Vespera</span></a>
+        <p>Free, open-source software. This static page has no analytics, cookies, external fonts, or third-party scripts. Opening a download link visits GitHub.</p>
+      </div>
+      <nav class="footer-links" aria-label="Project links">
+        <a href="https://github.com/Makerxm800/Vespera">Source code</a>
+        <a href="https://github.com/Makerxm800/Vespera/releases">All releases</a>
+        <a href="https://github.com/Makerxm800/Vespera/issues">Report an issue</a>
+        <a href="https://github.com/Makerxm800/Vespera/blob/main/LICENSE">MIT License</a>
+        <a href="https://github.com/Makerxm800/Vespera/blob/main/README.md">Project README</a>
+      </nav>
+    </footer>
+  </div>
+</body>
+</html>

@@ -1,5 +1,7 @@
 # Dependencies & build tooling
 node_modules/
+/src/renderer/vendor/html2canvas.min.js
+/src/renderer/vendor/html2canvas.LICENSE
 
 # Generated icons (recreated by `npm run icons`)
 build/

@@ -38,7 +38,7 @@ const FAKE_EXTENSIONS = [
   { id: EXT_NONE, name: 'Quiet Notes', version: '2.0.0', enabled: false, description: 'Local notes only.', permissions: ['storage'], hostPermissions: [], popup: true, options: '', actionTitle: 'Quiet Notes', icon: null },
 ];
 
-const calls = { inspectTab: [], checkUpdate: 0, installUpdate: 0 };
+const calls = { inspectTab: [], checkUpdate: 0, installUpdate: 0, downloads: [] };
 
 function makeVespera() {
   return {
@@ -46,6 +46,8 @@ function makeVespera() {
       checkUpdate: async () => { calls.checkUpdate++; return { ok: true, current: '0.1.9', latest: '0.2.0', hasUpdate: true, publishedAt: '2026-11-15T00:00:00Z', notes: 'New stuff.' }; },
       installUpdate: async (release) => { calls.installUpdate++; return { ok: true, latest: release.latest, message: 'Downloaded and launching the installer.' }; },
       inspectTab: async (contentsId, x, y) => { calls.inspectTab.push({ contentsId, x, y }); return { ok: true }; },
+      download: async (url, options) => { calls.downloads.push({ url, options }); return { ok: true }; },
+      chooseDownloadFolder: async () => ({ ok: true, path: '/tmp/vespera-downloads' }),
       tabMemory: async () => ({ ok: true, bytes: 512 * 1024 * 1024 }),
     },
     extensions: {
@@ -62,12 +64,13 @@ function makeVespera() {
   };
 }
 
-let dom, window, document, state, bridge, tauriInternals;
+let dom, window, document, state, bridge, tauriInternals, originalProcess;
 
 async function boot() {
   dom = new JSDOM(html, { url: 'https://vespera.local/', runScripts: 'outside-only' });
   window = dom.window;
   document = window.document;
+  originalProcess = window.process;
 
   // Minimal browser-API polyfills jsdom lacks.
   const mql = (query) => ({ matches: false, media: query, onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent() { return false; } });
@@ -98,6 +101,26 @@ async function boot() {
     };
     return image;
   };
+  const iframeWindows = new WeakMap();
+  Object.defineProperty(window.HTMLIFrameElement.prototype, 'contentWindow', {
+    configurable: true,
+    get() {
+      if (!iframeWindows.has(this)) {
+        const guestWindow = {
+          postMessage(message) {
+            if (message?.type !== 'vespera:capture-preview') return;
+            const event = new window.MessageEvent('message', { data: {
+              type: 'vespera:preview', id: message.id, image: 'data:image/jpeg;base64,TESTPREVIEW',
+            } });
+            Object.defineProperty(event, 'source', { value: guestWindow });
+            window.setTimeout(() => window.dispatchEvent(event), 0);
+          },
+        };
+        iframeWindows.set(this, guestWindow);
+      }
+      return iframeWindows.get(this);
+    },
+  });
 
   // Expose the jsdom realm as Node globals so the renderer modules resolve
   // window/document/localStorage/matchMedia the same way as in the browser.
@@ -209,6 +232,7 @@ test('extensions page renders sections, cards and controls', async () => {
   // Third-party cards only load when the shell reports extension support (web
   // preview). Drop the desktop probe and re-render to exercise the manager UI.
   delete window.__TAURI_INTERNALS__;
+  window.process = { versions: { electron: 'test' } };
   bridge.navigate('vespera://newtab');
   await tick(40);
   bridge.navigate('vespera://extensions');
@@ -329,9 +353,16 @@ test('access panel groups extensions for the site in the active website tab', as
   closePopovers();
   // Put the desktop probe back so the remaining tests run as the shipped app does.
   window.__TAURI_INTERNALS__ = tauriInternals;
+  if (originalProcess === undefined) delete window.process;
+  else window.process = originalProcess;
 });
 
 test('toolbar extensions menu has per-extension switches, pin and details', async () => {
+  // Exercise the legacy Chromium shell explicitly; the native Tauri webview
+  // is covered separately and intentionally exposes no Chrome extension APIs.
+  const previousProcess = window.process;
+  window.process = { versions: { electron: 'test' } };
+  try {
   // The menu reads site access from the active tab — focus a website tab first.
   const siteRow = siteTabRow();
   assert.ok(siteRow, 'a website tab is open');
@@ -354,6 +385,10 @@ test('toolbar extensions menu has per-extension switches, pin and details', asyn
   await tick(60);
   assert.equal(FAKE_EXTENSIONS.find((e) => e.id === EXT_BARE).enabled, false, 'disable was applied');
   closePopovers();
+  } finally {
+    if (previousProcess === undefined) delete window.process;
+    else window.process = previousProcess;
+  }
 });
 
 test('right-click site menu offers Inspect and invoking it hits the desktop API', async () => {
@@ -403,12 +438,13 @@ test('tab hover shows a card and follows the mouse to the next tab', async () =>
   let card = document.querySelector('.tab-hovercard');
   assert.ok(card, 'hover card appears for the website tab');
   const firstTitle = card.querySelector('.tab-hovercard-copy strong').textContent;
-  // The Tauri webview has no per-tab capturePage; the capture path must
-  // degrade gracefully and the card keeps working without a preview image.
-  await tick(600);
+  // Tauri renders proxied sites in sandboxed iframes; the guest bridge returns
+  // an on-demand, size-limited snapshot to the requesting tab.
+  await tick(80);
   card = document.querySelector('.tab-hovercard');
-  assert.ok(card, 'hover card survives the unavailable page capture');
+  assert.ok(card, 'hover card remains open after capture');
   assert.ok(card.querySelector('.tab-hovercard-copy strong'), 'hover card still shows the tab title');
+  assert.ok(card.querySelector('.tab-hovercard-preview img'), 'Tauri iframe supplies a page snapshot');
   pointer('pointerover', siteRows[0]);
   await tick(520); // hover delay + crossfade handoff
   card = document.querySelector('.tab-hovercard');
@@ -428,6 +464,26 @@ test('settings page renders every section and tab toggles live here', async () =
     assert.ok(document.querySelector(`.settings-page .section#${id}`), `section ${id} rendered`);
   }
   assert.ok(document.querySelector('#settings-check-update'), 'updates section has its check button');
+  const developerMode = document.querySelector('#extensions input[aria-label="Developer mode"]');
+  assert.ok(developerMode.disabled && !developerMode.checked, 'unsupported Tauri developer mode is disabled and not shown as active');
+  assert.match(document.querySelector('#extensions').textContent, /no Chrome extension runtime/i, 'extension copy matches the native shell');
+  assert.equal(document.querySelector('[data-setting="privacy.automation"]'), null, 'no fake always-on automation control is presented');
+  assert.match(document.querySelector('#privacy').textContent, /does not currently spoof or randomize browser fingerprinting signals/i);
+  assert.match(document.querySelector('#about').textContent, /System webview desktop/);
+  const askLocation = document.querySelector('[data-setting="askDownloadLocation"]');
+  assert.ok(askLocation && !askLocation.disabled, 'desktop save-dialog preference is available in Tauri');
+  askLocation.checked = false;
+  askLocation.dispatchEvent(new window.Event('change', { bubbles: true }));
+  assert.equal(state.settings.askDownloadLocation, false, 'save-dialog preference changes state');
+  click(document.querySelector('#choose-download-folder'));
+  await tick(40);
+  assert.equal(state.settings.downloadPath, '/tmp/vespera-downloads', 'folder selection persists');
+  assert.equal(document.querySelector('#download-folder-label').textContent, '/tmp/vespera-downloads');
+  await bridge.download('https://example.com/archive.zip', 'custom-name.zip');
+  assert.deepEqual(calls.downloads.at(-1), {
+    url: 'https://example.com/archive.zip',
+    options: { name: 'custom-name.zip', askLocation: false, folder: '/tmp/vespera-downloads' },
+  }, 'Tauri receives the selected filename and saved folder preference');
   // A tab-behavior switch in Settings changes state (the menu toggle is gone).
   const toggle = document.querySelector('[data-setting="tabBehavior.scrollableTabStrip"]');
   assert.ok(toggle, 'tab behavior toggle exists in Settings');

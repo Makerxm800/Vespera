@@ -82,7 +82,7 @@ export function initTabHover(tabs, getSettings) {
     const preview = mode === 'preview'
       ? `<div class="tab-hovercard-preview" data-hover-preview>${cached
         ? `<img src="${escapeHtml(cached)}" alt="Preview of ${escapeHtml(tab.title)}" referrerpolicy="no-referrer">`
-        : previewPlaceholder(platform.isElectron ? 'Capturing page preview…' : 'Page snapshots are available in the desktop app.')}</div>`
+        : previewPlaceholder(tab._internal ? 'Vespera pages do not need a site snapshot.' : platform.isElectron ? 'Capturing page preview…' : 'Page snapshots are available in the desktop app.')}</div>`
       : '';
     const stateLabel = tab.loading ? 'Loading' : tab.muted ? 'Muted' : tab.audible ? 'Playing audio' : 'Ready';
     card.innerHTML = `<div class="tab-hovercard-head"><div class="tab-hovercard-favicon">${faviconHtml(tab)}</div><div class="tab-hovercard-copy"><strong>${escapeHtml(tab.title)}</strong><span>${escapeHtml(siteLabel(tab.url))}</span></div></div>
@@ -100,7 +100,7 @@ export function initTabHover(tabs, getSettings) {
       target.innerHTML = `<img src="${escapeHtml(cached)}" alt="Preview of ${escapeHtml(tab.title)}" referrerpolicy="no-referrer">`;
       return;
     }
-    if (!platform.isElectron || !platform.isWebview(tab.view)) return;
+    if (tab._internal || !platform.isElectron) return;
     // Capture on demand when no automatic snapshot exists yet; if the page
     // wasn't ready, retry once shortly after so hover previews still appear.
     try {
@@ -240,18 +240,25 @@ export function initTabHover(tabs, getSettings) {
     close,
     /** Capture (and cache) a snapshot for a tab — called when it is active. */
     async captureForTab(tab) {
-      if (!tab || !platform.isElectron || !platform.isWebview(tab.view)) return;
+      if (!tab || tab._internal || !platform.isElectron) return;
       try {
         const image = await platform.capturePreview(tab.view);
         if (!image) {
-          // The page may still have been loading — retry once shortly after.
-          clearTimeout(tab._previewRetryTimer);
-          tab._previewRetryTimer = setTimeout(() => {
-            delete tab._previewRetryTimer;
-            captureForTab(tab);
-          }, 700);
+          // A just-loaded page may need one short retry. Never spin if a page
+          // or platform cannot be captured (for example, the web preview).
+          if (!tab._previewAutoRetried) {
+            tab._previewAutoRetried = true;
+            clearTimeout(tab._previewRetryTimer);
+            tab._previewRetryTimer = setTimeout(() => {
+              delete tab._previewRetryTimer;
+              captureForTab(tab);
+            }, 700);
+          } else {
+            tab._previewAutoRetried = false;
+          }
           return;
         }
+        tab._previewAutoRetried = false;
         previewCache.set(tab.id, image);
         if (current?.tab?.id === tab.id) {
           const target = current.card.querySelector('[data-hover-preview]');

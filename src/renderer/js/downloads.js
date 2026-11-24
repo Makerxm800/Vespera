@@ -32,7 +32,12 @@ export async function initDownloads() {
 export async function downloadUrl(url, name = '') {
   if (!/^https?:\/\//i.test(url)) return toast('Only web files can be downloaded.', 'error');
   if (window.vespera) {
-    const result = await window.vespera.app.download(url);
+    const result = await window.vespera.app.download(url, {
+      name,
+      askLocation: state.settings.askDownloadLocation !== false,
+      folder: typeof state.settings.downloadPath === 'string' ? state.settings.downloadPath : '',
+    });
+    if (result?.canceled) return;
     if (!result?.ok) toast(result?.message || 'Download could not start.', 'error');
     return;
   }

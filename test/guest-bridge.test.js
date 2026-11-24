@@ -11,12 +11,13 @@ const vm = require('node:vm');
 const { bridgeScript } = require('../src/shared/guest-bridge');
 
 /** Compile the injected <script> into a runnable guest with a DOM-ish stub. */
-function createGuest(pageUrl) {
-  const html = bridgeScript(pageUrl, '', '', '');
+function createGuest(pageUrl, { html2canvas = null } = {}) {
+  const html = bridgeScript(pageUrl, '', '', 'https://vespera.example');
   const inner = html.replace(/^<script[^>]*>/, '').replace(/<\/script>$/, '');
 
   const messages = [];
   const listeners = new Map();
+  const windowListeners = new Map();
   const document = {
     title: 'Article title',
     documentElement: {},
@@ -30,8 +31,17 @@ function createGuest(pageUrl) {
   const parent = { postMessage: (msg) => messages.push(msg) };
   const windowStub = {
     fetch: () => Promise.resolve({ ok: true }),
-    addEventListener() {},
+    addEventListener(type, listener) {
+      const list = windowListeners.get(type) || [];
+      list.push(listener);
+      windowListeners.set(type, list);
+    },
     getSelection: () => '',
+    innerWidth: 1280,
+    innerHeight: 720,
+    scrollX: 0,
+    scrollY: 0,
+    ...(html2canvas ? { html2canvas } : {}),
   };
   class XMLHttpRequest {}
   class MutationObserver { observe() {} }
@@ -53,7 +63,11 @@ function createGuest(pageUrl) {
     setTimeout,
     clearTimeout,
   }, { filename: 'guest-bridge.js' });
-  return { listeners, messages };
+  return { listeners, windowListeners, messages, parent, document };
+}
+
+function dispatchWindowMessage(guest, data, source = guest.parent) {
+  for (const listener of guest.windowListeners.get('message') || []) listener({ source, data });
 }
 
 function makeAnchor(href, { target = '', download = false } = {}) {
@@ -148,4 +162,49 @@ test('guest bridge ignores unsafe links and reports blocked resources', () => {
   const dataUrl = dispatch(guest, 'click', makeAnchor('data:text/html,x'));
   assert.deepEqual(dataUrl, { prevented: false, stopped: false });
   assert.equal(guest.messages.length, 0, 'no navigation reported for unsafe links');
+});
+
+test('guest bridge captures a small, redacted preview only when the host requests it', async () => {
+  let seenOptions;
+  const guest = createGuest('https://site.example/article', {
+    html2canvas: async (root, options) => {
+      seenOptions = { root, options };
+      return { toDataURL: () => 'data:image/jpeg;base64,cmVkYWN0ZWQ=' };
+    },
+  });
+  guest.messages.length = 0;
+  dispatchWindowMessage(guest, { type: 'vespera:capture-preview', id: 'tab-preview-1' });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  assert.equal(seenOptions.root, guest.document.documentElement, 'capture starts at the page document');
+  assert.equal(seenOptions.options.width, 1280);
+  assert.equal(seenOptions.options.height, 720);
+  assert.equal(seenOptions.options.scale, 0.25, 'output is scaled to the hover-card size');
+  assert.equal(typeof seenOptions.options.onclone, 'function', 'form and editable fields are removed from the clone');
+  let redactedSelector = '', removedFields = 0;
+  seenOptions.options.onclone({
+    querySelectorAll(selector) {
+      redactedSelector = selector;
+      return [{ remove() { removedFields++; } }];
+    },
+  });
+  assert.match(redactedSelector, /contenteditable/);
+  assert.equal(removedFields, 1, 'input fields and rich text editors are excluded from the preview');
+  const response = guest.messages.find((message) => message.type === 'vespera:preview');
+  assert.equal(response?.type, 'vespera:preview');
+  assert.equal(response?.id, 'tab-preview-1');
+  assert.equal(response?.image, 'data:image/jpeg;base64,cmVkYWN0ZWQ=');
+});
+
+test('guest bridge returns an empty preview rather than oversized image data', async () => {
+  const guest = createGuest('https://site.example/article', {
+    html2canvas: async () => ({ toDataURL: () => 'data:image/jpeg;base64,' + 'A'.repeat(900001) }),
+  });
+  guest.messages.length = 0;
+  dispatchWindowMessage(guest, { type: 'vespera:capture-preview', id: 'large-preview' });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  const response = guest.messages.find((message) => message.type === 'vespera:preview');
+  assert.equal(response?.type, 'vespera:preview');
+  assert.equal(response?.id, 'large-preview');
+  assert.equal(response?.image, null);
 });

@@ -1,6 +1,6 @@
 {
   "name": "vespera-browser",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Vespera — a next-gen, community-first privacy browser engineered for absolute privacy and superior performance. Tauri v2 shell.",
   "type": "commonjs",
   "scripts": {
@@ -8,8 +8,9 @@
     "preview": "node server/server.js",
     "dev": "npm run tauri dev",
     "tauri": "tauri",
+    "test:site": "node --test test/site.test.mjs",
     "test": "node --import ./test/jsx-register.mjs --test",
-    "icons": "node scripts/generate-icons.js",
+    "icons": "node scripts/generate-icons.js && node scripts/generate-installer-assets.js",
     "dist": "npm run icons && tauri build",
     "dist:win": "npm run icons && tauri build --bundles msi,nsis",
     "dist:mac": "npm run icons && tauri build --bundles dmg",
@@ -35,5 +36,8 @@
     "@tauri-apps/cli": "^2.1.0",
     "jsdom": "^31.0.1",
     "playwright": "^1.65.0"
+  },
+  "dependencies": {
+    "html2canvas": "1.4.1"
   }
 }

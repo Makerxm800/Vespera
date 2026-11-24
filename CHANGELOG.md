@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.3
+
+- Improved: browser preview snapshots are captured on demand with safer validation and redaction.
+- Improved: desktop downloads honor the selected folder and save-dialog preferences, with clearer error handling.
+- Improved: native-shell extension messaging, welcome/settings guidance, and migrated settings states.
+- Added: installer artwork and custom NSIS install/uninstall behavior.
+- Added: a standalone Vespera landing page and app-preview flow.
+
 ## 0.2.2
 
 - New: a profile button in the toolbar with a menu for your account, sync, a private window and account settings. Turn it off in Settings.

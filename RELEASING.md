@@ -29,7 +29,7 @@ Watch progress at **Actions → Build & Release** on the repo.
 Run **Actions → Build & publish Vespera → Run workflow** manually from `main`.
 Leave `release_tag` blank to build installers and upload them as run artifacts
 without publishing a release. To rebuild and publish an existing `v*` tag,
-enter it in `release_tag` (for example, `v0.2.2`); the workflow checks out that
+enter it in `release_tag` (for example, `v0.2.3`); the workflow checks out that
 tag's source and attaches the installers to its GitHub Release.
 
 ## Code signing (optional)

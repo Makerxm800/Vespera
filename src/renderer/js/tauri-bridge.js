@@ -41,7 +41,7 @@
       installUpdate: (releaseInfo) => invoke('app_update_install', { releaseInfo }),
       inspectTab: () => invoke('app_inspect_tab'),
       downloads: (privateMode) => invoke('downloads_list', { private: Boolean(privateMode) }),
-      download: (url) => invoke('downloads_start', { url, private: isPrivate }),
+      download: (url, options) => invoke('downloads_start', { url, private: isPrivate, options: options || null }),
       downloadAction: (action, id) => invoke('downloads_action', { action, id, private: isPrivate }),
       clearDownloads: () => invoke('downloads_clear', { private: isPrivate }),
       chooseDownloadFolder: () => invoke('downloads_choose_folder'),

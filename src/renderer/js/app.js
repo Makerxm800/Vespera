@@ -260,7 +260,7 @@ function storeExtId(url) {
 function syncStoreBanner(tab) {
   const banner = document.getElementById('store-banner');
   if (!banner) return;
-  const id = (platform.isElectron && !state.private) ? storeExtId(tab?.url) : null;
+  const id = (platform.hasWebview && !state.private) ? storeExtId(tab?.url) : null;
   const show = Boolean(id) && storeDismissed !== id;
   banner.classList.toggle('hidden', !show);
   if (!show) return;
@@ -270,6 +270,7 @@ function syncStoreBanner(tab) {
     : 'Google only lets Chrome install extensions — Vespera can install this one for you.';
 }
 async function installFromStorePage() {
+  if (!platform.hasWebview || state.private) return toast('Third-party extensions are unavailable in this desktop runtime.', 'info');
   const tab = tabs.active;
   const id = storeExtId(tab?.url);
   const banner = document.getElementById('store-banner');
@@ -460,7 +461,6 @@ function showSiteInfoMenu(anchor, tab = tabs.active) {
     const url = new URL(tab.url);
     origin = url.origin; host = url.hostname; secure = url.protocol === 'https:';
   } catch { /* Internal page. */ }
-  const protections = state.settings.shields;
   const connection = secure ? 'Connection is secure' : origin ? 'Connection is not secure' : 'Vespera page';
   const pop = openPopover(anchor, `
     <div class="site-info-panel-head">
@@ -468,9 +468,9 @@ function showSiteInfoMenu(anchor, tab = tabs.active) {
       <div><b>${connection}</b><div class="small muted">${escapeHtml(host)}</div></div>
     </div>
     <div class="site-info-panel-body">
-      <div class="site-info-row"><span>${icon('shield')} Fingerprinting protection</span><b>${protections.antiFingerprint !== false ? 'On' : 'Off'}</b></div>
+      <div class="site-info-row"><span>${icon('shield')} Fingerprint spoofing</span><b>Not active</b></div>
       <div class="site-info-row"><span>${icon('lock')} Cookies &amp; site data</span><b>${origin ? 'Stored per site' : 'Not applicable'}</b></div>
-      <div class="site-info-note">Site data stays in this browser profile. Private-window cookies, site data and download history are cleared after the last private window closes. Vespera does not expose saved passwords or authentication tokens here.</div>
+      <div class="site-info-note">Vespera blocks known requests that match its lists, but does not currently spoof or randomize browser fingerprint signals. Site data stays in this browser profile; this panel never exposes saved passwords or authentication tokens.</div>
       <button class="btn btn-sm" data-site-action="shields">${icon('shield')} Vespera Shields</button>
       <button class="btn btn-sm btn-ghost" data-site-action="privacy">${icon('gear')} Site privacy settings</button>
     </div>`, { className: 'popover site-info-popover', label: 'Connection and site information' });
@@ -640,7 +640,9 @@ function openMenu(anchor) {
 function wireWindowControls() {
   document.body.classList.add(platform.isElectron ? 'electron' : 'web-preview');
   if (state.private) { document.body.classList.add('private-mode'); $('runtime-status').textContent = 'Private · not saved'; }
-  else $('runtime-status').textContent = platform.isElectron ? 'Desktop · Chromium' : 'Live preview';
+  else $('runtime-status').textContent = platform.hasWebview
+    ? 'Desktop · Chromium'
+    : platform.isElectron ? 'Desktop · System webview' : 'Live preview';
   const min = $('wc-min'), max = $('wc-max'), close = $('wc-close');
   if (platform.isElectron) {
     min.onclick = () => platform.minimize(); max.onclick = () => platform.maximize(); close.onclick = () => platform.close();
@@ -684,7 +686,7 @@ async function showExtensionsMenu(anchor) {
   const close = pop.close.bind(pop);
   pop.close = () => { trigger?.setAttribute('aria-expanded', 'false'); close(); };
   let items = [];
-  if (platform.isElectron && !state.private) {
+  if (platform.hasWebview && !state.private) {
     try { items = await window.vespera.extensions.list() || []; }
     catch (err) { diagnostic('Could not list extensions: ' + err.message); }
   }
@@ -703,7 +705,13 @@ async function showExtensionsMenu(anchor) {
       <button class="icon-btn" data-ext-details="${id}" title="Permissions and site access" aria-label="Details for ${name}">${icon('info')}</button></div>`;
   }).join('') : '<div class="popover-copy">No third-party extensions are installed yet. Built-in tools are available in the Extensions page.</div>';
   const devMode = Boolean(state.settings.extensions.developerMode);
-  pop.el.innerHTML = '<div class="menu-label">Extensions <span class="chip">' + items.length + '</span></div>' + rows + '<div class="extension-menu-actions"><button class="btn btn-primary" data-ext-manage>Manage extensions</button><button class="btn" data-ext-load ' + (!platform.isElectron || state.private || !devMode ? 'disabled' : '') + '>' + (devMode ? 'Load unpacked' : 'Developer mode') + '</button></div><p class="small faint">Only load code from sources you trust. Unpacked folders still require a permission review. Some Chrome APIs are not supported by Electron.</p>';
+  const extensionMenuNote = platform.hasWebview
+    ? 'Only load code from sources you trust. Unpacked folders still require a permission review. Some Chrome APIs are not supported by the Chromium shell.'
+    : platform.isElectron
+      ? 'This desktop shell does not include a Chrome extension runtime. Vespera’s built-in tools are available in Manage extensions.'
+      : 'Third-party extensions are unavailable in this hosted preview. Manage Vespera’s built-in tools from the Extensions page.';
+  const extensionMenuAction = !platform.hasWebview ? 'Extensions unavailable' : devMode ? 'Load unpacked' : 'Developer mode';
+  pop.el.innerHTML = '<div class="menu-label">Extensions <span class="chip">' + items.length + '</span></div>' + rows + '<div class="extension-menu-actions"><button class="btn btn-primary" data-ext-manage>Manage extensions</button><button class="btn" data-ext-load ' + (!platform.hasWebview || state.private || !devMode ? 'disabled' : '') + '>' + extensionMenuAction + '</button></div><p class="small faint">' + extensionMenuNote + '</p>';
   const syncRows = async () => {
     items = await window.vespera.extensions.list().catch(() => items);
     updateExtensionActions(items);
@@ -711,7 +719,7 @@ async function showExtensionsMenu(anchor) {
   };
   pop.el.querySelector('[data-ext-manage]')?.addEventListener('click', () => { pop.close(); tabs.add('vespera://extensions'); });
   pop.el.querySelector('[data-ext-load]')?.addEventListener('click', async () => {
-    if (!platform.isElectron || state.private || !devMode) return;
+    if (!platform.hasWebview || state.private || !devMode) return;
     const result = await window.vespera.extensions.loadUnpacked();
     if (result.ok) { toast(`${result.name || 'Extension'} loaded after review.`, 'ok'); pop.close(); showExtensionsMenu(anchor); }
     else if (!result.canceled) toast(result.message || 'Could not load this extension.', 'error', 6000);
@@ -741,7 +749,7 @@ async function showExtensionsMenu(anchor) {
 }
 
 function showExtensionAction(anchor, ext) {
-  if (!platform.isElectron) return toast('Extensions are available in the desktop app.', 'info');
+  if (!platform.hasWebview) return toast('Third-party extensions are unavailable in this desktop runtime.', 'info');
   if (!ext?.enabled) return toast('Enable this extension before opening it.', 'info');
   const safePath = (value) => typeof value === 'string' && value.split('/').every((part) => part && part !== '..') ? value : '';
   const extId = String(ext.id || '');
@@ -776,7 +784,7 @@ async function updateExtensionActions(items = null) {
   const host = $('extension-actions');
   if (!host) return;
   const request = ++extensionActionRequest;
-  if (!platform.isElectron || state.private) { host.replaceChildren(); return; }
+  if (!platform.hasWebview || state.private) { host.replaceChildren(); return; }
   try {
     const available = Array.isArray(items) ? items : await window.vespera.extensions.list();
     if (request !== extensionActionRequest || !host.isConnected) return;
@@ -1007,7 +1015,7 @@ function boot() {
     download: downloadUrl,
     openExtensionAction: async (id, anchorEl) => {
       let entry = extensionCache.get(String(id));
-      if (!entry && platform.isElectron && !state.private) {
+      if (!entry && platform.hasWebview && !state.private) {
         const list = await window.vespera.extensions.list().catch(() => []);
         updateExtensionActions(list);
         entry = extensionCache.get(String(id));

@@ -139,7 +139,7 @@ npm run dist
 **Requirements:** Node.js 20+, npm, and the Rust toolchain (`rustup`).
 On Linux you also need the webview development packages (see the release
 workflow: `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`,
-`librsvg2-dev`, `libjavascriptcoregtk-4.1-dev`). **Published release: v0.2.2**
+`librsvg2-dev`, `libjavascriptcoregtk-4.1-dev`). **Published release: v0.2.3**
 — follow [RELEASING.md](RELEASING.md) to merge and tag a release.
 
 ### Live web preview / installable app

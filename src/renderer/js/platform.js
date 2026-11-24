@@ -53,6 +53,31 @@ export const platform = {
   },
   async capturePreview(view) {
     const frame = this.inner(view);
+    if (frame?.tagName === 'IFRAME' && frame.contentWindow) {
+      const source = frame.contentWindow;
+      const id = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+      const validImage = (value) => typeof value === 'string'
+        && value.length <= 900000
+        && /^data:image\/(?:jpeg|png);base64,[a-z0-9+/]+=*$/i.test(value);
+      return new Promise((resolve) => {
+        let settled = false;
+        const finish = (value) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          window.removeEventListener('message', onMessage);
+          resolve(validImage(value) ? value : null);
+        };
+        const onMessage = (event) => {
+          if (event.source !== source || event.data?.type !== 'vespera:preview' || event.data.id !== id) return;
+          finish(event.data.image);
+        };
+        const timeout = setTimeout(() => finish(null), 2800);
+        window.addEventListener('message', onMessage);
+        try { source.postMessage({ type: 'vespera:capture-preview', id }, '*'); }
+        catch { finish(null); }
+      });
+    }
     if (frame?.tagName !== 'WEBVIEW' || typeof frame.capturePage !== 'function') return null;
     try {
       const image = await frame.capturePage();

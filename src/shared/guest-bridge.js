@@ -10,6 +10,45 @@ function bridgeScript(pageUrl, error = '', extra = '', parentOrigin = '') {
   return `<script data-vespera-bridge>(()=>{
     const cfg=${config};
     const report=()=>parent.postMessage({type:'vespera:page',title:document.title||new URL(cfg.url).hostname,url:cfg.url,error:cfg.error},'*');
+    let canvasLibraryPromise=null,previewBusy=false;
+    const loadCanvasLibrary=()=>{
+      if(typeof window.html2canvas==='function')return Promise.resolve(window.html2canvas);
+      if(canvasLibraryPromise)return canvasLibraryPromise;
+      let origin='';try{const u=new URL(cfg.parentOrigin);if(u.protocol==='http:'||u.protocol==='https:')origin=u.origin}catch{}
+      if(!origin)return Promise.reject(new Error('Preview renderer unavailable'));
+      canvasLibraryPromise=new Promise((resolve,reject)=>{
+        const script=document.createElement('script');script.async=true;script.referrerPolicy='no-referrer';
+        script.src=origin+'/vendor/html2canvas.min.js';
+        script.onload=()=>typeof window.html2canvas==='function'?resolve(window.html2canvas):reject(new Error('Preview renderer unavailable'));
+        script.onerror=()=>reject(new Error('Preview renderer unavailable'));
+        (document.head||document.documentElement).appendChild(script);
+      }).catch(error=>{canvasLibraryPromise=null;throw error});
+      return canvasLibraryPromise;
+    };
+    const capturePreview=async(id)=>{
+      if(previewBusy){parent.postMessage({type:'vespera:preview',id,image:null},'*');return}
+      previewBusy=true;let image=null;
+      try{
+        const render=await loadCanvasLibrary();
+        const width=Math.max(1,Math.min(1920,window.innerWidth||1280));
+        const height=Math.max(1,Math.min(1080,window.innerHeight||720));
+        const scale=Math.min(320/width,180/height,1);
+        const canvas=await render(document.documentElement,{
+          backgroundColor:null,allowTaint:false,useCORS:true,logging:false,
+          width,height,windowWidth:width,windowHeight:height,
+          scrollX:window.scrollX||0,scrollY:window.scrollY||0,scale,
+          onclone:clone=>clone.querySelectorAll('input,textarea,select,[contenteditable]:not([contenteditable="false"])').forEach(node=>node.remove()),
+        });
+        const data=canvas.toDataURL('image/jpeg',0.68);
+        if(data.length<=900000)image=data;
+      }catch{}finally{previewBusy=false}
+      parent.postMessage({type:'vespera:preview',id,image},'*');
+    };
+    window.addEventListener('message',event=>{
+      if(event.source!==parent||event.data?.type!=='vespera:capture-preview')return;
+      const id=typeof event.data.id==='string'&&event.data.id.length<=100?event.data.id:'';
+      if(id)void capturePreview(id);
+    });
     report();document.addEventListener('DOMContentLoaded',report);
     const original=(v)=>{try{const parsed=new URL(v,cfg.url);if(parsed.origin===location.origin&&parsed.pathname==='/proxy'){const target=parsed.searchParams.get('url');return target&&/^https?:/.test(target)?target:null}const u=parsed;return /^https?:$/.test(u.protocol)?u.href:null}catch{return null}};
     const proxify=(v)=>{const u=original(v);return u?location.origin+'/proxy?url='+encodeURIComponent(u)+cfg.extra+'&vt=xmlhttprequest&doc='+encodeURIComponent(cfg.url):v};

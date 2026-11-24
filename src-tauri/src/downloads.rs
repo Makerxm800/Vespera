@@ -63,11 +63,7 @@ fn random_id() -> String {
     format!("dl-{nanos:x}-{:x}", std::process::id())
 }
 
-fn safe_filename(url: &str) -> String {
-    let name = url::Url::parse(url)
-        .ok()
-        .map(|u| u.path().rsplit('/').next().unwrap_or("download").to_string())
-        .unwrap_or_else(|| "download".to_string());
+fn sanitize_filename(name: &str) -> String {
     let cleaned: String = name
         .chars()
         .map(|c| {
@@ -78,8 +74,27 @@ fn safe_filename(url: &str) -> String {
             }
         })
         .collect();
-    let cleaned = if cleaned.is_empty() { "download".to_string() } else { cleaned };
+    let cleaned = if cleaned.trim().is_empty() || matches!(cleaned.as_str(), "." | "..") {
+        "download".to_string()
+    } else {
+        cleaned
+    };
     cleaned.chars().take(150).collect()
+}
+
+fn safe_filename(url: &str) -> String {
+    let name = url::Url::parse(url)
+        .ok()
+        .map(|u| u.path().rsplit('/').next().unwrap_or("download").to_string())
+        .unwrap_or_else(|| "download".to_string());
+    sanitize_filename(&name)
+}
+
+pub fn suggested_filename(url: &str, requested: Option<&str>) -> String {
+    requested
+        .filter(|name| !name.trim().is_empty())
+        .map(sanitize_filename)
+        .unwrap_or_else(|| safe_filename(url))
 }
 
 impl DownloadManager {
@@ -148,18 +163,24 @@ impl DownloadManager {
             .collect()
     }
 
-    pub fn start(&mut self, url: &str, is_private: bool) -> Result<Value, String> {
+    pub fn start(&mut self, url: &str, is_private: bool, selected_path: Option<PathBuf>) -> Result<Value, String> {
         let parsed = url::Url::parse(url)
             .map_err(|_| "Only HTTP and HTTPS files can be downloaded.".to_string())?;
         if parsed.scheme() != "http" && parsed.scheme() != "https" {
             return Err("Only HTTP and HTTPS files can be downloaded.".to_string());
         }
-        let _ = fs::create_dir_all(&self.downloads_dir);
+        let default_name = safe_filename(url);
+        let target_path = selected_path.unwrap_or_else(|| self.downloads_dir.join(&default_name));
+        let name = target_path.file_name().and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .unwrap_or(&default_name)
+            .to_string();
+        if let Some(parent) = target_path.parent() { let _ = fs::create_dir_all(parent); }
         let record = DownloadRecord {
             id: random_id(),
-            name: safe_filename(url),
+            name,
             url: url.to_string(),
-            path: String::new(),
+            path: target_path.to_string_lossy().to_string(),
             size: 0,
             received: 0,
             status: "progressing".to_string(),
@@ -180,7 +201,6 @@ impl DownloadManager {
         self.persist();
         self.emit_started(&record);
 
-        let target_path = self.downloads_dir.join(&record.name);
         let client = reqwest::blocking::Client::builder()
             .timeout(std::time::Duration::from_secs(120))
             .redirect(reqwest::redirect::Policy::limited(8))
@@ -314,10 +334,11 @@ impl DownloadManager {
                 if entry.status == "interrupted" || entry.status == "paused" {
                     let url = entry.url.clone();
                     let private = entry.is_private;
+                    let selected_path = if entry.path.is_empty() { None } else { Some(PathBuf::from(&entry.path)) };
                     entry.status = "progressing".to_string();
                     entry.can_resume = true;
                     self.persist();
-                    return self.start(&url, private);
+                    return self.start(&url, private, selected_path);
                 }
             }
             return Err("This download cannot be resumed. Please retry it.".to_string());
@@ -333,6 +354,10 @@ impl DownloadManager {
 
     pub fn folder(&self) -> PathBuf {
         self.downloads_dir.clone()
+    }
+
+    pub fn set_folder(&mut self, path: PathBuf) {
+        self.downloads_dir = path;
     }
 }
 
