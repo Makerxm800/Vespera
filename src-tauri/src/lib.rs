@@ -279,10 +279,10 @@ async fn downloads_start(
     url: String,
     private: bool,
     options: Option<Value>,
-) -> Value {
+) -> Result<Value, String> {
     match url::Url::parse(&url) {
         Ok(parsed) if parsed.scheme() == "http" || parsed.scheme() == "https" => {},
-        _ => return json!({ "ok": false, "message": "Only HTTP and HTTPS files can be downloaded." }),
+        _ => return Ok(json!({ "ok": false, "message": "Only HTTP and HTTPS files can be downloaded." })),
     }
     let requested_name = options.as_ref().and_then(|value| value.get("name"))
         .and_then(Value::as_str).map(str::to_string);
@@ -312,13 +312,13 @@ async fn downloads_start(
             });
         let selection = match tauri::async_runtime::spawn_blocking(move || receiver.recv()).await {
             Ok(Ok(selection)) => selection,
-            Ok(Err(error)) => return json!({ "ok": false, "message": error.to_string() }),
-            Err(error) => return json!({ "ok": false, "message": error.to_string() }),
+            Ok(Err(error)) => return Ok(json!({ "ok": false, "message": error.to_string() })),
+            Err(error) => return Ok(json!({ "ok": false, "message": error.to_string() })),
         };
-        let Some(selection) = selection else { return json!({ "ok": false, "canceled": true }); };
+        let Some(selection) = selection else { return Ok(json!({ "ok": false, "canceled": true })); };
         match selection.into_path() {
             Ok(path) => Some(path),
-            Err(error) => return json!({ "ok": false, "message": error.to_string() }),
+            Err(error) => return Ok(json!({ "ok": false, "message": error.to_string() })),
         }
     } else {
         folder.filter(|path| path.is_dir()).map(|path| path.join(&filename))
@@ -326,8 +326,8 @@ async fn downloads_start(
 
     let mut guard = state.downloads.lock().unwrap();
     match guard.start(&url, private, target_path) {
-        Ok(value) => value,
-        Err(message) => json!({ "ok": false, "message": message }),
+        Ok(value) => Ok(value),
+        Err(message) => Ok(json!({ "ok": false, "message": message })),
     }
 }
 
