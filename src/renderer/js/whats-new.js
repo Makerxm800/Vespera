@@ -5,10 +5,8 @@ import { escapeHtml } from './toasts.js';
 const SEEN_KEY = 'vespera.whatsNewSeen';
 
 export const SLIDES = [
-  { icon: 'user', title: 'Your profile, one click away', body: 'The new profile button sits next to Downloads. Sign in to sync, jump to your account, or open a private window. Don’t want it? Turn it off in Settings.' },
-  { icon: 'bolt', title: 'Lighter on your PC', body: 'Tabs you haven’t used for a while now go to sleep and wake the moment you click them, and visual effects ease off automatically on slower computers.' },
-  { icon: 'update', title: 'Updates that just work', body: 'Check for updates from Settings or the Updates page. Vespera downloads the latest GitHub release for your system and starts its installer for you.' },
-  { icon: 'puzzle', title: 'A clearer Extensions page', body: 'Built-in tools sit up front with simple switches, and the page says plainly what this version of Vespera can and can’t run.' },
+  { icon: 'sparkle', title: 'The live web preview is fixed', body: 'Vespera’s hosted browser preview now loads its JavaScript modules correctly instead of showing a blank panel. This fix is for the web preview; the desktop browsing experience is unchanged.' },
+  { icon: 'bolt', title: 'Faster repeat Linux builds', body: 'The CI and release workflows now cache Ubuntu build-package archives, so repeat Linux builds spend less time installing dependencies.' },
 ];
 
 export function showWhatsNew({ version = '', slides = SLIDES } = {}) {

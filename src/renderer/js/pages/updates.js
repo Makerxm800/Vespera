@@ -5,15 +5,8 @@ import { showWhatsNew } from '../whats-new.js';
 
 const RELEASES = 'https://github.com/Makerxm800/Vespera/releases';
 const NOTES = [
-  ['A profile button in the toolbar', 'Sign in to sync, jump to your account, or open a private window from one menu. You can hide it in Settings.'],
-  ['Lighter on your PC', 'Memory saver puts tabs you haven’t used for a while to sleep, only the tab you left open loads at startup, and blur and background animation ease off on slower computers.'],
-  ['Updates find the right installer', 'Check for updates now recognizes the installer names produced by the current build, so the latest GitHub release downloads and starts correctly.'],
-  ['A clearer Extensions page', 'The page now says plainly what this version can run, and the install buttons only appear where they work.'],
-  ['Extensions, pinned and in control', 'The Extensions page is remade: pin extensions to the toolbar or turn them off right from each card, see exactly what every extension can access — "On all sites", "On this site" or no site access — and open a per-extension permissions view. A new Access panel shows which extensions can act on the website in your active tab.'],
-  ['Inspect any tab', 'Right-click any page — or any tab — and choose Inspect to open the page inspector for that site, on every tab.'],
-  ['Tab previews for every tab', 'Hover cards now show a page preview for all tabs, captured while each tab is active, and crossfade smoothly as you move the mouse between tabs.'],
-  ['Updates from the browser', 'A new Check for updates button on this page and in Settings downloads and installs the latest Vespera release for your platform.'],
-  ['Tab controls live in Settings', 'Tab behavior toggles moved out of the browser menu and into the Tabs & groups section, where they belong.'],
+  ['The live web preview is fixed', 'Imported .jsx modules are now served with the JavaScript MIME type browsers expect, fixing the blank Vespera preview panel. The desktop browser experience is unchanged.'],
+  ['Faster repeat Linux builds', 'CI and release builds now target Ubuntu 24.04 and cache apt package archives, reducing dependency setup time on warm runs.'],
 ];
 
 function formatDate(value) {
@@ -44,7 +37,7 @@ export function renderUpdates(container, ctx) {
       </section>
       <section class="card account-card">
         <div class="account-card-head"><h2>Earlier releases</h2></div>
-        <div class="release-links"><a href="${RELEASES}/tag/v0.1.7" target="_blank" rel="noopener noreferrer">v0.1.7 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.6" target="_blank" rel="noopener noreferrer">v0.1.6 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.5" target="_blank" rel="noopener noreferrer">v0.1.5 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.4" target="_blank" rel="noopener noreferrer">v0.1.4 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.3" target="_blank" rel="noopener noreferrer">v0.1.3 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.2" target="_blank" rel="noopener noreferrer">v0.1.2 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.1" target="_blank" rel="noopener noreferrer">v0.1.1 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.0" target="_blank" rel="noopener noreferrer">v0.1.0 ${icon('external')}</a></div>
+        <div class="release-links"><a href="${RELEASES}/tag/v0.2.3" target="_blank" rel="noopener noreferrer">v0.2.3 ${icon('external')}</a><a href="${RELEASES}/tag/v0.2.2" target="_blank" rel="noopener noreferrer">v0.2.2 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.10" target="_blank" rel="noopener noreferrer">v0.1.10 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.9" target="_blank" rel="noopener noreferrer">v0.1.9 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.8" target="_blank" rel="noopener noreferrer">v0.1.8 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.7" target="_blank" rel="noopener noreferrer">v0.1.7 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.6" target="_blank" rel="noopener noreferrer">v0.1.6 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.5" target="_blank" rel="noopener noreferrer">v0.1.5 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.4" target="_blank" rel="noopener noreferrer">v0.1.4 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.3" target="_blank" rel="noopener noreferrer">v0.1.3 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.2" target="_blank" rel="noopener noreferrer">v0.1.2 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.1" target="_blank" rel="noopener noreferrer">v0.1.1 ${icon('external')}</a><a href="${RELEASES}/tag/v0.1.0" target="_blank" rel="noopener noreferrer">v0.1.0 ${icon('external')}</a></div>
       </section>
     </div>`;
   const status = container.querySelector('#update-status');

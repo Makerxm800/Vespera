@@ -5,20 +5,16 @@
 
 Im very sorry, i don't like using AI on my serious projects — i built Vespera by hand to see where the whole vibe-code experiment is actually going. It turned into a browser i use every day, so here it is. :P
 
-**Latest release: v0.2.2** — installers for Windows, macOS and Linux are published on the GitHub Releases page. The release workflow builds all platforms when a new `v*` tag is pushed.
+**Latest release: v0.2.4** — installers for Windows, macOS and Linux are on the [GitHub Releases page](https://github.com/Makerxm800/Vespera/releases). This patch fixes the blank live web-preview screen and improves repeat Linux build times. A new `v*` tag or a manual Actions dispatch builds all platforms.
 
 ---
 
-## ✨ What's new in 0.2.2
+## ✨ What's new in 0.2.4
 
-* **A profile button in the toolbar** — one click opens your account, sync, a private window and account settings. Turn it off in Settings if you'd rather not see it.
-* **A "What's new" slideshow after every update**, plus a **See what's new** button on the Updates page.
-* **Faster, lighter startup** — only the tab you left open loads at startup, and Memory saver puts tabs you haven't used for a while to sleep (they wake when you click them). Both have switches and timing in Settings.
-* **Goes easy on slower machines** — blur and background animation turn off automatically, with a **Reduce visual effects** setting to override it.
-* **"Check for updates" fixed** — it now recognizes the installer files named by the Tauri bundler (for example `Vespera_0.2.2_x64-setup.exe`), so the latest GitHub release downloads and starts correctly.
-* **An honest Extensions page** — it says plainly that Chrome extensions can't run in this version, hides the install buttons that can't work, and keeps the built-in tools (Shields, Dark Pages, Reader View, Focus Mode) front and center.
+* **The live preview opens properly again** — imported `.jsx` modules are served with a browser-valid JavaScript MIME type, fixing the blank Vespera preview panel.
+* **Faster repeat Linux builds** — Ubuntu 24.04 package downloads are cached in CI and release workflows; a cold cache still installs the dependencies normally.
 
-Full details in [CHANGELOG.md](CHANGELOG.md) and in-app at **`vespera://updates`**.
+Earlier product highlights—including the profile menu, memory saver, update installer, and Extensions-page improvements—are in [CHANGELOG.md](CHANGELOG.md) and in-app at **`vespera://updates`**.
 
 ---
 
@@ -136,11 +132,11 @@ npm run test:ui
 npm run dist
 ```
 
-**Requirements:** Node.js 20+, npm, and the Rust toolchain (`rustup`).
+**Requirements:** Node.js 20.19+ (GitHub checks use Node 22), npm, and the Rust toolchain (`rustup`).
 On Linux you also need the webview development packages (see the release
 workflow: `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`,
-`librsvg2-dev`, `libjavascriptcoregtk-4.1-dev`). **Published release: v0.2.3**
-— follow [RELEASING.md](RELEASING.md) to merge and tag a release.
+`librsvg2-dev`, `libjavascriptcoregtk-4.1-dev`). **Latest release: v0.2.4**
+— see [RELEASING.md](RELEASING.md) for the tagged and manual publishing paths.
 
 ### Live web preview / installable app
 

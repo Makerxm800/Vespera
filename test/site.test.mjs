@@ -3,12 +3,17 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const page = readFileSync(new URL('../docs/index.html', import.meta.url), 'utf8');
+const appVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 test('standalone site points to the canonical Vespera releases and source', () => {
   assert.match(page, /<!doctype html>/i);
   assert.match(page, /Makerxm800\/Vespera\/releases\/latest/);
   assert.match(page, /Makerxm800\/Vespera\/issues/);
   assert.doesNotMatch(page, /Makerxm800\/Vespera-beta/i);
+});
+
+test('landing page highlights the current package release', () => {
+  assert.ok(page.includes(`Vespera v${appVersion}`), `expected site to announce v${appVersion}`);
 });
 
 test('landing page download choices match published bundle types, not portable builds', () => {

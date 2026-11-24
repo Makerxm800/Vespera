@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.4
+
+- Fixed: the live web preview no longer opens to a blank panel; imported `.jsx` modules are served with a browser-valid JavaScript MIME type.
+- Improved: GitHub CI and release builds use Ubuntu 24.04, with cached apt package archives to speed repeat Linux dependency installs.
+- Updated: GitHub Actions artifact and cache tooling uses current major versions; project tests and builds run with Node 22.
+
 ## 0.2.3
 
 - Improved: browser preview snapshots are captured on demand with safer validation and redaction.
