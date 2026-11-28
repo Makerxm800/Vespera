@@ -21,6 +21,8 @@ pub struct AppState {
     pub server_origin: Mutex<String>,
     /// Rules snapshot served at /api/filters so shield counts match the proxy.
     pub rules_snapshot: Value,
+    /// Link the app was launched with (default-browser cold start), taken once by the UI.
+    pub launch_url: Mutex<Option<String>>,
 }
 
 impl AppState {

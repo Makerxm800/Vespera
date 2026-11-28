@@ -284,7 +284,7 @@ async function installFromStorePage() {
       storeDismissed = id;
       banner.classList.add('hidden');
       if (result.extensions) bus.emit('extensions', result.extensions);
-      toast(`${result.name || 'Extension'} installed. It survives restarts.`, 'ok', 5000);
+      toast(result.note || `${result.name || 'Extension'} installed. It survives restarts.`, result.note ? 'info' : 'ok', result.note ? 9000 : 5000);
     } else {
       toast(result.message || 'This extension could not be installed.', 'error', 7000);
     }
@@ -1137,6 +1137,10 @@ function boot() {
   initDownloads().catch((err) => diagnostic(err.message));
   if (platform.isElectron) {
     window.vespera.on('browser:extensions-changed', (items) => bus.emit('extensions', Array.isArray(items) ? items : []));
+    // Opened from another app while Vespera is the default browser (cold start).
+    window.vespera.app.takeLaunchUrl?.().then((url) => {
+      if (typeof url === 'string' && safeTabUrl(url)) tabs.add(url, { activate: true });
+    }).catch(() => {});
     window.vespera.on('browser:new-tab', (request) => {
       const url = typeof request === 'string' ? request : request?.url;
       if (!safeTabUrl(url, { allowFile: true })) return;

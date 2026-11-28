@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.5
+
+- Fixed: pages and the browser itself no longer freeze or stay blank while a slow site loads. The local server handled one request at a time, and it also served the browser's own interface; it now handles requests in parallel.
+- Faster: pages and searches load compressed (gzip/brotli) and connect with shorter timeouts.
+- New: extensions run in the desktop app. Install a .zip/.crx, an unpacked folder, a Chrome Web Store link or a direct package link. Vespera runs an extension's page scripts and styles with a basic `chrome.*` interface (storage, runtime, i18n). Background pages, toolbar popups and request blocking are not supported yet, and Vespera tells you when an extension only uses those.
+- Fixed: turned-off extensions stay in the list so you can turn them back on.
+- Fixed: Vespera works as the default browser. Links opened from other apps open in a new tab of the running window, or on startup if Vespera was closed. macOS now lists Vespera as a browser choice, and Windows and Linux registration is cleaner.
+
 ## 0.2.2
 
 - New: a profile button in the toolbar with a menu for your account, sync, a private window and account settings. Turn it off in Settings.

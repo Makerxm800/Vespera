@@ -36,6 +36,7 @@
       defaultBrowserStatus: () => invoke('app_default_browser_status'),
       setDefaultBrowser: () => invoke('app_default_browser'),
       openDefaultBrowserSettings: () => invoke('app_open_default_browser_settings'),
+      takeLaunchUrl: () => invoke('app_take_launch_url'),
       tabMemory: () => invoke('tabs_memory'),
       checkUpdate: () => invoke('app_update_check'),
       installUpdate: (releaseInfo) => invoke('app_update_install', { releaseInfo }),

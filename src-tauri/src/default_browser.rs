@@ -72,12 +72,6 @@ fn windows_register() -> Result<bool, String> {
     windows_registry_add(&class_key, "URL Protocol", "")?;
     windows_registry_add(&command_key, "", &command)?;
     windows_registry_add(&icon_key, "", &icon)?;
-    for scheme in ["http", "https"] {
-        let scheme_key = format!(r"HKCU\Software\Classes\{scheme}");
-        windows_registry_add(&scheme_key, "", prog_id)?;
-        windows_registry_add(&scheme_key, "URL Protocol", "")?;
-    }
-
     // Register the capabilities so Vespera appears in Windows Default Apps.
     let capabilities = r"HKCU\Software\Vespera\Capabilities";
     windows_registry_add(capabilities, "ApplicationName", "Vespera")?;
@@ -120,9 +114,15 @@ fn linux_register() -> Result<bool, String> {
     }
     let exe = exe_path();
     let desktop_file = format!(
-        "[Desktop Entry]\nType=Application\nName=Vespera\nExec={exe} %U\nTerminal=false\nCategories=Network;WebBrowser;\nMimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;\n"
+        "[Desktop Entry]\nType=Application\nName=Vespera\nComment=Private web browser\nExec=\"{exe}\" %U\nTerminal=false\nCategories=Network;WebBrowser;\nMimeType=x-scheme-handler/http;x-scheme-handler/https;\nStartupNotify=true\n"
     );
     std::fs::write(dir.join(desktop), desktop_file).map_err(|e| format!("Could not write the desktop file. ({e})"))?;
+    // Refresh the desktop database and bind the web schemes explicitly so
+    // links from other apps reach Vespera on desktops that ignore xdg-settings.
+    let _ = Command::new("update-desktop-database").arg(&dir).status();
+    for mime in ["x-scheme-handler/http", "x-scheme-handler/https"] {
+        let _ = Command::new("xdg-mime").args(["default", desktop, mime]).status();
+    }
     let status = Command::new("xdg-settings").arg("set").arg("default-web-browser").arg(desktop).status();
     match status {
         Ok(s) if s.success() => Ok(linux_registered()),
@@ -196,7 +196,7 @@ pub fn register() -> serde_json::Value {
 
 pub fn open_settings() -> serde_json::Value {
     let target = if std::env::consts::OS == "windows" {
-        "ms-settings:defaultapps"
+        "ms-settings:defaultapps?registeredAppUser=Vespera"
     } else if std::env::consts::OS == "macos" {
         "x-apple.systempreferences:com.apple._default-apps"
     } else {
