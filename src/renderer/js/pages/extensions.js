@@ -44,22 +44,22 @@ export function extensionPermissionsPopover(anchor, ext, host = '') {
 
 export function renderExtensions(container, ctx) {
   let query = '', filter = 'all', external = [];
-  // The Tauri desktop shell has no Chromium extension runtime, so third-party extensions can't run there.
+  // Vespera's own extension runtime (page scripts and styles) works in the desktop app.
   const nativeShell = Boolean(window.__TAURI_INTERNALS__);
-  const desktopReady = Boolean(window.vespera?.extensions) && !nativeShell;
+  const desktopReady = Boolean(window.vespera?.extensions);
   const status = state.private
     ? ['Extensions are paused in private windows', 'chip']
-    : (desktopReady ? ['Desktop app · extensions ready', 'chip-ok'] : nativeShell ? ['Desktop app · built-in tools ready', 'chip-ok'] : ['Web preview · desktop extensions unavailable', 'chip']);
+    : (desktopReady ? ['Desktop app · extensions ready', 'chip-ok'] : nativeShell ? ['Desktop app · extensions ready', 'chip-ok'] : ['Web preview · desktop extensions unavailable', 'chip']);
   container.innerHTML = `<div class="page extensions-page"><span class="eyebrow">A LITTLE MORE SUPERPOWER</span><h1 class="page-title">Extensions</h1><p class="page-sub">Small tools that add exactly what you need. Turn on what you use and leave the rest alone.</p>
     <nav class="settings-nav" aria-label="Extensions sections"><a href="#general" data-section="general">General</a><a href="#built-in" data-section="built-in">Built-in</a><a href="#installed" data-section="installed">Installed</a><a href="#access" data-section="access">Access</a><a href="#catalog" data-section="catalog">Catalog</a></nav>
 
     <section class="section" id="general"><h2>${icon('sparkle')} General</h2>
       <div class="extension-banner"><div class="extension-banner-icon">${icon('split')}</div><div class="grow"><b>Your essentials are already here.</b><p>Built-in privacy and productivity tools, plus a manager for compatible Chromium extensions.</p></div><span class="chip ${status[1]}">${icon('check')} ${status[0]}</span></div>
-      ${nativeShell ? `<div class="extension-notice" role="note">${icon('info')}<div><b>Chrome extensions can’t run in this version of Vespera.</b><p>The desktop app uses your system’s own web engine, which has no extension runtime. The built-in tools below work today: Shields, Dark Pages, Reader View and Focus Mode.</p></div></div>` : ''}<div class="card extension-install-card"><div class="row" style="gap:10px;flex-wrap:wrap"><b>Install from a source you trust</b><span class="grow"></span><span class="small faint">Nothing installs without your say-so.</span></div>
+      ${nativeShell ? `<div class="extension-notice" role="note">${icon('info')}<div><b>Extensions run on web pages.</b><p>Vespera runs an extension’s page scripts and styles (what most ad blockers, dark modes, and site tweaks use). Background pages, toolbar popups, and request blocking are not supported yet, so extensions that rely only on those will install but do nothing visible.</p></div></div>` : ''}<div class="card extension-install-card"><div class="row" style="gap:10px;flex-wrap:wrap"><b>Install from a source you trust</b><span class="grow"></span><span class="small faint">Nothing installs without your say-so.</span></div>
         <p class="muted" style="margin-top:10px">Every extension package is reviewed before it runs. Extensions can read or change website content; only load code you trust. Vespera supports a subset of Chrome’s extension APIs, so some extensions may not work as expected.</p>
         <div class="extension-dev-row"><div><label class="s-label" for="ext-developer-mode">Developer mode</label><div class="s-desc">Enables unpacked extension folders on this device. Vespera still shows a permission review; this security setting is not synced.</div></div><label class="switch"><input type="checkbox" id="ext-developer-mode" aria-label="Developer mode" ${state.settings.extensions.developerMode ? 'checked' : ''} ${!desktopReady || state.private ? 'disabled' : ''}><span class="track"></span><span class="thumb"></span></label></div>
         <div class="row extension-install-actions">
-          <button class="btn btn-primary" id="ext-open-store" ${nativeShell ? 'hidden' : ''}>${icon('external')} Open Chrome Web Store</button>
+          <button class="btn btn-primary" id="ext-open-store">${icon('external')} Open Chrome Web Store</button>
           <button class="btn" data-ext-open="https://github.com/topics/chrome-extension">${icon('code')} Explore GitHub</button>
           <button class="btn" id="ext-load" ${!desktopReady || state.private ? 'disabled' : ''}>${icon('download')} Install package (.zip / .crx)</button>
           <button class="btn" id="ext-load-unpacked" ${state.settings.extensions.developerMode ? '' : 'hidden'}>${icon('code')} Load unpacked</button>
@@ -233,7 +233,7 @@ export function renderExtensions(container, ctx) {
     let outcome = null;
     try {
       outcome = await method();
-      if (outcome?.ok) { external = outcome.extensions || await window.vespera.extensions.list(); bus.emit('extensions', external); render(); ctx.toast(`${outcome.name || 'Extension'} installed. Review its details below.`, 'ok', 5000); }
+      if (outcome?.ok) { external = outcome.extensions || await window.vespera.extensions.list(); bus.emit('extensions', external); render(); ctx.toast(outcome.note || `${outcome.name || 'Extension'} installed. Review its details below.`, outcome.note ? 'info' : 'ok', outcome.note ? 9000 : 5000); }
       else if (!outcome?.canceled) ctx.toast(outcome?.message || 'This extension could not be loaded.', 'error', 6500);
     } catch (err) { ctx.toast(err.message || 'This extension could not be loaded.', 'error', 6500); }
     finally { buttons.forEach((button) => { if (button?.isConnected) button.disabled = !desktopReady || state.private; }); syncDeveloperControls(); }
