@@ -4,6 +4,7 @@
 > Tauri v2 shell · Twilight UI · zero telemetry · local-first accounts + sync · community-voted roadmap.
 
 Im very sorry, i don't like using AI on my serious projects — i built Vespera by hand to see where the whole vibe-code experiment is actually going. It turned into a browser i use every day, so here it is. :P
+IM SO OFF AI DID OK FOR ME BUT I DONT LIKE THIS THAT A TIME IT BROKE ALREADY SO I WAIT TO USE ISUAL STUDIO AI I HATE THIS ARENA ETC AI BROKES MY UPDATE FREAK
 
 **Latest release: v0.2.2** — installers for Windows, macOS and Linux are published on the GitHub Releases page. The release workflow builds all platforms when a new `v*` tag is pushed.
 
