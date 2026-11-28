@@ -4,6 +4,7 @@
 //! endpoint that renders websites in the sandboxed preview, and the small
 //! `/api/*` surface the UI uses. Binds to 127.0.0.1 only.
 
+use crate::extensions::SharedRegistry;
 use crate::proxy::{ProxyEngine, STRIP_HEADERS};
 use include_dir::{include_dir, Dir};
 use serde_json::json;
@@ -73,6 +74,58 @@ fn serve_static(path: &str) -> Response<std::io::Cursor<Vec<u8>>> {
             .with_status_code(StatusCode(200)),
         None => Response::from_string("Not found.").with_status_code(StatusCode(404)),
     }
+}
+
+fn percent_decode(raw: &str) -> String {
+    let bytes = raw.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Some(v) = std::str::from_utf8(&bytes[i + 1..i + 3]).ok().and_then(|h| u8::from_str_radix(h, 16).ok()) {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Serve a file that belongs to an installed extension (`/ext/<id>/<file>`),
+/// for `chrome.runtime.getURL`. HTML is never served as a page: extension
+/// pages would otherwise run on the same origin as the browser UI.
+fn serve_extension_file(extensions: &SharedRegistry, rest: &str) -> Response<std::io::Cursor<Vec<u8>>> {
+    let not_found = || Response::from_string("Not found.").with_status_code(StatusCode(404));
+    let (id, rel) = match rest.split_once('/') {
+        Some(parts) => parts,
+        None => return not_found(),
+    };
+    let rel = percent_decode(rel);
+    if rel.contains("..") {
+        return not_found();
+    }
+    let file = match extensions.lock() {
+        Ok(registry) => registry.resolve_file(id, &rel),
+        Err(_) => None,
+    };
+    let Some(file) = file else { return not_found() };
+    let Ok(data) = std::fs::read(&file) else { return not_found() };
+    let name = file.to_string_lossy().to_string();
+    let ctype = match content_type(&name) {
+        "text/html; charset=utf-8" => "text/plain; charset=utf-8",
+        other => other,
+    };
+    Response::from_data(data)
+        .with_header(Header::from_bytes(&b"content-type"[..], ctype.as_bytes()).unwrap())
+        .with_header(Header::from_bytes(&b"access-control-allow-origin"[..], b"*").unwrap())
+        .with_header(Header::from_bytes(&b"cross-origin-resource-policy"[..], b"cross-origin").unwrap())
+        .with_header(Header::from_bytes(&b"x-content-type-options"[..], b"nosniff").unwrap())
+        .with_header(Header::from_bytes(&b"content-security-policy"[..], b"sandbox").unwrap())
+        .with_header(Header::from_bytes(&b"cache-control"[..], b"no-cache").unwrap())
+        .with_status_code(StatusCode(200))
 }
 
 fn json_response(status: u16, value: serde_json::Value) -> Response<std::io::Cursor<Vec<u8>>> {
@@ -264,7 +317,12 @@ fn base64_decode(input: &[u8]) -> Option<Vec<u8>> {
 }
 
 /// Start the server on 127.0.0.1, trying the base port upward.
-pub fn start(engine: Arc<ProxyEngine>, rules_snapshot: serde_json::Value, version: String) -> Result<ServerHandle, String> {
+pub fn start(
+    engine: Arc<ProxyEngine>,
+    extensions: SharedRegistry,
+    rules_snapshot: serde_json::Value,
+    version: String,
+) -> Result<ServerHandle, String> {
     let mut port = BASE_PORT;
     let server = loop {
         match Server::http(format!("127.0.0.1:{port}")) {
@@ -286,6 +344,7 @@ pub fn start(engine: Arc<ProxyEngine>, rules_snapshot: serde_json::Value, versio
     let thread = std::thread::spawn(move || {
         for request in server.incoming_requests() {
             let engine = Arc::clone(&engine);
+            let extensions = Arc::clone(&extensions);
             let origin = thread_origin.clone();
             let rules_snapshot = Arc::clone(&rules_snapshot);
             let version = Arc::clone(&version);
@@ -297,6 +356,9 @@ pub fn start(engine: Arc<ProxyEngine>, rules_snapshot: serde_json::Value, versio
                 let path = request.url().split('?').next().unwrap_or("/").to_string();
                 if path == "/proxy" {
                     return handle_proxy(&request, &engine, &origin);
+                }
+                if let Some(rest) = path.strip_prefix("/ext/") {
+                    return serve_extension_file(&extensions, rest);
                 }
                 if path == "/api/health" {
                     let allowed = std::env::var("VESPERA_PROXY_ALLOWED_HOSTS")
