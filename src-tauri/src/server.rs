@@ -8,10 +8,16 @@ use crate::extensions::SharedRegistry;
 use crate::proxy::{ProxyEngine, STRIP_HEADERS};
 use include_dir::{include_dir, Dir};
 use serde_json::json;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tiny_http::{Header, Response, Server, StatusCode};
 
 static RENDERER: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../src/renderer");
+
+/// Requests being served right now. Each request gets its own thread so one
+/// slow website can no longer freeze the browser UI (which this server also serves).
+static IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
+const MAX_WORKERS: usize = 64;
 
 const BASE_PORT: u16 = 4600;
 const PORT_SPAN: u16 = 10;
@@ -348,6 +354,7 @@ pub fn start(
             let origin = thread_origin.clone();
             let rules_snapshot = Arc::clone(&rules_snapshot);
             let version = Arc::clone(&version);
+            let work = move || {
             let response = (|| -> Response<std::io::Cursor<Vec<u8>>> {
                 let method = request.method().clone();
                 if method != tiny_http::Method::Get {
@@ -414,6 +421,17 @@ pub fn start(
                 serve_static(&path)
             })();
             let _ = request.respond(response);
+            };
+            if IN_FLIGHT.load(Ordering::Relaxed) >= MAX_WORKERS {
+                // Back-pressure: serve inline instead of spawning without limit.
+                work();
+            } else {
+                IN_FLIGHT.fetch_add(1, Ordering::Relaxed);
+                std::thread::spawn(move || {
+                    work();
+                    IN_FLIGHT.fetch_sub(1, Ordering::Relaxed);
+                });
+            }
         }
     });
 
