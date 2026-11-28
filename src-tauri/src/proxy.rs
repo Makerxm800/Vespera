@@ -10,7 +10,7 @@ use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
 use serde_json::{json, Value};
 use std::net::ToSocketAddrs;
-use std::sync::OnceLock;
+use std::sync::{OnceLock, RwLock};
 use std::time::Duration;
 
 /// The bridge script template with the `${config}` placeholder replaced by
@@ -43,6 +43,7 @@ pub struct ProxyEngine {
     ads: FilterEngine,
     annoyances: FilterEngine,
     client: reqwest::blocking::Client,
+    injections: RwLock<Vec<crate::extensions::Injection>>,
 }
 
 impl ProxyEngine {
@@ -60,7 +61,29 @@ impl ProxyEngine {
             ads: FilterEngine::from_bundled_rules(),
             annoyances: FilterEngine::from_bundled_rules(),
             client,
+            injections: RwLock::new(Vec::new()),
         }
+    }
+
+    /// Replace the extension content scripts injected into pages.
+    pub fn set_injections(&self, injections: Vec<crate::extensions::Injection>) {
+        if let Ok(mut guard) = self.injections.write() {
+            *guard = injections;
+        }
+    }
+
+    /// (head markup, end-of-body markup) for extensions matching a page.
+    fn extension_markup(&self, page_url: &str, origin: &str) -> (String, String) {
+        let mut head = String::new();
+        let mut tail = String::new();
+        if let Ok(guard) = self.injections.read() {
+            for inj in guard.iter().filter(|i| i.applies_to(page_url)) {
+                let (h, t) = crate::extensions::render_injection(inj, origin);
+                head.push_str(&h);
+                tail.push_str(&t);
+            }
+        }
+        (head, tail)
     }
 
     /// Public-address check mirroring publicAddress() in the JS proxy.
@@ -364,11 +387,13 @@ impl ProxyEngine {
             }
         }
 
+        let (ext_head, ext_tail) = self.extension_markup(page_url, origin);
         let head = format!(
-            "<base href=\"{}\">{}{}",
+            "<base href=\"{}\">{}{}{}",
             esc(page_url),
             self.bridge_script(page_url, "", &extra, origin),
-            dark_style
+            dark_style,
+            ext_head
         );
         if let Some(m) = head_tag_re().find(&out) {
             let matched = &out[m.start()..m.end()];
@@ -379,6 +404,7 @@ impl ProxyEngine {
         } else {
             out = format!("<!doctype html><html><head>{head}</head><body>{out}</body></html>");
         }
+        out.push_str(&ext_tail);
         out
     }
 
