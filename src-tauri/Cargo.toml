@@ -1,6 +1,6 @@
 [package]
 name = "vespera"
-version = "0.2.2"
+version = "0.2.5"
 description = "Vespera — a privacy browser (Tauri v2 shell)"
 authors = ["Vespera Community"]
 license = "MIT"
