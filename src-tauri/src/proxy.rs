@@ -50,6 +50,9 @@ impl ProxyEngine {
     pub fn new() -> Self {
         let client = reqwest::blocking::Client::builder()
             .timeout(Duration::from_millis(18000))
+            .connect_timeout(Duration::from_millis(6000))
+            .tcp_nodelay(true)
+            .pool_max_idle_per_host(8)
             .redirect(reqwest::redirect::Policy::limited(5))
             .user_agent(
                 "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
@@ -183,7 +186,6 @@ impl ProxyEngine {
             HeaderValue::from_static("text/html,application/xhtml+xml,image/avif,image/webp,*/*;q=0.8"),
         );
         headers.insert("accept-language", HeaderValue::from_static("en-US,en;q=0.9"));
-        headers.insert("accept-encoding", HeaderValue::from_static("identity"));
         if !sec_gpc.is_empty() {
             headers.insert("sec-gpc", HeaderValue::from_str(sec_gpc).unwrap_or(HeaderValue::from_static("1")));
         }
