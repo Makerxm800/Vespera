@@ -184,8 +184,8 @@ test('updates page: check finds the update, install runs it', async () => {
   assert.match(document.querySelector('#update-status').textContent, /Installing/);
 });
 
-test('extensions page: the desktop shell shows the notice and keeps installs off', async () => {
-  // The shipped Tauri app has no Chromium extension runtime — the page must
+test('extensions page: the desktop shell explains what extensions can run', async () => {
+  // The shipped Tauri app runs page scripts itself; the notice states the limits — the page must
   // say so up front and offer no way to install third-party extensions.
   bridge.navigate('vespera://extensions');
   await tick(80);
@@ -193,13 +193,10 @@ test('extensions page: the desktop shell shows the notice and keeps installs off
   assert.ok(page, 'extensions page rendered');
   assert.equal(page.querySelectorAll('[data-section]').length, 5, 'General / Built-in / Installed / Access / Catalog');
   const notice = page.querySelector('.extension-notice');
-  assert.ok(notice, 'notice explains the missing extension runtime');
-  assert.match(notice.textContent, /Chrome extensions can.t run in this version of Vespera/);
-  assert.match(page.querySelector('.extension-banner .chip').textContent, /built-in tools ready/, 'status chip reflects the native shell');
-  assert.equal(page.querySelectorAll('#ext-external .extension-manager-card').length, 0, 'no third-party cards in the native shell');
-  assert.match(page.querySelector('#ext-external').textContent, /No third-party extensions yet/, 'installed section explains the empty list');
-  assert.ok(page.querySelector('#ext-open-store').hidden, 'store button hidden');
-  assert.ok(page.querySelector('#ext-load').disabled, 'package install disabled');
+  assert.ok(notice, 'notice explains what the extension runtime supports');
+  assert.match(notice.textContent, /Extensions run on web pages/);
+  assert.match(page.querySelector('.extension-banner .chip').textContent, /extensions ready/, 'status chip reflects the native shell');
+  assert.ok(!page.querySelector('#ext-open-store').hidden, 'store button available');
   assert.ok([...page.querySelectorAll('#ext-grid .extension-card')].some((card) => card.textContent.includes('Shields')), 'built-in tools still render');
   assert.ok(page.querySelector('#ext-access'), 'access panel present');
   assert.match(page.querySelector('#ext-access').textContent, /Open a website to see its extension access/, 'empty access state without a site');
